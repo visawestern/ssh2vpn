@@ -1,0 +1,30 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run VPNCore tests
+        run: |
+          cd Iphone
+          SWIFT_MODULECACHE_PATH=/tmp/personalvpn-swift-modules \
+          CLANG_MODULE_CACHE_PATH=/tmp/personalvpn-clang-modules \
+          swift test --disable-sandbox 2>&1 | tail -5
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run gateway tests
+        run: |
+          cd Iphone
+          python3 -m Gateway.test_gateway 2>&1 | tail -5

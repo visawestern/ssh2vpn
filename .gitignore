@@ -1,0 +1,21 @@
+# Xcode / Swift
+DerivedData/
+DerivedDataLocal/
+.build/
+.swiftpm/
+build/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+xcuserdata/
+
+# macOS
+.DS_Store
+
+# Environment / binaries
+*.apk
+*.ipa
+octohide-vpn*
+
+# Python
+__pycache__/
+*.pyc
