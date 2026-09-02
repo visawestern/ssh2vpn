@@ -59,7 +59,7 @@ struct RootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                OctohideTabBar(selected: $selectedTab)
+                OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
 
             if model.needsLanguageSelection {
@@ -75,12 +75,13 @@ struct RootView: View {
 
 struct OctohideTabBar: View {
     @Binding var selected: Tab
+    let copy: AppCopy
 
     var body: some View {
         HStack(spacing: 0) {
-            tabButton(tab: .connect, icon: "wifi", title: "Connect")
-            tabButton(tab: .locations, icon: "globe", title: "Locations")
-            tabButton(tab: .settings, icon: "gearshape.fill", title: "Settings")
+            tabButton(tab: .connect, icon: "wifi", title: copy.text(.connect))
+            tabButton(tab: .locations, icon: "globe", title: copy.text(.locations))
+            tabButton(tab: .settings, icon: "gearshape.fill", title: copy.text(.settings))
         }
         .padding(.top, 10)
         .padding(.bottom, 8)
@@ -176,7 +177,7 @@ struct ConnectView: View {
                     .foregroundStyle(Color(red: 0.35, green: 0.40, blue: 0.50))
             }
 
-            Text(model.connection == .connected ? "Protected" : "Unprotected")
+            Text(model.connection == .connected ? model.copy.text(.protected_) : model.copy.text(.unprotected))
                 .font(.openSans(17, weight: .semibold))
                 .foregroundStyle(Color.octGray100)
             Spacer()
@@ -249,10 +250,10 @@ struct ConnectView: View {
                         .foregroundStyle(Color.sec50)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Add Your Server")
+                        Text(model.copy.text(.addServerLabel))
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
-                        Text("Connect to your own VPS")
+                        Text(model.copy.text(.addServerDesc))
                             .font(.openSans(12))
                             .foregroundStyle(Color.octGray60)
                     }
@@ -604,9 +605,6 @@ struct SettingsViewNew: View {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(Color.octGray40)
-                                Text(model.copy.text(.connectionDiagnostics))
-                                    .font(.openSans(15, weight: .medium))
-                                    .foregroundStyle(Color.octGray40)
                             }
                             .padding(14)
                         }
@@ -719,7 +717,7 @@ struct LanguagePickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(model.copy.text(.ok)) { dismiss() }
                         .foregroundStyle(Color.sec50)
                 }
             }
@@ -793,49 +791,85 @@ struct AddServerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Server section
+                VStack(spacing: 14) {
+                    // Server credentials section
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.server))
                             .font(.openSans(13, weight: .semibold))
                             .foregroundStyle(Color.octGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
-                            .padding(.bottom, 8)
+                            .padding(.bottom, 6)
 
-                        VStack(spacing: 0) {
-                            fieldRow(title: model.copy.text(.address), text: $address)
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            fieldRow(title: model.copy.text(.sshPort), text: $port)
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            fieldRow(title: model.copy.text(.username), text: $username)
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            secureFieldRow(title: model.copy.text(.passwordOptional), text: $password)
+                        VStack(spacing: 6) {
+                            fieldRow(
+                                title: model.copy.text(.address),
+                                placeholder: model.copy.text(.addressPlaceholder),
+                                text: $address
+                            )
+                            fieldRow(
+                                title: model.copy.text(.sshPort),
+                                placeholder: model.copy.text(.portPlaceholder),
+                                text: $port
+                            )
+                            fieldRow(
+                                title: model.copy.text(.username),
+                                placeholder: model.copy.text(.usernamePlaceholder),
+                                text: $username
+                            )
+                            secureFieldRow(
+                                title: model.copy.text(.passwordOptional),
+                                placeholder: model.copy.text(.passwordPlaceholder),
+                                text: $password
+                            )
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Private Key section
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(model.copy.text(.ed25519PrivateKeyOptional))
                             .font(.openSans(13, weight: .semibold))
                             .foregroundStyle(Color.octGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
-                            .padding(.bottom, 8)
+                            .padding(.bottom, 2)
 
-                        TextEditor(text: $privateKey)
-                            .frame(minHeight: 120)
-                            .font(.system(.footnote, design: .monospaced))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(14)
+                        ZStack(alignment: .topLeading) {
+                            if privateKey.isEmpty {
+                                Text(model.copy.text(.privateKeyPlaceholder))
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .foregroundStyle(Color.octGray40)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                            }
+                            TextEditor(text: $privateKey)
+                                .font(.system(.footnote, design: .monospaced))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .padding(6)
+                        }
+                        .frame(minHeight: 100)
+                        .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.octGray05, lineWidth: 1)
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Host Key
                     VStack(alignment: .leading, spacing: 0) {
-                        fieldRow(title: model.copy.text(.pinnedHostKey), text: $hostKey)
+                        fieldRow(
+                            title: model.copy.text(.pinnedHostKey),
+                            placeholder: model.copy.text(.hostKeyPlaceholder),
+                            text: $hostKey
+                        )
+                        .padding(12)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -866,7 +900,7 @@ struct AddServerView: View {
                             .font(.openSans(16, weight: .semibold))
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, 15)
                             .background(Color.sec50, in: RoundedRectangle(cornerRadius: 16))
                     }
                     .buttonStyle(.plain)
@@ -884,49 +918,55 @@ struct AddServerView: View {
             .navigationTitle(model.copy.text(.addServerTitle))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(model.copy.text(.cancel)) { dismiss() }
                         .foregroundStyle(Color.sec50)
                 }
             }
-            .alert("Invalid Input", isPresented: $showErrorAlert) {
-                Button("OK", role: .cancel) { }
+            .alert(model.copy.text(.invalidInput), isPresented: $showErrorAlert) {
+                Button(model.copy.text(.ok), role: .cancel) { }
             } message: {
                 Text(errorMessage ?? "Please check the entered configuration.")
             }
         }
     }
 
-    private func fieldRow(title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func fieldRow(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.openSans(13))
+                .font(.openSans(12, weight: .medium))
                 .foregroundStyle(Color.octGray60)
-            TextField("", text: text)
+            TextField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.openSans(15))
+                .font(.openSans(14))
                 .foregroundStyle(Color.octGray100)
                 .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 10)
+                .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.octGray05, lineWidth: 1)
+                )
         }
-        .padding(14)
     }
 
-    private func secureFieldRow(title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func secureFieldRow(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.openSans(13))
+                .font(.openSans(12, weight: .medium))
                 .foregroundStyle(Color.octGray60)
-            SecureField("", text: text)
+            SecureField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
-                .font(.openSans(15))
+                .font(.openSans(14))
                 .foregroundStyle(Color.octGray100)
                 .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 10)
+                .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.octGray05, lineWidth: 1)
+                )
         }
-        .padding(14)
     }
 }
 
