@@ -83,7 +83,7 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .preferredColorScheme(nil)
+        .preferredColorScheme(.light)
     }
 }
 
@@ -130,7 +130,6 @@ struct OctohideTabBar: View {
 
 struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var elapsed: TimeInterval = 0
     @State private var timer: Timer?
     @State private var showAddServer = false
     @State private var showLocationsSheet = false
@@ -156,10 +155,21 @@ struct ConnectView: View {
             powerButton
                 .padding(.bottom, 12)
 
-            // Cancel / Disconnect button visible during connecting or failed states
-            cancelOrDisconnectButton
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.connection == .connecting)
-                .padding(.bottom, 12)
+            // Active connection time (shown while connected)
+            if case .connected = model.connection {
+                Text(formatTime(TimeInterval(model.connectionActiveSeconds)))
+                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.octGray60)
+                    .padding(.bottom, 8)
+            } else if case .failed(let msg) = model.connection {
+                Text("connectionError: \(msg)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+            }
 
             Spacer(minLength: 8)
 
@@ -171,7 +181,18 @@ struct ConnectView: View {
         .background(Color.appBg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { startTimerIfNeeded() }
-        .onDisappear { timer?.invalidate() }
+        .onDisappear { timer?.invalidate(); timer = nil }
+        .onChange(of: model.connection) { newStatus in
+            switch newStatus {
+            case .connected:
+                startTimerIfNeeded()
+            case .disconnected, .failed:
+                timer?.invalidate()
+                timer = nil
+            case .connecting:
+                break
+            }
+        }
         .sheet(isPresented: $showAddServer) {
             NavigationStack {
                 AddServerView()
@@ -235,7 +256,7 @@ struct ConnectView: View {
                         .fill(
                             LinearGradient(
                                 colors: model.connection == .connected
-                                    ? [Color.prim50.opacity(0.4), Color.prim100.opacity(0.2)]
+                                    ? [Color(red: 0.90, green: 0.30, blue: 0.30).opacity(0.4), Color(red: 0.85, green: 0.25, blue: 0.25).opacity(0.2)]
                                     : [Color(red: 0.94, green: 0.95, blue: 0.97), Color(red: 0.89, green: 0.90, blue: 0.93)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -248,9 +269,9 @@ struct ConnectView: View {
                         .fill(Color.appBg)
                         .frame(width: 146, height: 146)
 
-                    // Inner solid white button disc
+                    // Inner solid button disc (red when connected = disconnect)
                     Circle()
-                        .fill(model.connection == .connected ? Color.prim50 : Color.white)
+                        .fill(model.connection == .connected ? Color(red: 0.90, green: 0.30, blue: 0.30) : Color.white)
                         .frame(width: 138, height: 138)
                         .shadow(color: Color.black.opacity(0.06), radius: 8, y: 4)
 
@@ -272,44 +293,6 @@ struct ConnectView: View {
                 }
             }
             .buttonStyle(PowerButtonStyle())
-        }
-    }
-
-    // MARK: - Cancel / Disconnect Button (shown when not idle)
-    @ViewBuilder
-    private var cancelOrDisconnectButton: some View {
-        let showCancel: Bool = {
-            switch model.connection {
-            case .connecting: return true
-            case .failed: return true
-            default: return false
-            }
-        }()
-
-        if showCancel {
-            Button {
-                model.disconnect()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15, weight: .medium))
-                    Text("Cancel")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
-                .padding(.horizontal, 22)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule()
-                        .fill(Color(red: 0.85, green: 0.2, blue: 0.3).opacity(0.10))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(Color(red: 0.85, green: 0.2, blue: 0.3).opacity(0.3), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .transition(.scale.combined(with: .opacity))
         }
     }
 
@@ -382,25 +365,22 @@ struct ConnectView: View {
     private func toggleConnection() {
         if model.connection == .connected {
             model.disconnect()
-            timer?.invalidate()
-            timer = nil
-            elapsed = 0
+        } else if model.connection == .connecting {
+            return
         } else {
             if model.profile.host.isEmpty {
                 showAddServer = true
                 return
             }
             model.connect()
-            startTimerIfNeeded()
         }
     }
 
     private func startTimerIfNeeded() {
         guard model.connection == .connected else { return }
         timer?.invalidate()
-        elapsed = 0
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            elapsed += 1
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak model] _ in
+            model?.tickConnectionTimer()
         }
     }
 
@@ -1237,7 +1217,6 @@ struct DiagnosticsView: View {
 
 struct ProtocolView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var selectedProtocol = "SSH2"
 
     var body: some View {
         ScrollView {
@@ -1250,12 +1229,12 @@ struct ProtocolView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    protocolOption(name: "SSH2", desc: model.copy.text(.ssh2Desc), selected: selectedProtocol == "SSH2") {
-                        selectedProtocol = "SSH2"
+                    protocolOption(name: "SSH2", desc: model.copy.text(.ssh2Desc), selected: model.settings.protocolName == "SSH2") {
+                        model.settings.protocolName = "SSH2"
                     }
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    protocolOption(name: "SSH", desc: model.copy.text(.sshLegacy), selected: selectedProtocol == "SSH") {
-                        selectedProtocol = "SSH"
+                    protocolOption(name: "SSH", desc: model.copy.text(.sshLegacy), selected: model.settings.protocolName == "SSH") {
+                        model.settings.protocolName = "SSH"
                     }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
@@ -1299,9 +1278,6 @@ struct ProtocolView: View {
 
 struct DNSView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var primaryDNS = "1.1.1.1"
-    @State private var secondaryDNS = "8.8.8.8"
-    @State private var useCustomDNS = false
 
     var body: some View {
         ScrollView {
@@ -1319,17 +1295,17 @@ struct DNSView: View {
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
                         Spacer()
-                        Toggle("", isOn: $useCustomDNS)
+                        Toggle("", isOn: $model.settings.useCustomDNS)
                             .tint(Color.prim50)
                     }
                     .padding(14)
 
-                    if useCustomDNS {
+                    if model.settings.useCustomDNS {
                         Divider().background(Color.octGray05).padding(.horizontal, 16)
                         VStack(spacing: 0) {
-                            dnsField(label: model.copy.text(.primaryDNS), text: $primaryDNS)
+                            dnsField(label: model.copy.text(.primaryDNS), text: $model.settings.primaryDNS)
                             Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            dnsField(label: model.copy.text(.secondaryDNS), text: $secondaryDNS)
+                            dnsField(label: model.copy.text(.secondaryDNS), text: $model.settings.secondaryDNS)
                         }
                     }
                 }
@@ -1367,9 +1343,6 @@ struct DNSView: View {
 
 struct AdvancedView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var killSwitch = true
-    @State private var connectOnDemand = false
-    @State private var enableLogging = false
 
     var body: some View {
         ScrollView {
@@ -1392,7 +1365,7 @@ struct AdvancedView: View {
                                 .foregroundStyle(Color.octGray60)
                         }
                         Spacer()
-                        Toggle("", isOn: $killSwitch)
+                        Toggle("", isOn: $model.settings.killSwitch)
                             .tint(Color.prim50)
                     }
                     .padding(14)
@@ -1409,7 +1382,7 @@ struct AdvancedView: View {
                                 .foregroundStyle(Color.octGray60)
                         }
                         Spacer()
-                        Toggle("", isOn: $connectOnDemand)
+                        Toggle("", isOn: $model.settings.connectOnDemand)
                             .tint(Color.prim50)
                     }
                     .padding(14)
@@ -1434,7 +1407,7 @@ struct AdvancedView: View {
                                 .foregroundStyle(Color.octGray60)
                         }
                         Spacer()
-                        Toggle("", isOn: $enableLogging)
+                        Toggle("", isOn: $model.settings.enableLogging)
                             .tint(Color.prim50)
                     }
                     .padding(14)

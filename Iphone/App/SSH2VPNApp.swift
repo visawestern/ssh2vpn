@@ -17,7 +17,9 @@ struct SSH2VPNApp: App {
 @MainActor
 final class AppModel: ObservableObject {
     @Published var selectedLanguage: AppLanguage? = LanguageStore.current
-    @Published var connection = ConnectionPresentation.disconnected
+    @Published var connection = ConnectionPresentation.disconnected {
+        didSet { updateIdleTimer() }
+    }
     @Published var serverName = "My VPS"
     @Published var profile = VPNProfileStore.load() {
         didSet {
@@ -25,6 +27,10 @@ final class AppModel: ObservableObject {
             refreshServerMetadata()
         }
     }
+    @Published var settings: AppSettingsState = SettingsStore.load() {
+        didSet { SettingsStore.save(settings) }
+    }
+    private var automation = VPNConnectionAutomation(maxRetries: 3)
     @Published var serverCountry: String = ""
     @Published var serverFlag: String = "🌐"
     @Published var serverCity: String = ""
@@ -47,6 +53,7 @@ final class AppModel: ObservableObject {
                 self?.connection = .connecting
                 ConsoleLogStore.shared.log(level: .warning, tag: "TUNNEL", message: "PacketTunnel state -> REASSERTING")
             case .connected:
+                _ = self?.automation.markConnected()
                 self?.connection = .connected
                 ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
             case .disconnecting:
@@ -64,6 +71,19 @@ final class AppModel: ObservableObject {
         }
         ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v1.0.0 Cyber Terminal Logger Initialized")
         refreshServerMetadata()
+    }
+
+    /// Keep the screen awake while the main window is active and during an
+    /// established VPN connection, so the device never sleeps mid-session.
+    private func updateIdleTimer() {
+        let keepAwake: Bool
+        switch connection {
+        case .connected, .connecting: keepAwake = true
+        case .disconnected, .failed: keepAwake = false
+        }
+        Task { @MainActor in
+            UIApplication.shared.isIdleTimerDisabled = keepAwake
+        }
     }
 
     var copy: AppCopy { AppCopy(language: selectedLanguage ?? .english) }
@@ -131,20 +151,57 @@ final class AppModel: ObservableObject {
             ConsoleLogStore.shared.log(level: .ssh, tag: "HOSTKEY", message: "Verifying pinned host key: \(profile.hostKey)")
         }
 
+        _ = automation.beginConnect()
         connection = .connecting
-        vpn.start(profile: profile) { [weak self] error in
+        performConnectionAttempt()
+        refreshServerMetadata()
+    }
+
+    private func performConnectionAttempt() {
+        guard !automation.isConnected else { return }
+        var effectiveProfile = profile
+        effectiveProfile.dnsServers = settings.resolvedDNSServers
+
+        vpn.start(profile: effectiveProfile) { [weak self] error in
+            guard let self = self else { return }
             if let error {
-                self?.connection = .failed(error.localizedDescription)
-                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "VPN connection failed: \(error.localizedDescription)")
+                let message = error.localizedDescription
+                switch self.automation.reportFailure(error) {
+                case .transientFailure(let attempt, _):
+                    ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "Transient failure (attempt \(attempt))/\(self.automation.maxRetries): \(message). Retrying in 2s...")
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(2))
+                        self.connection = .connecting
+                        self.performConnectionAttempt()
+                    }
+                case .gaveUpAfterRetries(let msg):
+                    self.connection = .failed(msg)
+                    ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(msg)")
+                case .fatalFailure(let msg):
+                    self.connection = .failed(msg)
+                    ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Fatal config error (no retry): \(msg)")
+                default:
+                    break
+                }
+            } else {
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "startVPNTunnel invoked; awaiting NEVPNStatusDidChange")
             }
         }
-        refreshServerMetadata()
     }
 
     func disconnect() {
         ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User requested VPN disconnect. Closing SSH2 tunnel...")
+        _ = automation.markDisconnected()
+        connection = .disconnected
         vpn.stop()
     }
+
+    func tickConnectionTimer() {
+        objectWillChange.send()
+        automation.tick()
+    }
+
+    var connectionActiveSeconds: Int { automation.activeSeconds }
 }
 
 struct VPNProfile: Equatable {
@@ -165,12 +222,23 @@ private enum VPNProfileStore {
         guard let data = defaults.data(forKey: key), let stored = try? JSONDecoder().decode(StoredProfile.self, from: data) else {
             return VPNProfile(host: "", port: 22, username: "", password: "", privateKey: "", hostKey: "")
         }
-        return VPNProfile(host: stored.host, port: stored.port, username: stored.username, password: "", privateKey: "", hostKey: stored.hostKey)
+        // Recover the password from Keychain (round-trips cleanly). The private
+        // key is left empty here because it is stored as a base64 32-byte seed
+        // (not a text key), so it cannot round-trip through VPNProfile.privateKey;
+        // it is restored inside VPNController.start() instead.
+        let password = (try? KeychainStore.read(account: "vps:\(stored.host):\(stored.username)")) ?? ""
+        return VPNProfile(host: stored.host, port: stored.port, username: stored.username,
+                          password: password, privateKey: "", hostKey: stored.hostKey)
     }
 
     static func save(_ profile: VPNProfile) {
         let stored = StoredProfile(host: profile.host, port: profile.port, username: profile.username, hostKey: profile.hostKey)
         if let data = try? JSONEncoder().encode(stored) { defaults.set(data, forKey: key) }
+        // Persist the password to Keychain immediately (not lazily at first
+        // connect), so an app restart before any tunnel attempt does not lose it.
+        if !profile.password.isEmpty {
+            try? KeychainStore.save(password: profile.password, account: "vps:\(profile.host):\(profile.username)")
+        }
     }
 
     private struct StoredProfile: Codable {
@@ -178,6 +246,23 @@ private enum VPNProfileStore {
         let port: Int
         let username: String
         let hostKey: String
+    }
+}
+
+private enum SettingsStore {
+    nonisolated(unsafe) private static let defaults = UserDefaults(suiteName: "group.com.sshtunnel.shared") ?? .standard
+
+    static func load() -> AppSettingsState {
+        guard let data = defaults.data(forKey: AppSettingsCodec.key),
+              let decoded = try? AppSettingsCodec.decode(data) else {
+            return AppSettingsState()
+        }
+        return decoded
+    }
+
+    static func save(_ settings: AppSettingsState) {
+        guard let data = try? AppSettingsCodec.encode(settings) else { return }
+        defaults.set(data, forKey: AppSettingsCodec.key)
     }
 }
 
@@ -189,12 +274,31 @@ private final class VPNController {
         manager.loadFromPreferences { [manager] error in
             guard error == nil else { completion(error); return }
 
+            // Restore any secrets the in-memory profile may be missing (e.g.
+            // after a cold app start, when UI load() cannot round-trip the
+            // base64 key). Without this, the builder would throw
+            // missingCredentials even though the user already stored credentials.
+            let passwordKey = "vps:\(profile.host):\(profile.username)"
+            let privateKeyKey = "vps-key:\(profile.host):\(profile.username)"
+            let password = profile.password.isEmpty
+                ? ((try? KeychainStore.read(account: passwordKey)) ?? "")
+                : profile.password
+            // Keychain holds the key as base64(32-byte seed). Recover it as a
+            // 64-char hex string so canonicalSeed() round-trips it idempotently
+            // and the builder sees a non-empty credential.
+            var privateKey = profile.privateKey
+            if privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let encoded = try? KeychainStore.read(account: privateKeyKey),
+               let seed = Data(base64Encoded: encoded) {
+                privateKey = seed.map { String(format: "%02x", $0) }.joined()
+            }
+
             let profileInput = VPNProfileInput(
                 host: profile.host,
                 port: profile.port,
                 username: profile.username,
-                password: profile.password,
-                privateKey: profile.privateKey,
+                password: password,
+                privateKey: privateKey,
                 hostKey: profile.hostKey,
                 dnsServers: profile.dnsServers
             )
@@ -218,27 +322,24 @@ private final class VPNController {
             // installs its own default routes / exclusion rules. Capturing all
             // networks here would conflict and cause NEVPNErrorDomain Code=1.
 
-            let passwordKey = "vps:\(profile.host):\(profile.username)"
-            do {
-                if !profile.password.isEmpty { try KeychainStore.save(password: profile.password, account: passwordKey) }
-            } catch { completion(error); return }
+            if !profile.password.isEmpty && password != profile.password {
+                try? KeychainStore.save(password: profile.password, account: passwordKey)
+            }
 
             // Start from the builder's provider config (host/port/user/hostKey/dns)
             // and layer in the App-target Keychain credential keys, which the
             // builder cannot know about.
             var providerConfig = configuration.providerConfiguration
-            if !profile.password.isEmpty || KeychainStore.contains(account: passwordKey) {
+            if password.isEmpty == false || KeychainStore.contains(account: passwordKey) {
                 providerConfig["passwordKey"] = passwordKey
             }
             if !profile.privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 do {
                     let seed = try SSHPrivateKeyImporter.canonicalSeed(from: Data(profile.privateKey.utf8))
-                    let privateKeyKey = "vps-key:\(profile.host):\(profile.username)"
                     try KeychainStore.save(password: seed.base64EncodedString(), account: privateKeyKey)
                     providerConfig["privateKeyKey"] = privateKeyKey
                 } catch { completion(error); return }
             }
-            let privateKeyKey = "vps-key:\(profile.host):\(profile.username)"
             if KeychainStore.contains(account: privateKeyKey) {
                 providerConfig["privateKeyKey"] = privateKeyKey
             }
