@@ -154,9 +154,14 @@ struct ConnectView: View {
 
             // Central Power Button
             powerButton
-                .padding(.bottom, 28)
+                .padding(.bottom, 12)
 
-            Spacer(minLength: 16)
+            // Cancel / Disconnect button visible during connecting or failed states
+            cancelOrDisconnectButton
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.connection == .connecting)
+                .padding(.bottom, 12)
+
+            Spacer(minLength: 8)
 
             // Selected Location Card
             selectedLocationCard
@@ -207,47 +212,105 @@ struct ConnectView: View {
         )
     }
 
-    // MARK: - Central Power Button
+    // MARK: - Central Power Button (with arc progress ring)
     private var powerButton: some View {
-        Button(action: toggleConnection) {
-            ZStack {
-                // Soft outer ambient shadow circle
-                Circle()
-                    .fill(Color.white.opacity(0.85))
-                    .frame(width: 172, height: 172)
-                    .shadow(color: Color(red: 0.85, green: 0.88, blue: 0.95), radius: 24, y: 10)
-
-                // Middle border / gradient ring
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: model.connection == .connected
-                                ? [Color.prim50.opacity(0.4), Color.prim100.opacity(0.2)]
-                                : [Color(red: 0.94, green: 0.95, blue: 0.97), Color(red: 0.89, green: 0.90, blue: 0.93)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 156, height: 156)
-
-                // Middle spacing ring
-                Circle()
-                    .fill(Color.appBg)
-                    .frame(width: 146, height: 146)
-
-                // Inner solid white button disc
-                Circle()
-                    .fill(model.connection == .connected ? Color.prim50 : Color.white)
-                    .frame(width: 138, height: 138)
-                    .shadow(color: Color.black.opacity(0.06), radius: 8, y: 4)
-
-                // Power icon
-                Image(systemName: "power")
-                    .font(.system(size: 46, weight: .regular))
-                    .foregroundStyle(model.connection == .connected ? Color.white : Color(red: 0.08, green: 0.16, blue: 0.28))
+        ZStack {
+            // Animated thin arc ring during connecting
+            if case .connecting = model.connection {
+                SpinningArcView()
+                    .frame(width: 190, height: 190)
+                    .transition(.opacity.animation(.easeInOut(duration: 0.25)))
             }
+
+            Button(action: toggleConnection) {
+                ZStack {
+                    // Soft outer ambient shadow circle
+                    Circle()
+                        .fill(Color.white.opacity(0.85))
+                        .frame(width: 172, height: 172)
+                        .shadow(color: Color(red: 0.85, green: 0.88, blue: 0.95), radius: 24, y: 10)
+
+                    // Middle border / gradient ring
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: model.connection == .connected
+                                    ? [Color.prim50.opacity(0.4), Color.prim100.opacity(0.2)]
+                                    : [Color(red: 0.94, green: 0.95, blue: 0.97), Color(red: 0.89, green: 0.90, blue: 0.93)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 156, height: 156)
+
+                    // Middle spacing ring
+                    Circle()
+                        .fill(Color.appBg)
+                        .frame(width: 146, height: 146)
+
+                    // Inner solid white button disc
+                    Circle()
+                        .fill(model.connection == .connected ? Color.prim50 : Color.white)
+                        .frame(width: 138, height: 138)
+                        .shadow(color: Color.black.opacity(0.06), radius: 8, y: 4)
+
+                    // Power icon or spinner
+                    if case .connecting = model.connection {
+                        VStack(spacing: 4) {
+                            Image(systemName: "power")
+                                .font(.system(size: 36, weight: .regular))
+                                .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                            Text("Connecting")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                        }
+                    } else {
+                        Image(systemName: "power")
+                            .font(.system(size: 46, weight: .regular))
+                            .foregroundStyle(model.connection == .connected ? Color.white : Color(red: 0.08, green: 0.16, blue: 0.28))
+                    }
+                }
+            }
+            .buttonStyle(PowerButtonStyle())
         }
-        .buttonStyle(PowerButtonStyle())
+    }
+
+    // MARK: - Cancel / Disconnect Button (shown when not idle)
+    @ViewBuilder
+    private var cancelOrDisconnectButton: some View {
+        let showCancel: Bool = {
+            switch model.connection {
+            case .connecting: return true
+            case .failed: return true
+            default: return false
+            }
+        }()
+
+        if showCancel {
+            Button {
+                model.disconnect()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .medium))
+                    Text("Cancel")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color(red: 0.85, green: 0.2, blue: 0.3).opacity(0.10))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color(red: 0.85, green: 0.2, blue: 0.3).opacity(0.3), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .transition(.scale.combined(with: .opacity))
+        }
     }
 
     // MARK: - Selected Location Card
@@ -357,6 +420,32 @@ struct PowerButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 1.0), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Thin Spinning Arc (connecting indicator)
+
+struct SpinningArcView: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.0, to: 0.28)
+            .stroke(
+                AngularGradient(
+                    colors: [Color(red: 0.25, green: 0.55, blue: 1.0).opacity(0.0),
+                             Color(red: 0.25, green: 0.55, blue: 1.0),
+                             Color(red: 0.15, green: 0.75, blue: 1.0)],
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+            )
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
     }
 }
 
