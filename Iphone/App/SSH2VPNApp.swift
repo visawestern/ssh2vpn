@@ -183,50 +183,87 @@ private enum VPNProfileStore {
 
 private final class VPNController {
     private let manager = NETunnelProviderManager()
+    private let providerBundleIdentifier = "com.sshtunnel.app.packet-tunnel"
 
     func start(profile: VPNProfile, completion: @escaping (Error?) -> Void) {
         manager.loadFromPreferences { [manager] error in
             guard error == nil else { completion(error); return }
-            let configuration = NETunnelProviderProtocol()
-            configuration.providerBundleIdentifier = "com.sshtunnel.app.packet-tunnel"
-            configuration.serverAddress = profile.host
-            configuration.includeAllNetworks = true
-            configuration.enforceRoutes = true
+
+            let profileInput = VPNProfileInput(
+                host: profile.host,
+                port: profile.port,
+                username: profile.username,
+                password: profile.password,
+                privateKey: profile.privateKey,
+                hostKey: profile.hostKey,
+                dnsServers: profile.dnsServers
+            )
+
+            let configuration: VPNConfiguration
+            do {
+                configuration = try VPNConfigurationBuilder.build(
+                    profile: profileInput,
+                    providerBundleIdentifier: self.providerBundleIdentifier
+                )
+            } catch {
+                completion(error)
+                return
+            }
+
+            let configurationProtocol = NETunnelProviderProtocol()
+            configurationProtocol.providerBundleIdentifier = self.providerBundleIdentifier
+            configurationProtocol.serverAddress = configuration.serverAddress
+            configurationProtocol.enforceRoutes = configuration.enforceRoutes
+            // includeAllNetworks is intentionally NOT set: the PacketTunnelProvider
+            // installs its own default routes / exclusion rules. Capturing all
+            // networks here would conflict and cause NEVPNErrorDomain Code=1.
+
             let passwordKey = "vps:\(profile.host):\(profile.username)"
             do {
                 if !profile.password.isEmpty { try KeychainStore.save(password: profile.password, account: passwordKey) }
             } catch { completion(error); return }
-            var providerConfiguration: [String: Any] = [
-                "host": profile.host, "port": profile.port, "username": profile.username,
-                "hostKey": profile.hostKey
-            ]
-            if !profile.dnsServers.isEmpty {
-                providerConfiguration["dnsServers"] = profile.dnsServers
-            }
+
+            // Start from the builder's provider config (host/port/user/hostKey/dns)
+            // and layer in the App-target Keychain credential keys, which the
+            // builder cannot know about.
+            var providerConfig = configuration.providerConfiguration
             if !profile.password.isEmpty || KeychainStore.contains(account: passwordKey) {
-                providerConfiguration["passwordKey"] = passwordKey
+                providerConfig["passwordKey"] = passwordKey
             }
             if !profile.privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 do {
                     let seed = try SSHPrivateKeyImporter.canonicalSeed(from: Data(profile.privateKey.utf8))
                     let privateKeyKey = "vps-key:\(profile.host):\(profile.username)"
                     try KeychainStore.save(password: seed.base64EncodedString(), account: privateKeyKey)
-                    providerConfiguration["privateKeyKey"] = privateKeyKey
+                    providerConfig["privateKeyKey"] = privateKeyKey
                 } catch { completion(error); return }
             }
             let privateKeyKey = "vps-key:\(profile.host):\(profile.username)"
             if KeychainStore.contains(account: privateKeyKey) {
-                providerConfiguration["privateKeyKey"] = privateKeyKey
+                providerConfig["privateKeyKey"] = privateKeyKey
             }
+
             VPNProfileStore.save(profile)
-            configuration.providerConfiguration = providerConfiguration
-            manager.protocolConfiguration = configuration
+            configurationProtocol.providerConfiguration = providerConfig
+            manager.protocolConfiguration = configurationProtocol
             manager.localizedDescription = "SSH2VPN"
             manager.isEnabled = true
-            manager.saveToPreferences { error in
-                guard error == nil else { completion(error); return }
-                do { try manager.connection.startVPNTunnel(); completion(nil) }
-                catch { completion(error) }
+
+            manager.saveToPreferences { saveError in
+                guard saveError == nil else { completion(saveError); return }
+                // CRITICAL FIX (matches VPNConnectionCoordinator): reload
+                // preferences after save and before start. Without this the
+                // manager's in-memory state can be out of sync with the network
+                // extension, producing NEVPNErrorDomain Code=1.
+                manager.loadFromPreferences { reloadError in
+                    guard reloadError == nil else { completion(reloadError); return }
+                    do {
+                        try manager.connection.startVPNTunnel()
+                        completion(nil)
+                    } catch {
+                        completion(error)
+                    }
+                }
             }
         }
     }
