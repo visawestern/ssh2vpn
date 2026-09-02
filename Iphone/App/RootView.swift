@@ -44,9 +44,10 @@ enum Tab: Int, CaseIterable {
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selectedTab: Tab = .connect
+    @State private var isConsoleOpen: Bool = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .trailing) {
             Color.appBg.ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -61,6 +62,21 @@ struct RootView: View {
 
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
+
+            // Vuexy-style Floating theCustomizer terminal button
+            VStack {
+                Spacer()
+                FloatingCustomizerButton(
+                    isOpen: $isConsoleOpen,
+                    logCount: ConsoleLogStore.shared.entries.count,
+                    isConnecting: model.connection == .connecting
+                )
+                .padding(.bottom, 110)
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+
+            // Right sliding Hacker Console Sidebar
+            HackerConsoleSidebarView(isOpen: $isConsoleOpen)
 
             if model.needsLanguageSelection {
                 LanguageOverlay()
@@ -258,14 +274,24 @@ struct ConnectView: View {
                             .foregroundStyle(Color.octGray60)
                     }
                 } else {
-                    Text("🌐")
-                        .font(.system(size: 20))
+                    Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
+                        .font(.system(size: 24))
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(model.serverName)
-                            .font(.openSans(15, weight: .medium))
-                            .foregroundStyle(Color.octGray100)
-                        Text(model.profile.host)
+                        HStack(spacing: 6) {
+                            Text(model.serverCountry.isEmpty ? model.serverName : model.serverCountry)
+                                .font(.openSans(15, weight: .semibold))
+                                .foregroundStyle(Color.octGray100)
+                            if let ping = model.serverPingMs {
+                                Text("\(ping) ms")
+                                    .font(.openSans(11, weight: .semibold))
+                                    .foregroundStyle(Color.prim50)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.prim50.opacity(0.12), in: Capsule())
+                            }
+                        }
+                        Text("\(model.profile.host):\(model.profile.port)")
                             .font(.openSans(12))
                             .foregroundStyle(Color.octGray60)
                     }
@@ -345,8 +371,12 @@ struct WorldMapView: View {
             let mapWidth = geo.size.width
             let mapHeight = mapWidth * (954.0 / 1920.0)
             let hasServer = !model.profile.host.isEmpty
-            let dotX = 0.48 * mapWidth
-            let dotY = 0.28 * mapHeight
+
+            // Map server's real geographic coordinates to world map position
+            let lonNorm = (model.serverLongitude + 180.0) / 360.0
+            let latNorm = (90.0 - model.serverLatitude) / 180.0
+            let dotX = min(max(lonNorm * mapWidth, 24), mapWidth - 24)
+            let dotY = min(max(latNorm * mapHeight, 22), mapHeight - 22)
 
             ZStack(alignment: .topLeading) {
                 Image("world_map")
@@ -360,24 +390,28 @@ struct WorldMapView: View {
                     ZStack {
                         Circle()
                             .stroke(Color.prim50.opacity(0.6), lineWidth: 1.5)
-                            .frame(width: 20, height: 20)
-                            .scaleEffect(isPulsing ? 1.8 : 0.8)
+                            .frame(width: 22, height: 22)
+                            .scaleEffect(isPulsing ? 1.9 : 0.8)
                             .opacity(isPulsing ? 0 : 0.9)
 
                         Circle()
                             .fill(Color.prim50)
                             .frame(width: 8, height: 8)
-                            .shadow(color: Color.prim50.opacity(0.9), radius: 4)
+                            .shadow(color: Color.prim50.opacity(0.9), radius: 5)
                     }
                     .position(x: dotX, y: dotY)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: dotX)
 
-                    // Compact callout badge with server info and ping
+                    // Compact callout badge with country flag, location name and live ping
                     HStack(spacing: 5) {
+                        Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
+                            .font(.system(size: 11))
+
                         Circle()
-                            .fill(model.connection == .connected ? Color.prim50 : Color.sec20)
+                            .fill(model.connection == .connected ? Color.prim50 : (model.connection == .connecting ? Color.orange : Color.sec20))
                             .frame(width: 5, height: 5)
 
-                        Text(model.serverName.isEmpty ? model.profile.host : model.serverName)
+                        Text(model.serverCountry.isEmpty ? (model.serverName.isEmpty ? model.profile.host : model.serverName) : model.serverCountry)
                             .font(.openSans(11, weight: .semibold))
                             .foregroundStyle(Color.octGray100)
                             .lineLimit(1)
@@ -386,19 +420,32 @@ struct WorldMapView: View {
                             .font(.system(size: 8))
                             .foregroundStyle(Color.octGray40)
 
-                        Text(model.connection == .connected ? "32 ms" : "SSH2")
-                            .font(.openSans(10, weight: .medium))
-                            .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.octGray60)
+                        if let ping = model.serverPingMs {
+                            Text("\(ping) ms")
+                                .font(.openSans(10, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                        } else if model.isResolvingMetadata {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Text(model.connection == .connected ? "32 ms" : "SSH2")
+                                .font(.openSans(10, weight: .medium))
+                                .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.octGray60)
+                        }
                     }
                     .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 5)
                     .background(
                         Capsule()
                             .fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.10), radius: 6, x: 0, y: 3)
+                            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
                     )
-                    .position(x: dotX, y: max(16, dotY - 22))
-                    .transition(.scale.combined(with: .opacity))
+                    .position(x: dotX, y: max(18, dotY - 24))
+                    .animation(.spring(response: 0.45, dampingFraction: 0.75), value: dotX)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.7).combined(with: .opacity).combined(with: .offset(y: 8)),
+                        removal: .scale(scale: 0.8).combined(with: .opacity)
+                    ))
                 }
             }
             .frame(width: mapWidth, height: mapHeight)
@@ -459,10 +506,25 @@ struct LocationsView: View {
                             .padding(16)
                         } else {
                             HStack(spacing: 12) {
-                                Text("🌐").font(.title2)
+                                Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
+                                    .font(.system(size: 26))
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.serverName).font(.headline)
-                                    Text(model.profile.host).font(.subheadline).foregroundStyle(.secondary)
+                                    HStack(spacing: 6) {
+                                        Text(model.serverCountry.isEmpty ? model.serverName : model.serverCountry)
+                                            .font(.openSans(16, weight: .semibold))
+                                            .foregroundStyle(Color.octGray100)
+                                        if let ping = model.serverPingMs {
+                                            Text("\(ping) ms")
+                                                .font(.openSans(11, weight: .semibold))
+                                                .foregroundStyle(Color.prim50)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.prim50.opacity(0.12), in: Capsule())
+                                        }
+                                    }
+                                    Text("\(model.profile.host):\(model.profile.port)")
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
                                 }
                                 Spacer()
                                 if model.connection == .connected {
@@ -1092,24 +1154,24 @@ struct ProtocolView: View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("VPN Protocol")
+                    Text(model.copy.text(.vpnProtocol))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    protocolOption(name: "SSH2", desc: "Secure Shell v2 with tunnel", selected: selectedProtocol == "SSH2") {
+                    protocolOption(name: "SSH2", desc: model.copy.text(.ssh2Desc), selected: selectedProtocol == "SSH2") {
                         selectedProtocol = "SSH2"
                     }
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    protocolOption(name: "SSH", desc: "Legacy Secure Shell", selected: selectedProtocol == "SSH") {
+                    protocolOption(name: "SSH", desc: model.copy.text(.sshLegacy), selected: selectedProtocol == "SSH") {
                         selectedProtocol = "SSH"
                     }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                Text("SSH2 is recommended. It provides the best security for your VPN tunnel.")
+                Text(model.copy.text(.ssh2Recommended))
                     .font(.openSans(12))
                     .foregroundStyle(Color.octGray60)
                     .padding(.horizontal, 16)
@@ -1117,7 +1179,7 @@ struct ProtocolView: View {
             .padding(16)
         }
         .background(Color.appBg)
-        .navigationTitle("Protocol")
+        .navigationTitle(model.copy.text(.protocolTitle))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -1156,7 +1218,7 @@ struct DNSView: View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("DNS Settings")
+                    Text(model.copy.text(.dnsSettings))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
@@ -1164,7 +1226,7 @@ struct DNSView: View {
                         .padding(.bottom, 8)
 
                     HStack {
-                        Text("Use Custom DNS")
+                        Text(model.copy.text(.useCustomDNS))
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
                         Spacer()
@@ -1176,15 +1238,15 @@ struct DNSView: View {
                     if useCustomDNS {
                         Divider().background(Color.octGray05).padding(.horizontal, 16)
                         VStack(spacing: 0) {
-                            dnsField(label: "Primary DNS", text: $primaryDNS)
+                            dnsField(label: model.copy.text(.primaryDNS), text: $primaryDNS)
                             Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            dnsField(label: "Secondary DNS", text: $secondaryDNS)
+                            dnsField(label: model.copy.text(.secondaryDNS), text: $secondaryDNS)
                         }
                     }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                Text("Custom DNS servers are used when the VPN tunnel is active.")
+                Text(model.copy.text(.customDNSHint))
                     .font(.openSans(12))
                     .foregroundStyle(Color.octGray60)
                     .padding(.horizontal, 16)
@@ -1192,7 +1254,7 @@ struct DNSView: View {
             .padding(16)
         }
         .background(Color.appBg)
-        .navigationTitle("DNS Settings")
+        .navigationTitle(model.copy.text(.dnsSettings))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -1224,7 +1286,7 @@ struct AdvancedView: View {
         ScrollView {
             VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Connection")
+                    Text(model.copy.text(.connectionSection))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
@@ -1233,10 +1295,10 @@ struct AdvancedView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Kill Switch")
+                            Text(model.copy.text(.killSwitch))
                                 .font(.openSans(15, weight: .medium))
                                 .foregroundStyle(Color.octGray100)
-                            Text("Block traffic when VPN disconnects")
+                            Text(model.copy.text(.killSwitchDesc))
                                 .font(.openSans(12))
                                 .foregroundStyle(Color.octGray60)
                         }
@@ -1250,10 +1312,10 @@ struct AdvancedView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Connect on Demand")
+                            Text(model.copy.text(.connectOnDemand))
                                 .font(.openSans(15, weight: .medium))
                                 .foregroundStyle(Color.octGray100)
-                            Text("Auto-connect when accessing the internet")
+                            Text(model.copy.text(.connectOnDemandDesc))
                                 .font(.openSans(12))
                                 .foregroundStyle(Color.octGray60)
                         }
@@ -1266,7 +1328,7 @@ struct AdvancedView: View {
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Debug")
+                    Text(model.copy.text(.debugSection))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
@@ -1275,10 +1337,10 @@ struct AdvancedView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Enable Logging")
+                            Text(model.copy.text(.enableLogging))
                                 .font(.openSans(15, weight: .medium))
                                 .foregroundStyle(Color.octGray100)
-                            Text("Record connection events for diagnostics")
+                            Text(model.copy.text(.enableLoggingDesc))
                                 .font(.openSans(12))
                                 .foregroundStyle(Color.octGray60)
                         }
@@ -1293,7 +1355,7 @@ struct AdvancedView: View {
             .padding(16)
         }
         .background(Color.appBg)
-        .navigationTitle("Advanced")
+        .navigationTitle(model.copy.text(.advanced))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

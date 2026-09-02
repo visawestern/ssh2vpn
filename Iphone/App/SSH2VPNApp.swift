@@ -19,7 +19,20 @@ final class AppModel: ObservableObject {
     @Published var selectedLanguage: AppLanguage? = LanguageStore.current
     @Published var connection = ConnectionPresentation.disconnected
     @Published var serverName = "My VPS"
-    @Published var profile = VPNProfileStore.load()
+    @Published var profile = VPNProfileStore.load() {
+        didSet {
+            VPNProfileStore.save(profile)
+            refreshServerMetadata()
+        }
+    }
+    @Published var serverCountry: String = ""
+    @Published var serverFlag: String = "🌐"
+    @Published var serverCity: String = ""
+    @Published var serverPingMs: Int? = nil
+    @Published var serverLatitude: Double = 50.1109
+    @Published var serverLongitude: Double = 8.6821
+    @Published var isResolvingMetadata: Bool = false
+
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
 
@@ -27,12 +40,30 @@ final class AppModel: ObservableObject {
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
             guard let connection = note.object as? NEVPNConnection else { return }
             switch connection.status {
-            case .connecting, .reasserting: self?.connection = .connecting
-            case .connected: self?.connection = .connected
-            case .disconnecting, .disconnected, .invalid: self?.connection = .disconnected
-            @unknown default: self?.connection = .failed("Unknown VPN state")
+            case .connecting:
+                self?.connection = .connecting
+                ConsoleLogStore.shared.log(level: .ssh, tag: "TUNNEL", message: "PacketTunnel state -> CONNECTING...")
+            case .reasserting:
+                self?.connection = .connecting
+                ConsoleLogStore.shared.log(level: .warning, tag: "TUNNEL", message: "PacketTunnel state -> REASSERTING")
+            case .connected:
+                self?.connection = .connected
+                ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
+            case .disconnecting:
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
+            case .disconnected:
+                self?.connection = .disconnected
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
+            case .invalid:
+                self?.connection = .disconnected
+                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION")
+            @unknown default:
+                self?.connection = .failed("Unknown VPN state")
+                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> UNKNOWN")
             }
         }
+        ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v1.0.0 Cyber Terminal Logger Initialized")
+        refreshServerMetadata()
     }
 
     var copy: AppCopy { AppCopy(language: selectedLanguage ?? .english) }
@@ -42,16 +73,78 @@ final class AppModel: ObservableObject {
     func choose(_ language: AppLanguage) {
         selectedLanguage = language
         LanguageStore.current = language
+        ConsoleLogStore.shared.log(level: .system, tag: "LANG", message: "Interface language updated -> \(language.title)")
     }
 
-    func connect() {
-        connection = .connecting
-        vpn.start(profile: profile) { [weak self] error in
-            if let error { self?.connection = .failed(error.localizedDescription) }
+    func refreshServerMetadata() {
+        guard !profile.host.isEmpty else {
+            serverCountry = ""
+            serverFlag = "🌐"
+            serverCity = ""
+            serverPingMs = nil
+            return
+        }
+
+        isResolvingMetadata = true
+        let currentHost = profile.host
+        let currentPort = profile.port
+
+        ConsoleLogStore.shared.log(level: .info, tag: "PROBE", message: "Analyzing remote server \(currentHost):\(currentPort)...")
+
+        Task {
+            let ping = await ServerMetadataResolver.measurePing(host: currentHost, port: currentPort)
+            let geo = await ServerMetadataResolver.resolveGeo(host: currentHost)
+
+            await MainActor.run {
+                guard self.profile.host == currentHost else { return }
+                self.serverPingMs = ping
+                if let ping = ping {
+                    ConsoleLogStore.shared.log(level: .success, tag: "PING", message: "TCP RTT latency: \(ping) ms to \(currentHost):\(currentPort)")
+                } else {
+                    ConsoleLogStore.shared.log(level: .warning, tag: "PING", message: "TCP ping probe timed out for \(currentHost):\(currentPort)")
+                }
+
+                if let geo = geo {
+                    self.serverCountry = geo.country
+                    self.serverFlag = geo.flag
+                    self.serverCity = geo.city
+                    self.serverLatitude = geo.lat
+                    self.serverLongitude = geo.lon
+                    if self.serverName.isEmpty || self.serverName == "My VPS" || self.serverName == currentHost {
+                        self.serverName = "\(geo.flag) \(geo.country)"
+                    }
+                    ConsoleLogStore.shared.log(level: .success, tag: "GEOIP", message: "GeoIP located: \(geo.flag) \(geo.country) (\(geo.city)) [\(geo.lat), \(geo.lon)]")
+                }
+                self.isResolvingMetadata = false
+            }
         }
     }
 
-    func disconnect() { vpn.stop() }
+    func connect() {
+        ConsoleLogStore.shared.log(level: .system, tag: "CONNECT", message: "Starting VPN connection to \(profile.host):\(profile.port) user=\(profile.username)...")
+        if !profile.privateKey.isEmpty {
+            ConsoleLogStore.shared.log(level: .ssh, tag: "AUTH", message: "Using Ed25519 private key authentication")
+        } else if !profile.password.isEmpty {
+            ConsoleLogStore.shared.log(level: .ssh, tag: "AUTH", message: "Using password authentication from secure Keychain")
+        }
+        if !profile.hostKey.isEmpty {
+            ConsoleLogStore.shared.log(level: .ssh, tag: "HOSTKEY", message: "Verifying pinned host key: \(profile.hostKey)")
+        }
+
+        connection = .connecting
+        vpn.start(profile: profile) { [weak self] error in
+            if let error {
+                self?.connection = .failed(error.localizedDescription)
+                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "VPN connection failed: \(error.localizedDescription)")
+            }
+        }
+        refreshServerMetadata()
+    }
+
+    func disconnect() {
+        ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User requested VPN disconnect. Closing SSH2 tunnel...")
+        vpn.stop()
+    }
 }
 
 struct VPNProfile: Equatable {

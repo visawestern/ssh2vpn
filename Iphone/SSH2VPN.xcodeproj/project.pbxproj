@@ -16,6 +16,8 @@
 		A10000010000000000000017 /* PacketTunnelPacketLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000018 /* PacketTunnelPacketLoop.swift */; };
 		A10000010000000000000018 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
 		A10000010000000000000019 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
+		A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000040 /* ServerMetadataResolver.swift */; };
+		A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000041 /* HackerConsoleSidebarView.swift */; };
 		A10000010000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021 /* Assets.xcassets */; };
 		A10000010000000000000030 /* opensans_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000030 /* opensans_regular.ttf */; };
 		A10000010000000000000031 /* opensans_bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000031 /* opensans_bold.ttf */; };
@@ -55,6 +57,8 @@
 		A20000010000000000000001 /* SSH2VPNApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSH2VPNApp.swift; sourceTree = "<group>"; };
 		A20000010000000000000002 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		A20000010000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		A20000010000000000000040 /* ServerMetadataResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMetadataResolver.swift; sourceTree = "<group>"; };
+		A20000010000000000000041 /* HackerConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HackerConsoleSidebarView.swift; sourceTree = "<group>"; };
 		A20000010000000000000004 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		A20000010000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000010000000000000006 /* PacketTunnel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "PacketTunnel-Info.plist"; sourceTree = "<group>"; };
@@ -119,6 +123,8 @@
 				A20000010000000000000001 /* SSH2VPNApp.swift */,
 				A20000010000000000000002 /* Localization.swift */,
 				A20000010000000000000003 /* RootView.swift */,
+				A20000010000000000000040 /* ServerMetadataResolver.swift */,
+				A20000010000000000000041 /* HackerConsoleSidebarView.swift */,
 				A20000010000000000000005 /* Info.plist */,
 				A20000010000000000000009 /* SSH2VPN.entitlements */,
 				A20000010000000000000011 /* Copy.swift */,
@@ -310,6 +316,8 @@
 				A10000010000000000000003 /* RootView.swift in Sources */,
 				A10000010000000000000006 /* Copy.swift in Sources */,
 				A10000010000000000000018 /* KeychainStore.swift in Sources */,
+				A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */,
+				A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

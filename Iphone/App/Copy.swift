@@ -33,6 +33,14 @@ enum CopyKey {
     case noServer, setupFailed, selectedServer, ping, status, country, ip
     // Errors
     case sshConnectionFailed, sshHostKeyMismatch, sshAuthFailed, sshTimeout, unknownError
+    // Protocol View
+    case vpnProtocol, ssh2Recommended, ssh2Desc, sshLegacy
+    // DNS View
+    case useCustomDNS, primaryDNS, secondaryDNS, customDNSHint
+    // Advanced View
+    case connectionSection, killSwitch, killSwitchDesc
+    case connectOnDemand, connectOnDemandDesc
+    case debugSection, enableLogging, enableLoggingDesc
 }
 
 struct AppCopy {
@@ -77,7 +85,14 @@ struct AppCopy {
         .setupFailed: "VPN setup failed", .selectedServer: "Selected Server", .ping: "Ping", .status: "Status",
         .country: "Country", .ip: "IP", .settings: "Settings", .sshConnectionFailed: "SSH connection failed",
         .sshHostKeyMismatch: "Host key mismatch", .sshAuthFailed: "Authentication failed",
-        .sshTimeout: "Connection timed out", .unknownError: "Unknown error"
+        .sshTimeout: "Connection timed out", .unknownError: "Unknown error",
+        .vpnProtocol: "VPN Protocol", .ssh2Recommended: "SSH2 is recommended. It provides the best security for your VPN tunnel.",
+        .ssh2Desc: "Secure Shell v2 with tunnel", .sshLegacy: "Legacy Secure Shell",
+        .useCustomDNS: "Use Custom DNS", .primaryDNS: "Primary DNS", .secondaryDNS: "Secondary DNS",
+        .customDNSHint: "Custom DNS servers are used when the VPN tunnel is active.",
+        .connectionSection: "Connection", .killSwitch: "Kill Switch", .killSwitchDesc: "Block traffic when VPN disconnects",
+        .connectOnDemand: "Connect on Demand", .connectOnDemandDesc: "Auto-connect when accessing the internet",
+        .debugSection: "Debug", .enableLogging: "Enable Logging", .enableLoggingDesc: "Record connection events for diagnostics"
     ]
 
     // MARK: - Russian
@@ -109,7 +124,14 @@ struct AppCopy {
         .selectedServer: "Выбранный сервер", .ping: "Пинг", .status: "Статус", .country: "Страна", .ip: "IP",
         .settings: "Настройки", .sshConnectionFailed: "Ошибка SSH-подключения",
         .sshHostKeyMismatch: "Несовпадение ключа хоста", .sshAuthFailed: "Ошибка аутентификации",
-        .sshTimeout: "Время подключения истекло", .unknownError: "Неизвестная ошибка"
+        .sshTimeout: "Время подключения истекло", .unknownError: "Неизвестная ошибка",
+        .vpnProtocol: "Протокол VPN", .ssh2Recommended: "Рекомендуется SSH2. Он обеспечивает лучшую безопасность для вашего VPN-туннеля.",
+        .ssh2Desc: "Secure Shell v2 с туннелем", .sshLegacy: "Legacy Secure Shell",
+        .useCustomDNS: "Использовать свои DNS", .primaryDNS: "Основной DNS", .secondaryDNS: "Резервный DNS",
+        .customDNSHint: "Пользовательские DNS-серверы используются, когда VPN-туннель активен.",
+        .connectionSection: "Подключение", .killSwitch: "Kill Switch", .killSwitchDesc: "Блокировать трафик при отключении VPN",
+        .connectOnDemand: "Подключение по запросу", .connectOnDemandDesc: "Автоподключение при доступе в интернет",
+        .debugSection: "Отладка", .enableLogging: "Включить логирование", .enableLoggingDesc: "Записывать события подключения для диагностики"
     ]
 
     // MARK: - Spanish
