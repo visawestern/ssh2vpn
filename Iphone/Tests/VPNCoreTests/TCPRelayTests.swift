@@ -11,6 +11,8 @@ final class TCPRelayTests: XCTestCase {
     final class FakeChannel: RelayChannel {
         var sent = [Data]()
         var closed = 0
+        var onData: ((Data) -> Void)?
+        var onClosed: (() -> Void)?
         func send(_ data: Data) { sent.append(data) }
         func close() { closed += 1 }
     }
@@ -18,12 +20,18 @@ final class TCPRelayTests: XCTestCase {
     final class FakeFactory: RelayChannelFactory {
         var channels = [String: FakeChannel]()
         var opened = [String]()
+        var capturedOnData: ((Data) -> Void)?
+        var capturedOnClosed: (() -> Void)?
 
         func open(flow: RelayFlow, onData: @escaping (Data) -> Void, onClosed: @escaping () -> Void) -> RelayChannel {
             let key = "\(flow.srcPort)->\(flow.dstAddr.map(String.init).joined(separator: ".")):\(flow.dstPort)"
             let ch = channels[key] ?? FakeChannel()
             channels[key] = ch
             opened.append(key)
+            capturedOnData = onData
+            capturedOnClosed = onClosed
+            ch.onData = onData
+            ch.onClosed = onClosed
             return ch
         }
     }
@@ -182,6 +190,112 @@ final class TCPRelayTests: XCTestCase {
         XCTAssertEqual(factory.opened.count, 1, "still one channel")
         XCTAssertEqual(r1.count, 1)
         XCTAssertEqual(r2.count, 1, "duplicate SYN resends SYN-ACK")
+    }
+
+    // MARK: - Round 9: flow census for status reporting
+
+    func testFlowCountTracksLiveFlows() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        XCTAssertEqual(machine.flowCount, 0)
+
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        XCTAssertEqual(machine.flowCount, 1)
+
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 4321, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        XCTAssertEqual(machine.flowCount, 2)
+    }
+
+    // MARK: - Round 10: server-to-phone splice (channel data -> utun packets)
+
+    func testChannelDataBuildsReplyPacket() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let flow = IPv4Flow(sourceAddress: 0x0A000002, sourcePort: 1234,
+                            destinationAddress: 0x01010101, destinationPort: 443, transport: .tcp)
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        _ = try machine.handle(packet: IPv4Packet(ackPacket(flow: flow, seq: 1001, ack: 5001)))
+
+        let rflow = RelayFlow(srcAddr: v4(10, 0, 0, 2), srcPort: 1234,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        let pkts = machine.channelData(Data([0xAA]), for: rflow)
+        XCTAssertEqual(pkts.count, 1)
+        let seg = try TCPParser.parse(Data(pkts[0].dropFirst(20)))
+        XCTAssertEqual(seg.seq, 5001, "first server byte uses ISN+1")
+        XCTAssertEqual(seg.ack, 1001)
+        XCTAssertEqual(seg.payload, Data([0xAA]))
+        XCTAssertTrue(seg.flags.contains(.ack))
+    }
+
+    func testChannelDataAdvancesSequence() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let flow = IPv4Flow(sourceAddress: 0x0A000002, sourcePort: 1234,
+                            destinationAddress: 0x01010101, destinationPort: 443, transport: .tcp)
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        _ = try machine.handle(packet: IPv4Packet(ackPacket(flow: flow, seq: 1001, ack: 5001)))
+        let rflow = RelayFlow(srcAddr: v4(10, 0, 0, 2), srcPort: 1234,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        _ = machine.channelData(Data([0xAA]), for: rflow)
+        let pkts = machine.channelData(Data([0xBB, 0xCC]), for: rflow)
+        let seg = try TCPParser.parse(Data(pkts[0].dropFirst(20)))
+        XCTAssertEqual(seg.seq, 5002)
+        XCTAssertEqual(seg.payload, Data([0xBB, 0xCC]))
+    }
+
+    func testChannelDataBufferedUntilEstablished() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let flow = IPv4Flow(sourceAddress: 0x0A000002, sourcePort: 1234,
+                            destinationAddress: 0x01010101, destinationPort: 443, transport: .tcp)
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        let rflow = RelayFlow(srcAddr: v4(10, 0, 0, 2), srcPort: 1234,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        // Server answered before the phone's ACK: buffer, don't drop.
+        XCTAssertTrue(machine.channelData(Data([0xAA]), for: rflow).isEmpty)
+        // The ACK flushes the buffered bytes as a data packet.
+        let flushed = try machine.handle(packet: IPv4Packet(ackPacket(flow: flow, seq: 1001, ack: 5001)))
+        XCTAssertEqual(flushed.count, 1)
+        let seg = try TCPParser.parse(Data(flushed[0].dropFirst(20)))
+        XCTAssertEqual(seg.payload, Data([0xAA]))
+    }
+
+    func testChannelCloseSendsFin() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let flow = IPv4Flow(sourceAddress: 0x0A000002, sourcePort: 1234,
+                            destinationAddress: 0x01010101, destinationPort: 443, transport: .tcp)
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        _ = try machine.handle(packet: IPv4Packet(ackPacket(flow: flow, seq: 1001, ack: 5001)))
+        let rflow = RelayFlow(srcAddr: v4(10, 0, 0, 2), srcPort: 1234,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        let pkts = machine.channelClosed(flow: rflow)
+        XCTAssertEqual(pkts.count, 1)
+        let seg = try TCPParser.parse(Data(pkts[0].dropFirst(20)))
+        XCTAssertTrue(seg.flags.contains(.fin))
+        XCTAssertEqual(seg.ack, 1001)
+    }
+
+    func testChannelDataUnknownFlowDropped() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let ghost = RelayFlow(srcAddr: v4(10, 0, 0, 9), srcPort: 9999,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        XCTAssertTrue(machine.channelData(Data([0x01]), for: ghost).isEmpty)
+        XCTAssertTrue(machine.channelClosed(flow: ghost).isEmpty)
+    }
+
+    func testOpenWiresChannelCallbacks() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        var seen: [(RelayFlow, Data)] = []
+        machine.onChannelData = { seen.append(($0, $1)) }
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        // Drive the captured onData closure as the SSH channel would.
+        factory.capturedOnData?(Data([0x07]))
+        XCTAssertEqual(seen.count, 1)
+        XCTAssertEqual(seen[0].0.srcPort, 1234)
+        XCTAssertEqual(seen[0].1, Data([0x07]))
     }
 
     // MARK: - Round 8: IP options + checksum edge cases

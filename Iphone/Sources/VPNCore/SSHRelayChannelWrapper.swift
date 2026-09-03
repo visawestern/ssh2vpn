@@ -21,6 +21,7 @@ public final class SSHRelayChannelWrapper: RelayChannel, ChannelInboundHandler {
     public func handlerAdded(context: ChannelHandlerContext) {
         channel = context.channel
         isAttached = true
+        ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "direct-tcpip channel attached (ready for splice)")
         context.channel.closeFuture.whenComplete { [weak self] _ in
             self?.onClosed?()
         }
@@ -52,6 +53,8 @@ public final class SSHRelayChannelWrapper: RelayChannel, ChannelInboundHandler {
     }
 
     public func close() {
-        try? channel?.close(mode: .all).wait()
+        // Never block: fire-and-forget close. A .wait() here would stall the
+        // caller (often the packet path or a state-machine tick).
+        channel?.close(mode: .all, promise: nil)
     }
 }

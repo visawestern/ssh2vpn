@@ -249,9 +249,10 @@ final class AppModel: ObservableObject {
             let status = await VPNExtensionAPI.call(from: vpn.diagnosticManager(), cmd: .status, timeout: 2)
             let r = status["packetsRead"] ?? "?"
             let w = status["packetsWritten"] ?? "?"
+            let replied = status["replied"] ?? "?"
             let s = status["sessions"] ?? "?"
             let phase = status["phase"] ?? "?"
-            ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Tunnel counters [\(tag)]: utun read=\(r) written=\(w) sessions=\(s) phase=\(phase)")
+            ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Tunnel counters [\(tag)]: utun read=\(r) written=\(w) replied=\(replied) sessions=\(s) phase=\(phase)")
         }
     }
 

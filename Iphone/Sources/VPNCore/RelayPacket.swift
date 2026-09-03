@@ -144,22 +144,29 @@ public enum Checksum {
         fold(words(header))
     }
 
-    /// TCP checksum over the segment (checksum field zeroed) plus the
-    /// pseudo-header derived from the endpoint addresses.
-    public static func tcp(segment: [UInt8], srcAddr: [UInt8], dstAddr: [UInt8]) -> UInt16 {
+    /// Transport checksum over the segment (checksum field zeroed) plus the
+    /// pseudo-header derived from the endpoint addresses. `proto` is 6 (TCP)
+    /// or 17 (UDP); address family is inferred from length (4 = v4, 16 = v6).
+    public static func transport(segment: [UInt8], srcAddr: [UInt8], dstAddr: [UInt8], proto: UInt8) -> UInt16 {
         var pseudo: [UInt8]
         if srcAddr.count == 4 {
             let len = segment.count
-            pseudo = srcAddr + dstAddr + [0, 6,
+            pseudo = srcAddr + dstAddr + [0, proto,
                 UInt8((len >> 8) & 0xFF), UInt8(len & 0xFF)]
         } else {
             let len = segment.count
             pseudo = srcAddr + dstAddr + [
                 UInt8((len >> 24) & 0xFF), UInt8((len >> 16) & 0xFF),
                 UInt8((len >> 8) & 0xFF), UInt8(len & 0xFF),
-                0, 0, 0, 6]
+                0, 0, 0, proto]
         }
         return fold(words(pseudo) + words(segment))
+    }
+
+    /// TCP checksum over the segment (checksum field zeroed) plus the
+    /// pseudo-header derived from the endpoint addresses.
+    public static func tcp(segment: [UInt8], srcAddr: [UInt8], dstAddr: [UInt8]) -> UInt16 {
+        transport(segment: segment, srcAddr: srcAddr, dstAddr: dstAddr, proto: 6)
     }
 
     /// True when a received full IPv4 packet's header checksum is valid.
@@ -168,6 +175,20 @@ public enum Checksum {
         let ihl = Int(packet[0] & 0x0F) * 4
         guard ihl >= 20, packet.count >= ihl else { return false }
         return ipHeader(Array(packet[0..<ihl])) == 0
+    }
+
+    /// True when a received full IP packet's UDP checksum verifies. A stored
+    /// zero means "no checksum" (legal for IPv4) and is accepted.
+    public static func isValidUDPDatagram(packet: [UInt8]) -> Bool {
+        guard packet.count >= 20, packet[0] >> 4 == 4 else { return false }
+        let ihl = Int(packet[0] & 0x0F) * 4
+        let total = Int(UInt16(packet[2]) << 8 | UInt16(packet[3]))
+        guard ihl >= 20, total >= ihl + 8, packet.count >= total, packet[9] == 17 else { return false }
+        let dgram = Array(packet[ihl..<total])
+        guard dgram.count >= 8 else { return false }
+        let stored = UInt16(dgram[6]) << 8 | UInt16(dgram[7])
+        if stored == 0 { return true }
+        return transport(segment: dgram, srcAddr: Array(packet[12..<16]), dstAddr: Array(packet[16..<20]), proto: 17) == 0
     }
 
     /// True when a received full IP packet's TCP checksum (including the
@@ -208,6 +229,12 @@ public enum TCPReplyBuilder {
     public static func rst(flow: RelayFlow, seq: UInt32, ack: UInt32, identification: UInt16 = 0) throws -> [UInt8] {
         try build(flow: flow, seq: seq, ack: ack, flags: [.rst, .ack],
                   payload: [], window: 0, identification: identification, mss: nil)
+    }
+
+    /// FIN closing our side toward the phone (server side went away).
+    public static func fin(flow: RelayFlow, seq: UInt32, ack: UInt32, identification: UInt16 = 0) throws -> [UInt8] {
+        try build(flow: flow, seq: seq, ack: ack, flags: [.fin, .ack],
+                  payload: [], window: 65535, identification: identification, mss: nil)
     }
 
     /// Data segment (ACK set, PSH when carrying payload).
@@ -273,6 +300,87 @@ public enum TCPReplyBuilder {
     }
 }
 
+// MARK: - UDP reply builder (server -> phone direction)
+
+/// Builds IPv4/UDP replies (used for relayed DNS answers). v4 only for now —
+/// v6 DNS goes through the same path once v6 relay exists.
+public enum UDPReplyBuilder {
+    public static func reply(flow: RelayFlow, payload: [UInt8], identification: UInt16 = 0) throws -> [UInt8] {
+        let r = flow.reversed
+        guard !r.isV6, r.srcAddr.count == 4, r.dstAddr.count == 4 else {
+            throw IPPacketError.invalidHeaderLength
+        }
+        // --- UDP datagram (checksum zeroed for now) ---
+        var dgram = [UInt8](repeating: 0, count: 8)
+        dgram[0] = UInt8(r.srcPort >> 8); dgram[1] = UInt8(r.srcPort & 0xFF)
+        dgram[2] = UInt8(r.dstPort >> 8); dgram[3] = UInt8(r.dstPort & 0xFF)
+        let udpLen = 8 + payload.count
+        dgram[4] = UInt8(udpLen >> 8); dgram[5] = UInt8(udpLen & 0xFF)
+        var csum = Checksum.transport(segment: dgram + payload, srcAddr: r.srcAddr, dstAddr: r.dstAddr, proto: 17)
+        if csum == 0 { csum = 0xFFFF } // zero means "absent" — never send that
+        dgram[6] = UInt8(csum >> 8); dgram[7] = UInt8(csum & 0xFF)
+        let datagram = dgram + payload
+
+        // --- IPv4 header ---
+        var ip = [UInt8](repeating: 0, count: 20)
+        ip[0] = 0x45
+        let total = 20 + datagram.count
+        ip[2] = UInt8(total >> 8); ip[3] = UInt8(total & 0xFF)
+        ip[4] = UInt8(identification >> 8); ip[5] = UInt8(identification & 0xFF)
+        ip[8] = 64
+        ip[9] = 17
+        ip[12..<16] = r.srcAddr[0..<4]
+        ip[16..<20] = r.dstAddr[0..<4]
+        let c = Checksum.ipHeader(ip)
+        ip[10] = UInt8(c >> 8); ip[11] = UInt8(c & 0xFF)
+        return ip + datagram
+    }
+}
+
+// MARK: - DNS multiplexer (many phone queries, one upstream TCP connection)
+
+/// Multiplexes concurrent phone DNS queries over a single upstream TCP
+/// connection to port 53. Responses are routed back to the originating flows
+/// by DNS query ID (several flows may share one ID — all get the answer).
+/// Pure bytes in/out; the transport owns the actual channel.
+public struct DNSRelay: Sendable {
+    public var upstreamHost: String
+    public var upstreamPort: Int
+    private var idToFlows: [UInt16: [RelayFlow]] = [:]
+    private var buffer = Data()
+
+    public init(upstreamHost: String, upstreamPort: Int = 53) {
+        self.upstreamHost = upstreamHost
+        self.upstreamPort = upstreamPort
+    }
+
+    /// Registers a query; returns the length-prefixed bytes to send upstream,
+    /// or nil when the query is malformed (shorter than a DNS header).
+    public mutating func query(_ query: Data, from flow: RelayFlow) -> Data? {
+        guard query.count >= 12 else { return nil }
+        let id = UInt16(query[0]) << 8 | UInt16(query[1])
+        idToFlows[id, default: []].append(flow)
+        return DNSOverTCP.encode(query)
+    }
+
+    /// Feeds upstream TCP bytes; returns (flow, response) pairs ready to
+    /// answer. Unknown IDs are dropped; partial messages stay buffered.
+    public mutating func receive(_ bytes: Data) -> [(RelayFlow, Data)] {
+        buffer.append(bytes)
+        let (messages, rest) = DNSOverTCP.decode(buffer)
+        buffer = rest
+        var out: [(RelayFlow, Data)] = []
+        for m in messages {
+            guard m.count >= 2 else { continue }
+            let id = UInt16(m[0]) << 8 | UInt16(m[1])
+            if let flows = idToFlows.removeValue(forKey: id) {
+                for f in flows { out.append((f, m)) }
+            }
+        }
+        return out
+    }
+}
+
 // MARK: - DNS-over-TCP codec
 
 public enum DNSOverTCP {
@@ -293,9 +401,11 @@ public enum DNSOverTCP {
         while offset + 2 <= stream.count {
             let length = Int(stream[offset]) << 8 | Int(stream[offset + 1])
             guard stream.count >= offset + 2 + length else { break }
-            messages.append(stream[offset + 2..<(offset + 2 + length)])
+            messages.append(Data(stream[(offset + 2)..<(offset + 2 + length)]))
             offset += 2 + length
         }
-        return (messages, stream[offset...])
+        // Slicing exactly at end-of-data traps on some Data layouts, so copy.
+        let remainder = offset < stream.count ? Data(stream[offset...]) : Data()
+        return (messages, remainder)
     }
 }

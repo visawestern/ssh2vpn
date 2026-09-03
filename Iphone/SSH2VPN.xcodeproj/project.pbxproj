@@ -16,16 +16,16 @@
 		A10000010000000000000017 /* PacketTunnelPacketLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000018 /* PacketTunnelPacketLoop.swift */; };
 		A10000010000000000000018 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
 		A10000010000000000000019 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
-		A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000040 /* ServerMetadataResolver.swift */; };
-		A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000041 /* HackerConsoleSidebarView.swift */; };
 		A10000010000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021 /* Assets.xcassets */; };
 		A10000010000000000000030 /* opensans_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000030 /* opensans_regular.ttf */; };
 		A10000010000000000000031 /* opensans_bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000031 /* opensans_bold.ttf */; };
 		A10000010000000000000032 /* opensans_semibold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000032 /* opensans_semibold.ttf */; };
 		A10000010000000000000033 /* opensans_medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000033 /* opensans_medium.ttf */; };
 		A10000010000000000000034 /* opensans_light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000034 /* opensans_light.ttf */; };
+		A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000040 /* ServerMetadataResolver.swift */; };
+		A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000041 /* HackerConsoleSidebarView.swift */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
-		C30000010000000000000002 /* ../Gateway/gateway.py in Resources */ = {isa = PBXBuildFile; fileRef = C40000010000000000000001 /* ../Gateway/gateway.py */; };
+		C30000010000000000000002 /* gateway.py in Resources */ = {isa = PBXBuildFile; fileRef = C40000010000000000000001 /* gateway.py */; };
 		C30000010000000000000003 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
 /* End PBXBuildFile section */
 
@@ -57,8 +57,6 @@
 		A20000010000000000000001 /* SSH2VPNApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSH2VPNApp.swift; sourceTree = "<group>"; };
 		A20000010000000000000002 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		A20000010000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		A20000010000000000000040 /* ServerMetadataResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMetadataResolver.swift; sourceTree = "<group>"; };
-		A20000010000000000000041 /* HackerConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HackerConsoleSidebarView.swift; sourceTree = "<group>"; };
 		A20000010000000000000004 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		A20000010000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000010000000000000006 /* PacketTunnel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "PacketTunnel-Info.plist"; sourceTree = "<group>"; };
@@ -67,22 +65,24 @@
 		A20000010000000000000009 /* SSH2VPN.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SSH2VPN.entitlements; sourceTree = "<group>"; };
 		A20000010000000000000010 /* SSH2VPNPacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SSH2VPNPacketTunnel.entitlements; sourceTree = "<group>"; };
 		A20000010000000000000011 /* Copy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Copy.swift; sourceTree = "<group>"; };
-		A20000010000000000000012 /* ../Sources/VPNCore/TransportFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/TransportFrame.swift; sourceTree = "<group>"; };
-		A20000010000000000000013 /* ../Sources/VPNCore/ConnectionStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/ConnectionStateMachine.swift; sourceTree = "<group>"; };
-		A20000010000000000000014 /* ../Sources/VPNCore/FlowRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/FlowRouter.swift; sourceTree = "<group>"; };
-		A20000010000000000000015 /* ../Sources/VPNCore/IPPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/IPPacket.swift; sourceTree = "<group>"; };
-		A20000010000000000000016 /* ../Sources/VPNCore/SSHTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHTransport.swift; sourceTree = "<group>"; };
-		A20000010000000000000017 /* ../Sources/VPNCore/SSHFrameCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHFrameCodec.swift; sourceTree = "<group>"; };
+		A20000010000000000000012 /* TransportFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/TransportFrame.swift; sourceTree = "<group>"; };
+		A20000010000000000000013 /* ConnectionStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/ConnectionStateMachine.swift; sourceTree = "<group>"; };
+		A20000010000000000000014 /* FlowRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/FlowRouter.swift; sourceTree = "<group>"; };
+		A20000010000000000000015 /* IPPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/IPPacket.swift; sourceTree = "<group>"; };
+		A20000010000000000000016 /* SSHTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHTransport.swift; sourceTree = "<group>"; };
+		A20000010000000000000017 /* SSHFrameCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHFrameCodec.swift; sourceTree = "<group>"; };
 		A20000010000000000000018 /* PacketTunnelPacketLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelPacketLoop.swift; sourceTree = "<group>"; };
 		A20000010000000000000019 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		A20000010000000000000020 /* ../Sources/VPNCore/SessionHandshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SessionHandshake.swift; sourceTree = "<group>"; };
+		A20000010000000000000020 /* SessionHandshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SessionHandshake.swift; sourceTree = "<group>"; };
 		A20000010000000000000021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000010000000000000030 /* opensans_regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_regular.ttf; sourceTree = "<group>"; };
 		A20000010000000000000031 /* opensans_bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_bold.ttf; sourceTree = "<group>"; };
 		A20000010000000000000032 /* opensans_semibold.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_semibold.ttf; sourceTree = "<group>"; };
 		A20000010000000000000033 /* opensans_medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_medium.ttf; sourceTree = "<group>"; };
 		A20000010000000000000034 /* opensans_light.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_light.ttf; sourceTree = "<group>"; };
-		C40000010000000000000001 /* ../Gateway/gateway.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ../Gateway/gateway.py; sourceTree = "<group>"; };
+		A20000010000000000000040 /* ServerMetadataResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMetadataResolver.swift; sourceTree = "<group>"; };
+		A20000010000000000000041 /* HackerConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HackerConsoleSidebarView.swift; sourceTree = "<group>"; };
+		C40000010000000000000001 /* gateway.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ../Gateway/gateway.py; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,7 +132,6 @@
 				A20000010000000000000021 /* Assets.xcassets */,
 				A20000010000000000000030 /* opensans_regular.ttf */,
 				A20000010000000000000034 /* opensans_light.ttf */,
-				"",
 				A20000010000000000000031 /* opensans_bold.ttf */,
 				A20000010000000000000032 /* opensans_semibold.ttf */,
 				A20000010000000000000033 /* opensans_medium.ttf */,
@@ -147,14 +146,14 @@
 				A20000010000000000000006 /* PacketTunnel-Info.plist */,
 				A20000010000000000000010 /* SSH2VPNPacketTunnel.entitlements */,
 				A20000010000000000000018 /* PacketTunnelPacketLoop.swift */,
-				A20000010000000000000012 /* ../Sources/VPNCore/TransportFrame.swift */,
-				A20000010000000000000013 /* ../Sources/VPNCore/ConnectionStateMachine.swift */,
-				A20000010000000000000014 /* ../Sources/VPNCore/FlowRouter.swift */,
-				A20000010000000000000015 /* ../Sources/VPNCore/IPPacket.swift */,
-				A20000010000000000000016 /* ../Sources/VPNCore/SSHTransport.swift */,
-				A20000010000000000000017 /* ../Sources/VPNCore/SSHFrameCodec.swift */,
-				A20000010000000000000020 /* ../Sources/VPNCore/SessionHandshake.swift */,
-				C40000010000000000000001 /* ../Gateway/gateway.py */,
+				A20000010000000000000012 /* TransportFrame.swift */,
+				A20000010000000000000013 /* ConnectionStateMachine.swift */,
+				A20000010000000000000014 /* FlowRouter.swift */,
+				A20000010000000000000015 /* IPPacket.swift */,
+				A20000010000000000000016 /* SSHTransport.swift */,
+				A20000010000000000000017 /* SSHFrameCodec.swift */,
+				A20000010000000000000020 /* SessionHandshake.swift */,
+				C40000010000000000000001 /* gateway.py */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -277,7 +276,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C30000010000000000000002 /* ../Gateway/gateway.py in Resources */,
+				C30000010000000000000002 /* gateway.py in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

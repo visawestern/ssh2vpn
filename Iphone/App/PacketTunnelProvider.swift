@@ -49,7 +49,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                  "stopReason": self?.lastStopReason ?? "none",
                  "packetsRead": "\(self?.packetLoop?.packetsRead ?? 0)",
                  "packetsWritten": "\(self?.packetLoop?.packetsWritten ?? 0)",
-                  "sessions": "relay"]
+                 "replied": "\((self?.transport as? RelayTransport)?.repliedCount() ?? 0)",
+                 "sessions": "\((self?.transport as? RelayTransport)?.flowCount() ?? 0)"]
             },
             errorProvider: { [weak self] in
                 ["error": self?.lastRuntimeError ?? "none"]
@@ -124,13 +125,49 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let credentials = SSHCredentials(host: configuration.host, port: configuration.port,
                                             username: configuration.username,
                                             password: configuration.password, privateKey: nil)
-            let serverAddress = try SocketAddress(ipAddress: configuration.host, port: configuration.port)
             let sshChannel = try factory.connect(credentials).wait()
             let sshHandler = try sshChannel.pipeline.handler(type: NIOSSHHandler.self).wait()
             tunnelPhase = "ssh-connected"
+            elog(.info, "TUNNEL", "SSH connected; probing TCP forwarding (direct-tcpip)")
+            // Pre-flight probe: one throwaway direct-tcpip open proves auth is
+            // done AND the server forwards. Without it, later fire-and-forget
+            // opens can hang forever on a stuck auth or AllowTcpForwarding=no,
+            // leaving a blackholed tunnel with zero diagnostics.
+            var probeError: Error?
+            for target in [("8.8.8.8", 53), ("1.1.1.1", 53)] {
+                do {
+                    try SSHChannelProbe.probe(handler: sshHandler, eventLoop: sshChannel.eventLoop,
+                                              host: target.0, port: target.1, timeoutSeconds: 5)
+                    elog(.info, "TUNNEL", "forwarding probe OK via \(target.0):\(target.1)")
+                    probeError = nil
+                    break
+                } catch {
+                    elog(.warning, "TUNNEL", "forwarding probe via \(target.0):\(target.1) failed: \(error.localizedDescription)")
+                    probeError = error
+                }
+            }
+            if let probeError {
+                let msg: String
+                switch probeError {
+                case SSHProbeError.timeout(let h, let p, let s):
+                    msg = "SSH forwarding probe timed out (\(h):\(p), \(s)s) — auth stuck or server silent"
+                case SSHProbeError.refused(let h, let p, let detail):
+                    msg = "SSH forwarding refused (\(h):\(p)): \(detail) — check password and AllowTcpForwarding on server"
+                default:
+                    msg = "SSH forwarding probe failed: \(probeError.localizedDescription)"
+                }
+                elog(.error, "TUNNEL", msg)
+                tunnelPhase = "probe-failed"
+                lastRuntimeError = msg
+                startInFlight = false
+                completionHandler(probeError)
+                return
+            }
             elog(.info, "TUNNEL", "SSH connected; starting relay transport")
 
-            let relay = RelayTransport(sshHandler: sshHandler, eventLoop: sshChannel.eventLoop,
+            let relay = RelayTransport(sshHandler: sshHandler,
+                                       eventLoop: sshChannel.eventLoop,
+                                       dnsServers: configuration.dnsServers,
                                        receive: { [weak self] packet in
                                            guard let self else { return }
                                            let proto = packet.first.map { ($0 >> 4) == 6 ? AF_INET6 : AF_INET } ?? AF_INET
@@ -147,10 +184,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
             // Minimal network settings: route all IPv4/IPv6 to utun. The relay
             // handles per-flow routing itself, so no excluded routes needed.
+            // Addresses MUST be unique per install (TunnelDevice-derived):
+            // a hardcoded 10.0.0.2 collides with common LAN subnets
+            // (10.0.0.0/24) and silently blackholes all traffic.
+            let brokerID = Self.persistentDeviceIdentity()
+            let device = try TunnelDevice.derive(brokerID: brokerID)
+            elog(.info, "TUNNEL", "device derived ipv4=\(device.ipv4Address) ipv6=\(device.ipv6Address)")
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.host)
-            settings.ipv4Settings = NEIPv4Settings(addresses: ["10.0.0.2"], subnetMasks: ["255.255.255.0"])
+            settings.ipv4Settings = NEIPv4Settings(addresses: [device.ipv4Address], subnetMasks: [TunnelDevice.v4SubnetMask])
             settings.ipv4Settings?.includedRoutes = [NEIPv4Route.default()]
-            settings.ipv6Settings = NEIPv6Settings(addresses: ["fd00::2"], networkPrefixLengths: [NSNumber(value: 64)])
+            settings.ipv6Settings = NEIPv6Settings(addresses: [device.ipv6Address], networkPrefixLengths: [NSNumber(value: TunnelDevice.v6PrefixLength)])
             settings.ipv6Settings?.includedRoutes = [NEIPv6Route.default()]
             if !configuration.dnsServers.isEmpty {
                 let dns = NEDNSSettings(servers: configuration.dnsServers)
@@ -684,32 +727,105 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var stateMachine: TCPRelayStateMachine
     private let receiveCallback: (Data) -> Void
     private var isStarted = false
+    /// Serializes ALL relay-state access (utun send path, SSH callbacks,
+    /// sweep timer). NIO callbacks arrive on event loops, utun reads on the
+    /// packet thread — without this the structs race.
+    private let relayQueue = DispatchQueue(label: "com.ssh2vpn.relay")
+    private let sshHandler: NIOSSHHandler
+    private let sshEventLoop: EventLoop
+    /// Upstream DNS for port-53 relay (profile override or public fallback).
+    private let dnsUpstream: String
+    private var dnsRelay: DNSRelay?
+    private var dnsChannel: RelayChannel?
+    private var sweepTimer: DispatchSourceTimer?
 
     /// pending packets received before SSH connected (bounded)
     private var pendingPackets: [Data] = []
     private let maxPending = 64
+    /// Flows already logged (one line per flow, no per-packet spam).
+    private var loggedFlows = Set<RelayFlow>()
+    /// Reply packets emitted toward utun (the loop's own `written` counter
+    /// only sees its closure path, so this is the honest number).
+    private var repliesWritten = 0
 
     init(sshHandler: NIOSSHHandler,
          eventLoop: EventLoop,
+         dnsServers: [String] = [],
          receive: @escaping (Data) -> Void,
          failure: @escaping (Error) -> Void,
          ready: @escaping (Error?) -> Void) {
         self.receiveCallback = receive
+        self.sshHandler = sshHandler
+        self.sshEventLoop = eventLoop
+        self.dnsUpstream = dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
 
         let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: eventLoop)
         let factory = SSHRelayChannelFactory(opener: opener)
         self.stateMachine = TCPRelayStateMachine(factory: factory, isnGenerator: RandomISN(), idleTimeout: 120)
+        // Server-to-phone splice: channel callbacks arrive on NIO threads and
+        // hop onto the relay queue, where they mutate the same state machine
+        // the utun send path uses. Replies go straight back into utun.
+        self.stateMachine.onChannelData = { [weak self] flow, data in
+            guard let self else { return }
+            self.relayQueue.async { [weak self] in
+                guard let self else { return }
+                for reply in self.stateMachine.channelData(data, for: flow) {
+                    self.receiveCallback(Data(reply))
+                }
+            }
+        }
+        self.stateMachine.onChannelClose = { [weak self] flow in
+            guard let self else { return }
+            self.relayQueue.async { [weak self] in
+                guard let self else { return }
+                let s = flow.srcAddr.map(String.init).joined(separator: ".")
+                let d = flow.dstAddr.map(String.init).joined(separator: ".")
+                elog(.info, "RELAY", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) server closed; FIN to phone")
+                for reply in self.stateMachine.channelClosed(flow: flow) {
+                    self.receiveCallback(Data(reply))
+                }
+            }
+        }
+        elog(.info, "RELAY", "transport created; DNS upstream \(self.dnsUpstream)")
     }
+
+    /// Live flow census for status reporting. Called off-queue like the loop
+    /// counters — informational only.
+    func flowCount() -> Int { stateMachine.flowCount }
+
+    /// Reply packets emitted toward utun (all paths). Read off-queue like the
+    /// other counters — informational only.
+    func repliedCount() -> Int { repliesWritten }
 
     func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void) {
         guard !isStarted else { return }
         isStarted = true
         // SSH is already connected by the caller; flush anything queued.
         ready(nil)
-        for pkt in pendingPackets {
-            handlePacket(pkt, receive: receive)
+        relayQueue.async { [weak self] in
+            guard let self else { return }
+            // Arm the upstream DNS channel eagerly so it is ready before the
+            // first query (and before the post-connect SELFTEST runs) —
+            // otherwise the "DNS relay armed" line confusingly lands after
+            // the internet check that needs it.
+            self.ensureDNSChannel()
+            for pkt in self.pendingPackets {
+                self.handlePacket(pkt, receive: receive)
+            }
+            self.pendingPackets.removeAll()
         }
-        pendingPackets.removeAll()
+        // Periodic sweep bounds ghost flows (channels that died silently).
+        let timer = DispatchSource.makeTimerSource(queue: relayQueue)
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let n = self.stateMachine.expireIdle()
+            if n > 0 {
+                elog(.info, "RELAY", "sweep expired \(n) idle flow(s)")
+            }
+        }
+        timer.resume()
+        sweepTimer = timer
     }
 
     func send(packet: Data, completion: @escaping (Error?) -> Void) {
@@ -722,29 +838,111 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             completion(nil)
             return
         }
-        handlePacket(packet, receive: receiveCallback)
+        // Hop onto the relay queue; the loop ignores completion anyway.
+        relayQueue.async { [weak self] in
+            guard let self else { return }
+            self.handlePacket(packet, receive: self.receiveCallback)
+        }
         completion(nil)
     }
 
     func stop() {
         isStarted = false
+        sweepTimer?.cancel()
+        sweepTimer = nil
         pendingPackets.removeAll()
     }
 
     // MARK: - private
 
     private func handlePacket(_ packet: Data, receive: @escaping (Data) -> Void) {
-        // Only IPv4 TCP for now; everything else is dropped silently (the
-        // phone will retry over the relayed TCP flows).
-        guard packet.count >= 20, packet[0] >> 4 == 4, packet[9] == 6 else { return }
+        // Runs on relayQueue only (see send/start). IPv4 TCP goes through the
+        // flow state machine; IPv4 UDP port 53 goes through the DNS relay;
+        // everything else is dropped (the phone retransmits / falls back).
+        guard packet.count >= 20, packet[0] >> 4 == 4 else { return }
+        if packet[9] == 17 {
+            handleDNSPacket(packet, receive: receive)
+            return
+        }
+        guard packet[9] == 6 else { return }
         do {
             let replies = try stateMachine.handle(packet: IPv4Packet(Array(packet)))
-            for reply in replies {
-                receive(Data(reply))
+            if !replies.isEmpty {
+                // Log newly opened flows once each so the dump shows relay
+                // activity without per-packet spam.
+                if let parsed = try? IPv4Parser.parse(packet) {
+                    let key = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
+                                        dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
+                                        transport: .tcp)
+                    if loggedFlows.insert(key).inserted {
+                        let s = key.srcAddr.map(String.init).joined(separator: ".")
+                        let d = key.dstAddr.map(String.init).joined(separator: ".")
+                        elog(.info, "RELAY", "flow \(s):\(key.srcPort) -> \(d):\(key.dstPort) opened")
+                    }
+                }
+                for reply in replies {
+                    self.repliesWritten += 1
+                    receive(Data(reply))
+                }
             }
         } catch {
             // Parse/relay errors are per-flow; don't tear down the tunnel.
+            elog(.warning, "RELAY", "drop packet: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - DNS relay (UDP port 53 over one shared upstream TCP connection)
+
+    /// Routes a utun IPv4/UDP packet: port-53 queries go upstream over TCP,
+    /// everything else UDP is dropped (TCP fallback covers real traffic).
+    /// Runs on relayQueue only.
+    private func handleDNSPacket(_ packet: Data, receive: @escaping (Data) -> Void) {
+        guard let parsed = try? IPv4Parser.parse(packet),
+              parsed.flow.transport == .udp,
+              parsed.flow.destinationPort == 53 else { return }
+        let total = Int(UInt16(packet[2]) << 8 | UInt16(packet[3]))
+        guard total >= 28, packet.count >= total else { return }
+        guard let udp = try? UDPParser.parse(Data(packet[20..<total])),
+              !udp.payload.isEmpty else { return }
+        let flow = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
+                             dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
+                             transport: .udp)
+        if dnsRelay == nil {
+            dnsRelay = DNSRelay(upstreamHost: dnsUpstream)
+            elog(.info, "RELAY", "DNS relay armed -> \(dnsUpstream):53")
+        }
+        guard let toSend = dnsRelay!.query(udp.payload, from: flow) else { return }
+        ensureDNSChannel()
+        dnsChannel?.send(toSend)
+    }
+
+    /// Lazily opens the single shared upstream DNS channel. Runs on relayQueue.
+    private func ensureDNSChannel() {
+        guard dnsChannel == nil else { return }
+        let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: sshEventLoop)
+        guard let origin = try? SocketAddress(ipAddress: "127.0.0.1", port: 0) else { return }
+        dnsChannel = opener.open(
+            targetHost: dnsUpstream, targetPort: 53, originatorAddress: origin,
+            onData: { [weak self] bytes in
+                guard let self else { return }
+                self.relayQueue.async { [weak self] in
+                    guard let self else { return }
+                    for (flow, resp) in self.dnsRelay?.receive(bytes) ?? [] {
+                        if let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(resp)) {
+                            self.repliesWritten += 1
+                            self.receiveCallback(Data(pkt))
+                        }
+                    }
+                }
+            },
+            onClosed: { [weak self] in
+                guard let self else { return }
+                self.relayQueue.async { [weak self] in
+                    // Drop the dead channel; the next query re-opens it.
+                    self?.dnsChannel = nil
+                    elog(.warning, "RELAY", "upstream DNS channel closed; will reopen on next query")
+                }
+            })
     }
 }
 
