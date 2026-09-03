@@ -64,9 +64,13 @@ LEGACY_SUBNET = TunnelSubnet(TUN_ADDRESS, TUN_CIDR, TUN6_ADDRESS, TUN6_CIDR)
 def subnet_for_broker(broker_id):
     digest = hashlib.sha256(broker_id.encode("ascii")).digest()
     h1, h2 = digest[0], digest[1]
+    # base is a valid /30 network base for ANY hash bytes (low two bits
+    # masked); gateway +1, device +2. Must match TunnelDevice.derive (Swift).
+    # Five-octet strings are not IPv4 and make iOS drop the v4 settings.
+    base = h2 & 0xFC
     return TunnelSubnet(
-        v4_gateway=f"10.203.{h1}.{h2}.1/30",
-        v4_cidr=f"10.203.{h1}.{h2}.0/30",
+        v4_gateway=f"10.203.{h1}.{base + 1}/30",
+        v4_cidr=f"10.203.{h1}.{base}/30",
         v6_gateway=f"fd00:203:{h1:02x}{h2:02x}::1/64",
         v6_cidr=f"fd00:203:{h1:02x}{h2:02x}::/64",
     )

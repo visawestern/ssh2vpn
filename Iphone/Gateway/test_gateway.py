@@ -416,14 +416,24 @@ class Round1ArchitectureTests(unittest.IsolatedAsyncioTestCase):
 class Round2SubnetTests(unittest.IsolatedAsyncioTestCase):
     def test_broker_subnet_is_deterministic_and_pins_golden_values(self):
         subnet = gateway.subnet_for_broker("testbroker")
-        self.assertEqual(subnet.v4_cidr, "10.203.49.46.0/30")
-        self.assertEqual(subnet.v4_gateway, "10.203.49.46.1/30")
+        self.assertEqual(subnet.v4_cidr, "10.203.49.44/30")
+        self.assertEqual(subnet.v4_gateway, "10.203.49.45/30")
         self.assertEqual(subnet.v6_gateway, "fd00:203:312e::1/64")
         self.assertEqual(subnet.v6_cidr, "fd00:203:312e::/64")
         self.assertEqual(gateway.subnet_for_broker("testbroker"), gateway.subnet_for_broker("testbroker"))
         other = gateway.subnet_for_broker("device42")
-        self.assertEqual(other.v4_cidr, "10.203.26.1.0/30")
+        self.assertEqual(other.v4_cidr, "10.203.26.0/30")
         self.assertNotEqual(subnet.v4_cidr, other.v4_cidr)
+
+    def test_broker_subnet_addresses_are_valid_slash30_hosts(self):
+        import ipaddress
+        for broker in ("testbroker", "device42", "a", "phone-1", "zzz-last"):
+            subnet = gateway.subnet_for_broker(broker)
+            net = ipaddress.ip_network(subnet.v4_cidr)
+            self.assertEqual(net.prefixlen, 30)
+            gw = ipaddress.ip_interface(subnet.v4_gateway)
+            self.assertIn(gw.ip, list(net.hosts()), f"gateway must be a host of {net}")
+            self.assertEqual(int(gw.ip) % 4, 1, "gateway is .1 of its /30")
 
     def test_configure_tun_uses_legacy_subnet_when_unspecified(self):
         self.assertEqual(gateway.LEGACY_SUBNET.v4_gateway, gateway.TUN_ADDRESS)
@@ -448,10 +458,10 @@ class Round2SubnetTests(unittest.IsolatedAsyncioTestCase):
         subnet = gateway.subnet_for_broker("device42")
         uplink, saved = gateway.configure_tun("personalvpn0", run=run, comment="pvvpn-device42", subnet=subnet)
         self.assertEqual(uplink, "eth0")
-        self.assertIn(["ip", "addr", "replace", "10.203.26.1.1/30", "dev", "personalvpn0"], calls)
+        self.assertIn(["ip", "addr", "replace", "10.203.26.1/30", "dev", "personalvpn0"], calls)
         self.assertIn(["ip", "-6", "addr", "replace", "fd00:203:1a01::1/64", "dev", "personalvpn0"], calls)
         self.assertIn(
-            ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "10.203.26.1.0/30", "-o", "eth0",
+            ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "10.203.26.0/30", "-o", "eth0",
              "-j", "MASQUERADE", "-m", "comment", "--comment", "pvvpn-device42"],
             calls,
         )
@@ -462,7 +472,7 @@ class Round2SubnetTests(unittest.IsolatedAsyncioTestCase):
         )
         gateway.cleanup_tun("personalvpn0", "eth0", run=run, comment="pvvpn-device42", restore=saved, subnet=subnet)
         self.assertIn(
-            ["iptables", "-t", "nat", "-D", "POSTROUTING", "-s", "10.203.26.1.0/30", "-o", "eth0",
+            ["iptables", "-t", "nat", "-D", "POSTROUTING", "-s", "10.203.26.0/30", "-o", "eth0",
              "-j", "MASQUERADE", "-m", "comment", "--comment", "pvvpn-device42"],
             calls,
         )

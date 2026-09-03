@@ -63,6 +63,9 @@ final class AppModel: ObservableObject {
     @Published var serverLatitude: Double = 50.1109
     @Published var serverLongitude: Double = 8.6821
     @Published var isResolvingMetadata: Bool = false
+    /// GeoIP runs once per host (on server-list updates), never on every
+    /// connect/reconnect — ping stays live, geo does not spam.
+    private var lastGeoHost: String? = nil
 
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
@@ -342,7 +345,9 @@ final class AppModel: ObservableObject {
 
         Task {
             let ping = await ServerMetadataResolver.measurePing(host: currentHost, port: currentPort)
-            let geo = await ServerMetadataResolver.resolveGeo(host: currentHost)
+            // GeoIP only for a host we haven't located yet (failures are not
+            // cached, so an offline lookup simply retries next time).
+            let geo: ServerGeoInfo? = (lastGeoHost == currentHost) ? nil : await ServerMetadataResolver.resolveGeo(host: currentHost)
 
             await MainActor.run {
                 guard self.profile.host == currentHost else { return }
@@ -354,6 +359,7 @@ final class AppModel: ObservableObject {
                 }
 
                 if let geo = geo {
+                    self.lastGeoHost = currentHost
                     self.serverCountry = geo.country
                     self.serverFlag = geo.flag
                     self.serverCity = geo.city
@@ -398,7 +404,29 @@ final class AppModel: ObservableObject {
         // in performConnectionAttempt(); the extension also persists them into
         // its own store on every startTunnel.
         saveServer(selected)
-        beginConnection()
+        connection = .connecting
+        // TCP reachability FIRST: don't touch any VPN machinery until the
+        // server answers. Fail fast with a readable error instead of a 16s
+        // CONNECTING hang + silent death (e.g. phone IP banned by fail2ban
+        // after repeated attempts, or a down path).
+        Task { @MainActor in
+            var reachable = false
+            for _ in 0..<2 {
+                if await ServerMetadataResolver.measurePing(host: selected.host, port: selected.port) != nil {
+                    reachable = true
+                    break
+                }
+            }
+            guard reachable else {
+                let msg = "Server unreachable over TCP (\(selected.host):\(selected.port)). Check internet access and that the VPS firewall allows this phone (fail2ban may have banned it after repeated attempts)."
+                ConsoleLogStore.shared.log(level: .error, tag: "CONNECT", message: msg)
+                self.connection = .failed(msg)
+                return
+            }
+            // The user may have cancelled while probing — never start then.
+            guard self.connection == .connecting else { return }
+            self.beginConnection()
+        }
     }
 
     /// Starts the actual tunnel after the selected server is guaranteed to be
@@ -408,7 +436,6 @@ final class AppModel: ObservableObject {
         connection = .connecting
         startPhasePolling()
         performConnectionAttempt()
-        refreshServerMetadata()
     }
 
     /// Polls the extension for its start-up phase while connecting and logs
@@ -538,6 +565,9 @@ private final class VPNController {
     /// there is exactly one profile for this app, re-pointed at whatever server
     /// the user selects.
     private var manager: NETunnelProviderManager?
+    /// Generation counter: bumped on every start/stop so a stale creation-wait
+    /// from a superseded attempt aborts instead of starting a dead tunnel.
+    private var startEpoch = 0
     /// One-time migration flag: legacy cleanup runs exactly once ever, never
     /// on every connect.
     private static let legacyCleanupKey = "ssh2vpn.legacyCleanupDone.v1"
@@ -560,8 +590,14 @@ private final class VPNController {
     }
 
     func start(profile: VPNProfile, completion: @escaping (Error?) -> Void) {
+        // New generation: any creation-wait from an older attempt must die,
+        // and its parked completion must never fire.
+        startEpoch += 1
+        pendingCreationCompletion = nil
+        let epoch = startEpoch
         // Resolve (deduplicate) the single app profile before building.
-        resolveManager { error in
+        resolveManager { [weak self] error in
+            guard let self else { return }
             guard error == nil else { completion(error); return }
             guard let manager = self.manager else { completion(nil); return }
 
@@ -611,27 +647,125 @@ private final class VPNController {
                 providerConfig["privateKey"] = privateKey
             }
 
+            // Reuse check: if the stored system configuration already equals
+            // the desired one, skip saveToPreferences/loadFromPreferences and
+            // start the tunnel directly. Rewriting identical configs only
+            // churns NEVPN status and wastes failure surface.
+            let desiredSnapshot = VPNProtocolSnapshot(
+                providerBundleIdentifier: self.providerBundleIdentifier,
+                serverAddress: configuration.serverAddress,
+                enforceRoutes: configuration.enforceRoutes,
+                isEnabled: true,
+                providerConfiguration: providerConfig
+            )
+            if let live = manager.protocolConfiguration as? NETunnelProviderProtocol {
+                let currentSnapshot = VPNProtocolSnapshot(
+                    providerBundleIdentifier: live.providerBundleIdentifier ?? "",
+                    serverAddress: live.serverAddress ?? "",
+                    enforceRoutes: live.enforceRoutes,
+                    isEnabled: manager.isEnabled,
+                    providerConfiguration: live.providerConfiguration ?? [:]
+                )
+                if VPNConfigComparer.isSame(current: currentSnapshot, desired: desiredSnapshot) {
+                    ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "Reusing existing VPN configuration (unchanged) — starting tunnel directly")
+                    self.startTunnelNow(manager: manager, completion: completion)
+                    return
+                }
+            }
+
             configurationProtocol.providerConfiguration = providerConfig
             manager.protocolConfiguration = configurationProtocol
             manager.localizedDescription = "SSH2VPN"
             manager.isEnabled = true
 
-            manager.saveToPreferences { saveError in
-                guard saveError == nil else { completion(saveError); return }
+            manager.saveToPreferences { [weak self] saveError in
+                guard let self else { return }
+                // Save failed (typically: system VPN-consent dialog still
+                // pending on first install) — wait for creation instead of
+                // failing the attempt outright. See waitForProfileCreation.
+                if saveError != nil {
+                    self.pendingCreationCompletion = completion
+                    self.waitForProfileCreation(epoch: epoch, saveError: saveError, budget: RetryBudget())
+                    return
+                }
                 // CRITICAL FIX (matches VPNConnectionCoordinator): reload
                 // preferences after save and before start. Without this the
                 // manager's in-memory state can be out of sync with the network
                 // extension, producing NEVPNErrorDomain Code=1.
-                manager.loadFromPreferences { reloadError in
-                    guard reloadError == nil else { completion(reloadError); return }
-                    do {
-                        try manager.connection.startVPNTunnel()
-                        completion(nil)
-                    } catch {
-                        completion(error)
-                    }
+                self.reloadAndStart(manager: manager, completion: completion)
+            }
+        }
+    }
+
+    /// Reloads preferences after a save (keeps the manager in sync with the
+    /// network extension — otherwise NEVPNErrorDomain Code=1) and starts.
+    /// Nonisolated: touches only its arguments, so unchecked system callbacks
+    /// can use it without dragging non-Sendable values across isolation.
+    private nonisolated func reloadAndStart(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+        manager.loadFromPreferences { reloadError in
+            guard reloadError == nil else { completion(reloadError); return }
+            do {
+                try manager.connection.startVPNTunnel()
+                completion(nil)
+            } catch {
+                completion(error)
+            }
+        }
+    }
+
+    /// Completion parked while waiting for profile creation. MainActor-owned
+    /// so async ticks can reacquire it without moving non-Sendable values
+    /// (manager/completion) across isolation domains. Cleared on every new
+    /// start/stop so a superseded wait never fires a stale completion.
+    private var pendingCreationCompletion: ((Error?) -> Void)?
+
+    /// Waits for a freshly saved VPN profile to become creatable: retries the
+    /// save every 5 seconds for up to 2 minutes (first install: the system
+    /// consent dialog may still be pending), then surfaces the last error.
+    /// Aborts silently when superseded by a newer start or by stop().
+    private func waitForProfileCreation(
+        epoch: Int,
+        saveError: Error?,
+        budget: RetryBudget
+    ) {
+        var budget = budget
+        guard budget.consume() else {
+            ConsoleLogStore.shared.log(level: .error, tag: "VPN", message: "VPN profile was not created within 2 minutes — giving up")
+            guard let completion = pendingCreationCompletion else { return }
+            pendingCreationCompletion = nil
+            completion(saveError)
+            return
+        }
+        if budget.used == 1 {
+            ConsoleLogStore.shared.log(level: .warning, tag: "VPN", message: "VPN profile save failed (\(saveError?.localizedDescription ?? "unknown error")) — waiting up to 2 min for creation, retrying every 5s")
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(budget.intervalSeconds))
+            guard let self, self.startEpoch == epoch else { return }
+            guard let completion = self.pendingCreationCompletion else { return }
+            self.pendingCreationCompletion = nil
+            guard let manager = self.manager else { completion(saveError); return }
+            manager.saveToPreferences { [weak self] retryError in
+                guard let self, self.startEpoch == epoch else { return }
+                if retryError == nil {
+                    ConsoleLogStore.shared.log(level: .success, tag: "VPN", message: "VPN profile created after waiting")
+                    self.reloadAndStart(manager: manager, completion: completion)
+                } else {
+                    self.waitForProfileCreation(epoch: epoch, saveError: retryError, budget: budget)
                 }
             }
+        }
+    }
+
+    /// Starts the tunnel on an already-configured manager (reuse path — the
+    /// stored configuration already matches, so no save is needed).
+    /// Nonisolated: touches only its arguments (see reloadAndStart).
+    private nonisolated func startTunnelNow(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+        do {
+            try manager.connection.startVPNTunnel()
+            completion(nil)
+        } catch {
+            completion(error)
         }
     }
 
@@ -690,7 +824,11 @@ private final class VPNController {
         }
     }
 
-    func stop() { manager?.connection.stopVPNTunnel() }
+    func stop() {
+        startEpoch += 1
+        pendingCreationCompletion = nil
+        manager?.connection.stopVPNTunnel()
+    }
 
     /// True when this connection object belongs to our manager. Events from
     /// stale/foreign profiles are ignored by the status observer. Accepts

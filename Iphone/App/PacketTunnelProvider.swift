@@ -313,6 +313,10 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
 
     private var nextSession = 0
     private let desiredSessionCount = 3
+    /// Set once the first session authenticates; the remaining sessions are
+    /// then opened staggered instead of as a parallel auth burst (which trips
+    /// sshd MaxStartups / fail2ban-style rate limits). Reset on start().
+    private var didScaleUp = false
     private var reconnectController: GatewayReconnectController
     private var reconnectWorkItem: DispatchWorkItem?
     private var pathMonitor: NWPathMonitor?
@@ -373,7 +377,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
                 ready(SSHPacketTunnelError.gatewayMissing)
                 return
             }
-            elog(.info, "TRANSPORT", "gateway.py loaded (\(script.count) bytes); opening \(self.desiredSessionCount) SSH sessions")
+            elog(.info, "TRANSPORT", "gateway.py loaded (\(script.count) bytes); opening initial SSH session (1 of \(self.desiredSessionCount), rest scale up staggered after first auth)")
             let target = self.endpoint.primaryTarget() ?? self.configuration.host
             let credentials = SSHCredentials(
                 host: target,
@@ -385,8 +389,25 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
             let command = GatewayCommandBuilder.pythonInline(script: script, brokerID: self.brokerID)
             self.sessionCredentials = credentials
             self.sessionCommand = command
-            for _ in 0..<self.desiredSessionCount { self.openOne(credentials: credentials, command: command, factory: factory) }
+            self.openOne(credentials: credentials, command: command, factory: factory)
             self.startHeartbeat()
+        }
+    }
+
+    /// Opens the remaining sessions staggered once the first one proves the
+    /// path and credentials work. Never fires a parallel auth burst against
+    /// the server. Runs on stateQueue (all call sites already do).
+    private func scaleUpIfNeeded(credentials: SSHCredentials, command: String, factory: SSHTransportFactory) {
+        guard !didScaleUp, !stopped else { return }
+        didScaleUp = true
+        let remaining = max(0, desiredSessionCount - 1)
+        guard remaining > 0 else { return }
+        elog(.info, "TRANSPORT", "first session authenticated; scaling up \(remaining) more session(s) staggered")
+        for i in 0..<remaining {
+            stateQueue.asyncAfter(deadline: .now() + 0.7 * Double(i + 1)) { [weak self] in
+                guard let self, !self.stopped else { return }
+                self.openOne(credentials: credentials, command: command, factory: factory)
+            }
         }
     }
 
@@ -408,6 +429,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
                         return
                     }
                     self.authenticatedTokens.insert(token)
+                    self.scaleUpIfNeeded(credentials: credentials, command: command, factory: factory)
                     if let ping = try? TransportFrame(type: .ping) {
                         sessionHolder.session?.send(ping)
                         self.heartbeat.markSent(token)
@@ -536,6 +558,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
 
     private func reset() {
         stopped = false
+        didScaleUp = false
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
         pathMonitor?.cancel()
