@@ -21,12 +21,15 @@ final class ChannelDataPreviewTests: XCTestCase {
         XCTAssertTrue(preview.contains("OSError"))
     }
 
-    func testLongOutputIsTruncated() {
-        let big = String(repeating: "x", count: 1000)
+    func testLongOutputKeepsHeadAndTail() {
+        // Tracebacks diagnose by their LAST line (the exception); keep both
+        // ends around a truncation marker.
+        let big = String(repeating: "H", count: 30) + String(repeating: "M", count: 940) + String(repeating: "T", count: 30)
         let data = SSHChannelData(type: .stdErr, data: .byteBuffer(buffer(big)))
-        let preview = ChannelDataPreview.text(of: data, limit: 100)
-        XCTAssertLessThanOrEqual(preview.count, 110)
-        XCTAssertTrue(preview.hasSuffix("…"))
+        let preview = ChannelDataPreview.text(of: data, limit: 90)
+        XCTAssertTrue(preview.hasPrefix(String(repeating: "H", count: 30)))
+        XCTAssertTrue(preview.hasSuffix(String(repeating: "T", count: 30)))
+        XCTAssertTrue(preview.contains("[truncated"))
     }
 
     func testEmptyPayloadIsMarked() {

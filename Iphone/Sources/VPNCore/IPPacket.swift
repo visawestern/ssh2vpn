@@ -28,6 +28,17 @@ public struct IPv4Flow: Hashable, Sendable {
         self.destinationPort = destinationPort
         self.transport = transport
     }
+
+    /// Raw address bytes (network order) for use as flow keys.
+    public var sourceAddressBytes: [UInt8] {
+        [UInt8(sourceAddress >> 24), UInt8((sourceAddress >> 16) & 0xFF),
+         UInt8((sourceAddress >> 8) & 0xFF), UInt8(sourceAddress & 0xFF)]
+    }
+
+    public var destinationAddressBytes: [UInt8] {
+        [UInt8(destinationAddress >> 24), UInt8((destinationAddress >> 16) & 0xFF),
+         UInt8((destinationAddress >> 8) & 0xFF), UInt8(destinationAddress & 0xFF)]
+    }
 }
 
 public struct ParsedIPv4Packet: Sendable {

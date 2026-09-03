@@ -127,17 +127,30 @@ def configure_tun(name, run=subprocess.run, comment=None, subnet=None):
     subnet = subnet or LEGACY_SUBNET
     uplink = default_interface(run)
     run(["ip", "addr", "replace", subnet.v4_gateway, "dev", name], check=True)
-    run(["ip", "-6", "addr", "replace", subnet.v6_gateway, "dev", name], check=True)
+    try:
+        run(["ip", "-6", "addr", "replace", subnet.v6_gateway, "dev", name], check=True)
+    except (subprocess.CalledProcessError, OSError) as e:
+        # VPS without IPv6 (common on cheap boxes): warn and continue v4-only.
+        # The warning travels over stderr, which clients drain and log.
+        print(f"Warning: ipv6 unavailable ({e}); continuing IPv4-only", file=sys.stderr)
     run(["ip", "link", "set", "dev", name, "up"], check=True)
     saved = {
         "net.ipv4.ip_forward": _sysctl_value(run, "net.ipv4.ip_forward"),
         "net.ipv6.conf.all.forwarding": _sysctl_value(run, "net.ipv6.conf.all.forwarding"),
     }
     run(["sysctl", "-w", "net.ipv4.ip_forward=1"], check=True, capture_output=True, text=True)
-    run(["sysctl", "-w", "net.ipv6.conf.all.forwarding=1"], check=True, capture_output=True, text=True)
+    try:
+        run(["sysctl", "-w", "net.ipv6.conf.all.forwarding=1"], check=True, capture_output=True, text=True)
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: ipv6 forwarding unavailable ({e}); continuing IPv4-only", file=sys.stderr)
     for tool, source in (("iptables", subnet.v4_cidr), ("ip6tables", subnet.v6_cidr)):
-        if run(nat_rule(tool, "-C", source, uplink, comment), check=False).returncode != 0:
-            run(nat_rule(tool, "-A", source, uplink, comment), check=True)
+        try:
+            if run(nat_rule(tool, "-C", source, uplink, comment), check=False).returncode != 0:
+                run(nat_rule(tool, "-A", source, uplink, comment), check=True)
+        except (subprocess.CalledProcessError, OSError) as e:
+            if tool != "ip6tables":
+                raise
+            print(f"Warning: ipv6 NAT unavailable ({e}); continuing IPv4-only", file=sys.stderr)
     return uplink, saved
 
 

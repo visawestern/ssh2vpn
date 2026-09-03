@@ -17,11 +17,13 @@ public final class SSHFrameCodec: ChannelDuplexHandler, @unchecked Sendable {
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let channelData = unwrapInboundIn(data)
         guard channelData.type == .channel, case .byteBuffer(var buffer) = channelData.data else {
-            // The server talked outside the framed protocol — almost always
-            // stderr output (e.g. a gateway.py traceback). Carry a preview so
-            // the app dump shows WHAT it said, not just that data arrived.
+            // Drain, don't kill: the server sometimes talks outside the framed
+            // protocol (stderr warnings, degraded modes). Killing the session
+            // on any such bytes turned warnings into tunnel failures. The
+            // preview still reaches the app dump for diagnosis, and a truly
+            // dead gateway is caught by channel close + heartbeat timeouts.
             let preview = ChannelDataPreview.text(of: channelData)
-            context.fireErrorCaught(SSHFrameCodecError.unexpectedChannelData(kind: "\(channelData.type)", preview: preview))
+            ConsoleLogStore.shared.log(level: .warning, tag: "SESSION", message: "drained \(channelData.type): \(preview)")
             return
         }
 
@@ -44,13 +46,6 @@ public final class SSHFrameCodec: ChannelDuplexHandler, @unchecked Sendable {
     }
 }
 
-public enum SSHFrameCodecError: Error, Equatable {
-    /// Server sent channel data outside the framed protocol (usually stderr,
-    /// e.g. a gateway.py traceback). `preview` carries the first bytes so the
-    /// app dump shows what was actually said.
-    case unexpectedChannelData(kind: String, preview: String)
-}
-
 /// Renders unexpected SSH channel payloads for diagnostics. Pure function —
 /// fully unit-testable without a channel pipeline.
 public enum ChannelDataPreview {
@@ -60,12 +55,22 @@ public enum ChannelDataPreview {
         }
         let total = buffer.readableBytes
         guard total > 0 else { return "<empty>" }
-        let n = min(limit, total)
-        guard let bytes = buffer.readBytes(length: n), !bytes.isEmpty else { return "<empty>" }
-        let truncated = total > n
-        if let text = String(bytes: bytes, encoding: .utf8) {
-            return truncated ? text + "…" : text
+        guard let bytes = buffer.readBytes(length: total), !bytes.isEmpty else { return "<empty>" }
+        if total <= limit {
+            return String(bytes: bytes, encoding: .utf8) ?? hex(bytes)
         }
-        return bytes.map { String(format: "%02x", $0) }.joined(separator: " ")
+        // Tracebacks diagnose by head (context) and tail (the exception).
+        let headCount = limit / 3
+        let tailCount = limit - headCount
+        let head = Array(bytes.prefix(headCount))
+        let tail = Array(bytes.suffix(tailCount))
+        let marker = "\n…[truncated \(total - limit) bytes]…\n"
+        let headText = String(bytes: head, encoding: .utf8) ?? hex(head)
+        let tailText = String(bytes: tail, encoding: .utf8) ?? hex(tail)
+        return headText + marker + tailText
+    }
+
+    private static func hex(_ bytes: [UInt8]) -> String {
+        bytes.map { String(format: "%02x", $0) }.joined(separator: " ")
     }
 }

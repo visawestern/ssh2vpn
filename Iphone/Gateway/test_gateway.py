@@ -2,6 +2,7 @@ import asyncio
 import socket
 import os
 import struct
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -434,6 +435,41 @@ class Round2SubnetTests(unittest.IsolatedAsyncioTestCase):
             gw = ipaddress.ip_interface(subnet.v4_gateway)
             self.assertIn(gw.ip, list(net.hosts()), f"gateway must be a host of {net}")
             self.assertEqual(int(gw.ip) % 4, 1, "gateway is .1 of its /30")
+
+    def test_configure_tun_survives_missing_ipv6(self):
+        # VPS without IPv6 (common on cheap boxes): v4 provisioning must still
+        # succeed; v6 steps degrade to stderr warnings instead of aborting.
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append(args)
+            result = Mock(returncode=0, stdout="")
+            if args[:2] == ["ip", "route"]:
+                result.stdout = "default via 192.0.2.1 dev eth0\n"
+            if args[0] == "sysctl" and args[1] == "-n":
+                result.stdout = "0"
+            flat = " ".join(args)
+            v6_mutation = (
+                args[:2] == ["ip", "-6"]
+                or (args[:2] == ["sysctl", "-w"] and "ipv6" in flat)
+                or args[0] == "ip6tables"
+            )
+            if v6_mutation:
+                raise subprocess.CalledProcessError(1, args)
+            if args[0] in ("iptables", "ip6tables") and args[3] == "-C":
+                result.returncode = 1
+            return result
+
+        subnet = gateway.subnet_for_broker("device42")
+        uplink, saved = gateway.configure_tun("personalvpn0", run=run, comment="pvvpn-device42", subnet=subnet)
+        self.assertEqual(uplink, "eth0")
+        # v4 address + NAT applied despite dead v6:
+        self.assertIn(["ip", "addr", "replace", "10.203.26.1/30", "dev", "personalvpn0"], calls)
+        self.assertIn(
+            ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "10.203.26.0/30", "-o", "eth0",
+             "-j", "MASQUERADE", "-m", "comment", "--comment", "pvvpn-device42"],
+            calls,
+        )
 
     def test_configure_tun_uses_legacy_subnet_when_unspecified(self):
         self.assertEqual(gateway.LEGACY_SUBNET.v4_gateway, gateway.TUN_ADDRESS)
