@@ -164,6 +164,14 @@ final class AppModel: ObservableObject {
             // Ignore chatter from stale/foreign VPN profiles: only our
             // manager's connection may drive UI state and diagnostics.
             if let self, !self.vpn.owns(connection) { return }
+            // Pre-invoke stale filter: nothing of ours is running yet, so a
+            // disconnect here is definitionally stale (prefs churn re-posting
+            // DISCONNECTED) — accepting it would clobber a fresh .connecting
+            // and orphan the whole attempt. Real failures always arrive AFTER
+            // startVPNTunnel was invoked, when the flag is set.
+            if connection.status == .disconnected || connection.status == .disconnecting {
+                if let self, !self.vpn.didInvokeStart { return }
+            }
             // Collapse identical bursts (system double-posts) in the log.
             // State below still updates, so a repeated status is harmless.
             let now = Date()
@@ -580,6 +588,12 @@ private final class VPNController {
     /// profiles without crossing actor isolation. A stale read only risks
     /// accepting one foreign event — never data corruption.
     nonisolated(unsafe) private var knownConnection: NEVPNConnection?
+    /// True once startVPNTunnel has been invoked for the current attempt.
+    /// Lets the observer tell a REAL disconnect (something of ours was
+    /// running) from STALE churn (prefs reload re-posting DISCONNECTED while
+    /// nothing was ever started — this used to clobber .connecting set by a
+    /// fresh tap and orphan its whole attempt).
+    nonisolated(unsafe) var didInvokeStart = false
 
     /// Loads (or creates) the single app manager WITHOUT starting the tunnel.
     /// Lets the app talk to the extension over the message channel before a
@@ -591,9 +605,10 @@ private final class VPNController {
 
     func start(profile: VPNProfile, completion: @escaping (Error?) -> Void) {
         // New generation: any creation-wait from an older attempt must die,
-        // and its parked completion must never fire.
+        // and its parked completion must never fire. Nothing invoked yet.
         startEpoch += 1
         pendingCreationCompletion = nil
+        didInvokeStart = false
         let epoch = startEpoch
         // Resolve (deduplicate) the single app profile before building.
         resolveManager { [weak self] error in
@@ -702,8 +717,9 @@ private final class VPNController {
     /// Nonisolated: touches only its arguments, so unchecked system callbacks
     /// can use it without dragging non-Sendable values across isolation.
     private nonisolated func reloadAndStart(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
-        manager.loadFromPreferences { reloadError in
+        manager.loadFromPreferences { [weak self] reloadError in
             guard reloadError == nil else { completion(reloadError); return }
+            self?.didInvokeStart = true
             do {
                 try manager.connection.startVPNTunnel()
                 completion(nil)
@@ -761,6 +777,7 @@ private final class VPNController {
     /// stored configuration already matches, so no save is needed).
     /// Nonisolated: touches only its arguments (see reloadAndStart).
     private nonisolated func startTunnelNow(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+        didInvokeStart = true
         do {
             try manager.connection.startVPNTunnel()
             completion(nil)
@@ -827,6 +844,7 @@ private final class VPNController {
     func stop() {
         startEpoch += 1
         pendingCreationCompletion = nil
+        didInvokeStart = false
         manager?.connection.stopVPNTunnel()
     }
 
