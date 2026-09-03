@@ -56,6 +56,21 @@ public enum VPNConfigurationError: Error, Equatable {
     case emptyProviderBundleIdentifier
 }
 
+extension VPNConfigurationError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .emptyHost:
+            return "No server address was provided. Enter your VPS host."
+        case .invalidPort:
+            return "The SSH port is invalid. Use a port between 1 and 65535."
+        case .missingCredentials:
+            return "No login credentials found. Add a password or an SSH private key for this server."
+        case .emptyProviderBundleIdentifier:
+            return "The tunnel provider is not configured."
+        }
+    }
+}
+
 /// Pure builder for the NETunnelProviderProtocol configuration.
 /// No NetworkExtension imports so it is fully testable on macOS.
 public enum VPNConfigurationBuilder {

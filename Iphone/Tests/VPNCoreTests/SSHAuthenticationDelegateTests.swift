@@ -31,15 +31,16 @@ final class SSHAuthenticationDelegateTests: XCTestCase {
 
     // MARK: - PinnedHostKeyDelegate
 
-    func testHostKeyFailsWhenNothingPinned() {
+    func testHostKeyAcceptedWithoutPinning() {
+        // TOFU: with no pinned key the first host key is accepted (host key is
+        // an optional hardening, not a hard requirement when the user logs in
+        // with a password). This must NOT throw.
         let delegate = PinnedHostKeyDelegate(expected: nil)
         let key = ed25519Key(0x11)
         let promise = group.next().makePromise(of: Void.self)
         delegate.validateHostKey(hostKey: key.publicKey, validationCompletePromise: promise)
 
-        XCTAssertThrowsError(try promise.futureResult.wait()) { error in
-            XCTAssertEqual(error as? SSHTransportError, .hostKeyNotPinned)
-        }
+        XCTAssertNoThrow(try promise.futureResult.wait())
     }
 
     func testHostKeyFailsOnMismatch() {

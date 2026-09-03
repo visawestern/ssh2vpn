@@ -36,6 +36,10 @@ public enum ConsoleLogSanitizer {
                 // If regex has capturing group for the secret value (group 2 or group 1)
                 let targetGroup = match.numberOfRanges > 2 ? 2 : (match.numberOfRanges > 1 ? 1 : 0)
                 if let range = Range(match.range(at: targetGroup), in: result) {
+                    // Boolean presence flags (hasPassword=true) carry no secret
+                    // and must stay readable in diagnostics.
+                    let captured = String(result[range]).lowercased()
+                    guard captured != "true", captured != "false" else { continue }
                     result.replaceSubrange(range, with: "***REDACTED***")
                 }
             }

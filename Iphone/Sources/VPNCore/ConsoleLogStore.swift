@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ConsoleLogLevel: String, Sendable, CaseIterable {
+public enum ConsoleLogLevel: String, Sendable, CaseIterable, Codable {
     case info = "INFO"
     case ssh = "SSH2"
     case success = "OK"
@@ -24,7 +24,7 @@ public enum ConsoleLogLevel: String, Sendable, CaseIterable {
     }
 }
 
-public struct ConsoleLogEntry: Identifiable, Sendable, Equatable {
+public struct ConsoleLogEntry: Identifiable, Sendable, Equatable, Codable {
     public let id: UUID
     public let timestamp: Date
     public let level: ConsoleLogLevel
@@ -39,6 +39,15 @@ public struct ConsoleLogEntry: Identifiable, Sendable, Equatable {
         self.tag = tag.uppercased()
         self.message = message
         self.formattedTimestamp = ConsoleLogStore.timestampFormatter.string(from: timestamp)
+    }
+
+    public init(id: UUID = UUID(), timestamp: Date = Date(), level: ConsoleLogLevel, tag: String, message: String, formattedTimestamp: String) {
+        self.id = id
+        self.timestamp = timestamp
+        self.level = level
+        self.tag = tag.uppercased()
+        self.message = message
+        self.formattedTimestamp = formattedTimestamp
     }
 }
 
@@ -83,20 +92,54 @@ public final class ConsoleLogStore: @unchecked Sendable {
         lock.lock()
         _entries.removeAll()
         lock.unlock()
+        // One-way migration hygiene: older builds persisted history under this
+        // key (whose export wrongly resurrected stale sessions, including log
+        // strings from previous builds). The persisted log is gone for good —
+        // export covers the current session only — so drop any leftover.
+        Self.removeLegacyPersisted()
         NotificationCenter.default.post(name: .consoleLogDidClear, object: nil)
     }
 
+    /// Deletes history persisted by older builds. Kept solely so CLEAR (and a
+    /// fresh launch path) can wipe it; nothing writes this key anymore.
+    private static func removeLegacyPersisted() {
+        let defaults = UserDefaults(suiteName: "group.com.sshtunnel.shared") ?? .standard
+        defaults.removeObject(forKey: "console.log.entries.v1")
+    }
+
+    /// Ingests entries pulled from the extension over the message API. Original
+    /// timestamps are preserved (true cross-process ordering); repeats from
+    /// overlapping poll windows are dropped by id. Entries are pre-sanitized
+    /// at log() time on the producing side, so no secrets pass through here.
+    public func ingestExternal(_ incoming: [ConsoleLogEntry]) {
+        guard !incoming.isEmpty else { return }
+        lock.lock()
+        var known = Set(_entries.map(\.id))
+        for e in incoming where !known.contains(e.id) {
+            known.insert(e.id)
+            _entries.append(e)
+        }
+        if _entries.count > maxEntries {
+            _entries.removeFirst(_entries.count - maxEntries)
+        }
+        lock.unlock()
+        NotificationCenter.default.post(name: .consoleLogDidAppend, object: nil)
+    }
+
+    /// Exports exactly what is on screen: the current session's in-memory
+    /// entries, newest last. No cross-launch history is merged in — stale
+    /// sessions (and their outdated log strings) must never pollute a dump.
     public func exportPlainText() -> String {
-        let currentEntries = entries
+        let snapshot = entries
         var out = [String]()
         out.append("==================================================================")
         out.append("                SSH2VPN HACKER TERMINAL LOG DUMP                  ")
         out.append("==================================================================")
         out.append("Generated: \(Date().description)")
-        out.append("Entries: \(currentEntries.count)")
+        out.append("Entries: \(snapshot.count)")
         out.append("------------------------------------------------------------------")
 
-        for e in currentEntries {
+        for e in snapshot {
             out.append("[\(e.formattedTimestamp)] \(e.level.prefixAscii) [\(e.tag)] \(e.message)")
         }
 

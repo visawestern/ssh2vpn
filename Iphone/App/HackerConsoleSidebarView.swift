@@ -6,14 +6,15 @@ import VPNCore
 
 public struct FloatingCustomizerButton: View {
     @Binding var isOpen: Bool
-    let logCount: Int
+    /// Live count, updated on every log line. (A plain init-time Int would go
+    /// stale because the parent view doesn't re-render on log appends.)
+    @State private var logCount: Int = ConsoleLogStore.shared.entries.count
     let isConnecting: Bool
 
     @State private var isGlowing = false
 
-    public init(isOpen: Binding<Bool>, logCount: Int, isConnecting: Bool) {
+    public init(isOpen: Binding<Bool>, isConnecting: Bool) {
         self._isOpen = isOpen
-        self.logCount = logCount
         self.isConnecting = isConnecting
     }
 
@@ -69,6 +70,12 @@ public struct FloatingCustomizerButton: View {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 isGlowing = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .consoleLogDidAppend)) { _ in
+            logCount = ConsoleLogStore.shared.entries.count
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .consoleLogDidClear)) { _ in
+            logCount = 0
         }
     }
 }

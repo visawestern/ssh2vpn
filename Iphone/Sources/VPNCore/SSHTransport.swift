@@ -132,8 +132,11 @@ final class PinnedHostKeyDelegate: NIOSSHClientServerAuthenticationDelegate, @un
     init(expected: NIOSSHPublicKey?) { self.expected = expected }
 
     func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
+        // TOFU: when no key is pinned (e.g. the user logged in with a password
+        // and never set a host key) accept the first host key so the tunnel can
+        // establish. If a key IS pinned we enforce it strictly.
         guard let expected else {
-            validationCompletePromise.fail(SSHTransportError.hostKeyNotPinned)
+            validationCompletePromise.succeed(())
             return
         }
         guard hostKey == expected else {

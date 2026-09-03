@@ -3,6 +3,20 @@ import XCTest
 
 final class ConsoleLogSanitizerTests: XCTestCase {
 
+    func testPreservesBooleanPresenceFlags() {
+        // Diagnostic lines like "hasPassword=true" carry no secret — the
+        // sanitizer must leave them readable, or every tunnel dump degrades.
+        let input = "TunnelConfiguration OK host=1.2.3.4 hasPassword=true hasPrivateKey=false dns=[]"
+        XCTAssertEqual(ConsoleLogSanitizer.sanitize(input), input)
+    }
+
+    func testStillRedactsRealPasswords() {
+        XCTAssertTrue(ConsoleLogSanitizer.sanitize("password=secret123").contains("***REDACTED***"))
+        XCTAssertTrue(ConsoleLogSanitizer.sanitize("password=true123").contains("***REDACTED***"),
+                      "true as a prefix of a longer secret is still a secret")
+        XCTAssertTrue(ConsoleLogSanitizer.sanitize("{\"password\": \"TopSecret\"}").contains("***REDACTED***"))
+    }
+
     func testScrubPlainPassword() {
         let input = "Connecting with password: MySuperSecretPassword123! to 192.168.1.1"
         let output = ConsoleLogSanitizer.sanitize(input)

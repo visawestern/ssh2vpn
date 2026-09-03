@@ -68,10 +68,9 @@ struct RootView: View {
                 Spacer()
                 FloatingCustomizerButton(
                     isOpen: $isConsoleOpen,
-                    logCount: ConsoleLogStore.shared.entries.count,
                     isConnecting: model.connection == .connecting
                 )
-                .padding(.bottom, 110)
+                Spacer()
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
 
@@ -133,6 +132,9 @@ struct ConnectView: View {
     @State private var timer: Timer?
     @State private var showAddServer = false
     @State private var showLocationsSheet = false
+    /// Post-tap cooldown: the power button stays disabled for a fixed window
+    /// after every press (connect or disconnect), then re-enables itself.
+    @State private var powerCooldown = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -293,6 +295,9 @@ struct ConnectView: View {
                 }
             }
             .buttonStyle(PowerButtonStyle())
+            // Double-tap protection: disabled mid-connect plus a fixed 2s
+            // cooldown after every press (model guards cover runloop races).
+            .disabled(model.connection == .connecting || powerCooldown)
         }
     }
 
@@ -363,6 +368,12 @@ struct ConnectView: View {
     // MARK: - Helpers
 
     private func toggleConnection() {
+        guard !powerCooldown else { return }
+        powerCooldown = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            powerCooldown = false
+        }
         if model.connection == .connected {
             model.disconnect()
         } else if model.connection == .connecting {
@@ -552,6 +563,8 @@ struct ServerDot: Identifiable {
 
 struct LocationsView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var showEdit = false
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -604,6 +617,29 @@ struct LocationsView: View {
                                         .padding(.vertical, 4)
                                         .background(Color.prim50, in: Capsule())
                                 }
+                                Button {
+                                    showEdit = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(Color.sec50)
+                                        .frame(width: 30, height: 30)
+                                        .background(Color.sec50.opacity(0.12), in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(model.copy.text(.editServerTitle))
+
+                                Button {
+                                    showDeleteConfirm = true
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(Color.red)
+                                        .frame(width: 30, height: 30)
+                                        .background(Color.red.opacity(0.12), in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(model.copy.text(.deleteServer))
                             }
                             .padding(16)
                         }
@@ -638,6 +674,18 @@ struct LocationsView: View {
             }
             .background(Color.appBg)
             .navigationTitle(model.copy.text(.locations))
+            .sheet(isPresented: $showEdit) {
+                AddServerView(editing: true, editingID: model.selectedServer?.id)
+                    .environmentObject(model)
+            }
+            .confirmationDialog(model.copy.text(.deleteServerConfirm),
+                                isPresented: $showDeleteConfirm,
+                                titleVisibility: .visible) {
+                Button(model.copy.text(.deleteServer), role: .destructive) {
+                    model.deleteProfile()
+                }
+                Button(model.copy.text(.cancel), role: .cancel) { }
+            }
         }
     }
 }
@@ -910,6 +958,9 @@ struct LanguageOverlay: View {
 struct AddServerView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    var editing: Bool = false
+    /// When editing, the id of the server being modified (nil = adding new).
+    var editingID: String? = nil
     @State private var address = ""
     @State private var username = ""
     @State private var port = "22"
@@ -1010,24 +1061,56 @@ struct AddServerView: View {
                             let validHost = try ProfileValidator.validateHost(address)
                             let validPort = try ProfileValidator.validatePort(port)
                             let validUsername = try ProfileValidator.validateUsername(username)
-                            try ProfileValidator.validateCredentials(password: password, privateKey: privateKey)
+                            // In edit mode we may be leaving the credential
+                            // fields blank to keep what is already saved; only
+                            // validate when the user actually entered something.
+                            if !password.isEmpty || !privateKey.isEmpty {
+                                try ProfileValidator.validateCredentials(password: password, privateKey: privateKey)
+                            }
 
-                            model.profile = VPNProfile(
+                            // Resolve the id: reuse the edited server's id (or the
+                            // currently selected one when editing without an
+                            // explicit id), otherwise mint a fresh one. Never
+                            // mint blindly on edit — that spawns duplicates.
+                            let id = editingID ?? (editing ? model.selectedServer?.id : nil) ?? UUID().uuidString
+
+                            // When editing, preserve existing secrets if the user
+                            // left the fields blank (same merge semantics as the
+                            // old single-profile editor).
+                            var existingPassword: String?
+                            var existingPrivateKey: String?
+                            if let existing = model.servers.first(where: { $0.id == id }) {
+                                existingPassword = existing.password
+                                existingPrivateKey = existing.privateKey
+                            }
+                            let resolvedPassword = password.isEmpty ? (existingPassword ?? "") : password
+                            let resolvedPrivateKey = privateKey.isEmpty ? (existingPrivateKey ?? "") : privateKey
+
+                            let profile = ServerProfile(
+                                id: id,
+                                name: validHost,
                                 host: validHost,
                                 port: validPort,
                                 username: validUsername,
-                                password: password,
-                                privateKey: privateKey,
-                                hostKey: hostKey
+                                hostKey: hostKey,
+                                dnsServers: [],
+                                hasPassword: !resolvedPassword.isEmpty,
+                                hasPrivateKey: !resolvedPrivateKey.isEmpty,
+                                password: resolvedPassword.isEmpty ? nil : resolvedPassword,
+                                privateKey: resolvedPrivateKey.isEmpty ? nil : resolvedPrivateKey
                             )
+
+                            // Persist locally (instant UI) then close. Extension
+                            // sync happens best-effort in the background.
+                            model.saveServer(profile)
                             model.serverName = validHost
                             dismiss()
                         } catch {
                             errorMessage = error.localizedDescription
                             showErrorAlert = true
-                        }
+                         }
                     } label: {
-                        Text(model.copy.text(.addServer))
+                        Text(model.copy.text(editing ? .saveChanges : .addServer))
                             .font(.openSans(16, weight: .semibold))
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
@@ -1046,11 +1129,23 @@ struct AddServerView: View {
                 .padding(16)
             }
             .background(Color.appBg)
-            .navigationTitle(model.copy.text(.addServerTitle))
+            .navigationTitle(model.copy.text(editing ? .editServerTitle : .addServerTitle))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(model.copy.text(.cancel)) { dismiss() }
                         .foregroundStyle(Color.sec50)
+                }
+            }
+            .onAppear {
+                if editing, let server = model.servers.first(where: { $0.id == editingID }) {
+                    address = server.host
+                    username = server.username
+                    port = String(server.port)
+                    hostKey = server.hostKey
+                    // Pre-fill secrets so the edit form shows what is stored.
+                    password = server.password ?? ""
+                    privateKey = server.privateKey ?? ""
                 }
             }
             .alert(model.copy.text(.invalidInput), isPresented: $showErrorAlert) {

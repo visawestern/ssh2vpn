@@ -16,6 +16,11 @@ final class PacketTunnelPacketLoop: @unchecked Sendable {
     private var isRunning = false
     private var isSuspended = false
     private var onReady: ((Error?) -> Void)?
+    /// Diagnostic counters: packets read from utun (iOS routed them to us)
+    /// vs written back to utun (replies). Plain Ints on purpose — aligned
+    /// access is practically atomic and these are read-only diagnostics.
+    private(set) var packetsRead = 0
+    private(set) var packetsWritten = 0
 
     init(packetFlow: NEPacketTunnelFlow, transport: PacketTunnelTransport) {
         self.packetFlow = packetFlow
@@ -30,6 +35,7 @@ final class PacketTunnelPacketLoop: @unchecked Sendable {
         transport.start(
             receive: { [weak self] packet in
                 guard let self, self.isRunning else { return }
+                self.packetsWritten += 1
                 let protocolNumber = packet.first.map { ($0 >> 4) == 6 ? AF_INET6 : AF_INET } ?? AF_INET
                 self.packetFlow.writePackets([packet], withProtocols: [NSNumber(value: protocolNumber)])
             },
@@ -65,6 +71,7 @@ final class PacketTunnelPacketLoop: @unchecked Sendable {
         guard isRunning, !isSuspended else { return }
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self, self.isRunning, !self.isSuspended else { return }
+            self.packetsRead += packets.count
             for packet in packets {
                 self.transport.send(packet: packet) { _ in
                     // Transient send failures (backpressure while the gateway
