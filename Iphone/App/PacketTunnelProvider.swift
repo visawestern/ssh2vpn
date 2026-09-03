@@ -165,7 +165,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             elog(.info, "TUNNEL", "SSH connected; starting relay transport")
 
-            let relay = RelayTransport(sshHandler: sshHandler,
+            let relay = RelayTransport(factory: factory,
+                                       sshHandler: sshHandler,
                                        eventLoop: sshChannel.eventLoop,
                                        dnsServers: configuration.dnsServers,
                                        receive: { [weak self] packet in
@@ -733,6 +734,12 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private let relayQueue = DispatchQueue(label: "com.ssh2vpn.relay")
     private let sshHandler: NIOSSHHandler
     private let sshEventLoop: EventLoop
+    /// Retains the SSH factory (and its event loop group) for the tunnel's
+    /// lifetime. Without this the factory deallocs when startTunnel returns,
+    /// its deinit shuts the group down, and every later channel open hangs
+    /// forever with no error — the exact silence seen on device. (The old TUN
+    /// transport kept its own factory property, which is why it never hit this.)
+    private let sshFactory: SSHTransportFactory
     /// Upstream DNS for port-53 relay (profile override or public fallback).
     private let dnsUpstream: String
     private var dnsRelay: DNSRelay?
@@ -748,13 +755,15 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// only sees its closure path, so this is the honest number).
     private var repliesWritten = 0
 
-    init(sshHandler: NIOSSHHandler,
+    init(factory: SSHTransportFactory,
+         sshHandler: NIOSSHHandler,
          eventLoop: EventLoop,
          dnsServers: [String] = [],
          receive: @escaping (Data) -> Void,
          failure: @escaping (Error) -> Void,
          ready: @escaping (Error?) -> Void) {
         self.receiveCallback = receive
+        self.sshFactory = factory
         self.sshHandler = sshHandler
         self.sshEventLoop = eventLoop
         self.dnsUpstream = dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
