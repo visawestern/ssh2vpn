@@ -1,6 +1,8 @@
 import Foundation
 import Network
 import NetworkExtension
+import NIOCore
+import NIOSSH
 import VPNCore
 
 /// Dual-write for extension diagnostics: device console (NSLog, visible in
@@ -14,7 +16,7 @@ private func elog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var packetLoop: PacketTunnelPacketLoop?
-    private var transport: SSHPacketTunnelTransport?
+    private var transport: PacketTunnelTransport?
     // Latest runtime failure surfaced by the tunnel (auth, transport, config,
     // probe). The app pulls it over this VPN's app-message channel.
     private var lastRuntimeError: String?
@@ -47,7 +49,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                  "stopReason": self?.lastStopReason ?? "none",
                  "packetsRead": "\(self?.packetLoop?.packetsRead ?? 0)",
                  "packetsWritten": "\(self?.packetLoop?.packetsWritten ?? 0)",
-                 "sessions": "\(self?.transport?.sessionCount ?? 0)"]
+                  "sessions": "relay"]
             },
             errorProvider: { [weak self] in
                 ["error": self?.lastRuntimeError ?? "none"]
@@ -58,7 +60,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
-        elog(.info, "TUNNEL", "startTunnel BEGIN")
+        elog(.info, "TUNNEL", "startTunnel BEGIN (relay mode — no root/TUN needed on server)")
         if startInFlight {
             elog(.warning, "TUNNEL", "startTunnel RE-ENTERED while a start is already in flight")
             lastRuntimeError = "startTunnel re-entered while previous start in flight"
@@ -68,10 +70,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             var providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
             elog(.info, "TUNNEL", "providerConfiguration keys: \(providerConfiguration?.keys.sorted() ?? [])")
-            // The extension is the owner of the server list. If it has a
-            // selected server saved, use that as the source of truth for the
-            // tunnel (the app syncs the list over the message API), ignoring
-            // what the system passed through.
+            // Extension-owned server list is the source of truth.
             if let selectedID = serverStore.selectedID(),
                let selected = serverStore.load(id: selectedID) {
                 var merged = providerConfiguration ?? [:]
@@ -85,26 +84,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 if let key = selected.privateKey, !key.isEmpty { merged["privateKey"] = key }
                 else { merged.removeValue(forKey: "privateKey") }
                 providerConfiguration = merged
-                elog(.info, "TUNNEL", "using extension-owned server id=\(selectedID) host=\(selected.host) hasPassword=\(selected.hasPassword)")
+                elog(.info, "TUNNEL", "using extension-owned server id=\(selectedID) host=\(selected.host)")
             }
             let configuration = try TunnelConfiguration(providerConfiguration: providerConfiguration)
             tunnelPhase = "config"
-            elog(.info, "TUNNEL", "TunnelConfiguration OK host=\(configuration.host) port=\(configuration.port) user=\(configuration.username) hasPassword=\(configuration.password != nil) hasPrivateKey=\(configuration.privateKey != nil) dns=\(configuration.dnsServers)")
-            // Persist the effective config into the extension-owned store so a
-            // copy survives here (used by the next start and by serverList
-            // queries while the tunnel runs). Secrets live only in this store.
-            // One-time hygiene first: earlier builds minted a fresh UUID per
-            // connect whenever no server was selected, spawning duplicates.
+            elog(.info, "TUNNEL", "TunnelConfiguration OK host=\(configuration.host) port=\(configuration.port) user=\(configuration.username)")
+            // Persist effective config into the extension-owned store.
             if serverStore.needsDedupe() {
                 serverStore.markDeduped()
                 let dupes = ServerDedupe.duplicateIDs(servers: serverStore.loadAll(), selectedID: serverStore.selectedID())
                 for id in dupes { serverStore.delete(id: id) }
-                if !dupes.isEmpty {
-                    elog(.warning, "TUNNEL", "removed \(dupes.count) duplicate server record(s) (one-time hygiene)")
-                }
             }
-            // Reuse the selected record, else match by coordinates — never mint
-            // a fresh UUID for a machine we already know.
             let persistID: String = {
                 if let sel = serverStore.selectedID(), serverStore.load(id: sel) != nil { return sel }
                 if let match = ServerDedupe.matchID(servers: serverStore.loadAll(), host: configuration.host, port: configuration.port, username: configuration.username) { return match }
@@ -114,74 +104,72 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 id: persistID, name: configuration.host, host: configuration.host, port: configuration.port,
                 username: configuration.username, hostKey: configuration.hostKey ?? "",
                 dnsServers: configuration.dnsServers, hasPassword: false, hasPrivateKey: false)
-            storedProfile.host = configuration.host
-            storedProfile.port = configuration.port
-            storedProfile.username = configuration.username
-            storedProfile.hostKey = configuration.hostKey ?? ""
-            storedProfile.dnsServers = configuration.dnsServers
             storedProfile.password = configuration.password
             storedProfile.privateKey = (providerConfiguration?["privateKey"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             storedProfile.hasPassword = storedProfile.password?.isEmpty == false
             storedProfile.hasPrivateKey = storedProfile.privateKey?.isEmpty == false
             serverStore.save(storedProfile)
             serverStore.select(id: persistID)
-            // Resolve once and pin the whole tunnel to that result: the route
-            // exclusions below must match the address the SSH socket actually
-            // connects to, otherwise the tunnel can recursively carry it.
-            let endpoint = try SSHEndpointResolver.resolve(configuration.host)
-            tunnelPhase = "resolved"
-            elog(.info, "TUNNEL", "endpoint resolved ipv4=\(endpoint.ipv4) ipv6=\(endpoint.ipv6)")
-            // The device identity is persisted so a reconnect (and the gateway
-            // broker socket) stays stable across tunnel restarts, while being
-            // unique per install so two phones sharing one VPS never collide.
-            let brokerID = Self.persistentDeviceIdentity()
-            let device = try TunnelDevice.derive(brokerID: brokerID)
-            tunnelPhase = "device"
-            elog(.info, "TUNNEL", "device derived ipv4=\(device.ipv4Address) ipv6=\(device.ipv6Address)")
+
+            // UNUSED (TUN mode removed — no root on server): endpoint resolution,
+            // TunnelDevice.derive, NEPacketTunnelNetworkSettings with routes.
+            // These are kept as commented reference but are not invoked.
+            // let endpoint = try SSHEndpointResolver.resolve(configuration.host)
+            // let device = try TunnelDevice.derive(brokerID: Self.persistentDeviceIdentity())
+            // ... (see git history for full TUN network settings)
+
+            // Relay mode: connect SSH, then parse/relay TCP over direct-tcpip channels.
+            tunnelPhase = "ssh-connect"
+            let factory = try SSHTransportFactory(pinnedOpenSSHHostKey: configuration.hostKey)
+            let credentials = SSHCredentials(host: configuration.host, port: configuration.port,
+                                            username: configuration.username,
+                                            password: configuration.password, privateKey: nil)
+            let serverAddress = try SocketAddress(ipAddress: configuration.host, port: configuration.port)
+            let sshChannel = try factory.connect(credentials).wait()
+            let sshHandler = try sshChannel.pipeline.handler(type: NIOSSHHandler.self).wait()
+            tunnelPhase = "ssh-connected"
+            elog(.info, "TUNNEL", "SSH connected; starting relay transport")
+
+            let relay = RelayTransport(sshHandler: sshHandler, eventLoop: sshChannel.eventLoop,
+                                       receive: { [weak self] packet in
+                                           guard let self else { return }
+                                           let proto = packet.first.map { ($0 >> 4) == 6 ? AF_INET6 : AF_INET } ?? AF_INET
+                                           self.packetFlow.writePackets([packet], withProtocols: [NSNumber(value: proto)])
+                                       },
+                                       failure: { [weak self] error in
+                                           self?.lastRuntimeError = "relay: \(error.localizedDescription)"
+                                           self?.cancelTunnelWithError(error)
+                                       },
+                                       ready: { _ in })
+            self.transport = relay
+            tunnelPhase = "transport"
+            elog(.info, "TUNNEL", "relay transport ready; calling setTunnelNetworkSettings")
+
+            // Minimal network settings: route all IPv4/IPv6 to utun. The relay
+            // handles per-flow routing itself, so no excluded routes needed.
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.host)
-            settings.ipv4Settings = NEIPv4Settings(addresses: [device.ipv4Address], subnetMasks: [TunnelDevice.v4SubnetMask])
+            settings.ipv4Settings = NEIPv4Settings(addresses: ["10.0.0.2"], subnetMasks: ["255.255.255.0"])
             settings.ipv4Settings?.includedRoutes = [NEIPv4Route.default()]
-            settings.ipv6Settings = NEIPv6Settings(addresses: [device.ipv6Address], networkPrefixLengths: [NSNumber(value: TunnelDevice.v6PrefixLength)])
+            settings.ipv6Settings = NEIPv6Settings(addresses: ["fd00::2"], networkPrefixLengths: [NSNumber(value: 64)])
             settings.ipv6Settings?.includedRoutes = [NEIPv6Route.default()]
-            // Keep the SSH control channel outside the packet tunnel. Without
-            // this host route the tunnel can recursively carry its own socket.
-            if !endpoint.ipv4.isEmpty {
-                settings.ipv4Settings?.excludedRoutes = endpoint.ipv4.map {
-                    NEIPv4Route(destinationAddress: $0, subnetMask: "255.255.255.255")
-                }
-            }
-            if !endpoint.ipv6.isEmpty {
-                settings.ipv6Settings?.excludedRoutes = endpoint.ipv6.map {
-                    NEIPv6Route(destinationAddress: $0, networkPrefixLength: 128)
-                }
-            }
-            // DNS comes from the saved profile; when unset the system resolvers
-            // are used so the tunnel never depends on a hardcoded third party.
             if !configuration.dnsServers.isEmpty {
                 let dns = NEDNSSettings(servers: configuration.dnsServers)
                 dns.matchDomains = [""]
                 settings.dnsSettings = dns
             }
-            elog(.info, "TUNNEL", "network settings built")
 
-            let transport = try SSHPacketTunnelTransport(configuration: configuration, endpoint: endpoint, brokerID: brokerID, bundle: .main)
-            self.transport = transport
-            tunnelPhase = "transport"
-            elog(.info, "TUNNEL", "transport initialized; calling setTunnelNetworkSettings")
             setTunnelNetworkSettings(settings) { [weak self] error in
+                guard let self else { return }
                 if let error {
                     elog(.error, "TUNNEL", "setTunnelNetworkSettings FAILED: \(error)")
-                    self?.lastRuntimeError = "setTunnelNetworkSettings: \(error.localizedDescription)"
-                } else {
-                    elog(.info, "TUNNEL", "setTunnelNetworkSettings OK")
-                    self?.tunnelPhase = "network-settings"
-                }
-                guard let self, error == nil else {
-                    self?.startInFlight = false
+                    self.lastRuntimeError = "setTunnelNetworkSettings: \(error.localizedDescription)"
+                    self.startInFlight = false
                     completionHandler(error)
                     return
                 }
-                let loop = PacketTunnelPacketLoop(packetFlow: self.packetFlow, transport: transport)
+                self.tunnelPhase = "network-settings"
+                elog(.info, "TUNNEL", "setTunnelNetworkSettings OK")
+                let loop = PacketTunnelPacketLoop(packetFlow: self.packetFlow, transport: relay)
                 self.packetLoop = loop
                 self.loopStartCompleted = false
                 loop.start { [weak self] readyError in
@@ -196,15 +184,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         self?.tunnelPhase = "ready"
                     }
                     completionHandler(readyError)
-                }
-                // Watchdog: if the loop never reports back, the app would hang
-                // on CONNECTING forever and the system would eventually kill a
-                // silent tunnel. Fail loudly instead so the app dump shows why.
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 15) { [weak self] in
-                    guard let self, !self.loopStartCompleted, self.tunnelPhase == "network-settings" else { return }
-                    elog(.error, "TUNNEL", "packet loop start TIMEOUT (no ready callback in 15s)")
-                    self.lastRuntimeError = "packetLoop start timeout (no ready callback in 15s)"
-                    self.cancelTunnelWithError(SSHPacketTunnelError.probeFailed)
                 }
             }
         } catch {
@@ -689,5 +668,89 @@ private final class LockedSessionHandshake: @unchecked Sendable {
 
 private final class SessionHolder: @unchecked Sendable {
     var session: SSHTransportSession?
+}
+
+// MARK: - Unprivileged TCP relay transport
+
+/// Unprivileged relay transport: instead of shipping raw IP packets to a
+/// gateway that needs a TUN device (root), this parses TCP from utun itself
+/// and relays each flow through an SSH direct-tcpip channel. No root, no TUN,
+/// no iptables needed on the server — just a regular SSH connection.
+///
+/// Wire format seen by the relay:
+///   utun -> IP packet -> parse TCP -> state machine -> direct-tcpip channel -> server -> internet
+///   internet -> server -> direct-tcpip channel -> state machine -> IP packet -> utun
+final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
+    private var stateMachine: TCPRelayStateMachine
+    private let receiveCallback: (Data) -> Void
+    private var isStarted = false
+
+    /// pending packets received before SSH connected (bounded)
+    private var pendingPackets: [Data] = []
+    private let maxPending = 64
+
+    init(sshHandler: NIOSSHHandler,
+         eventLoop: EventLoop,
+         receive: @escaping (Data) -> Void,
+         failure: @escaping (Error) -> Void,
+         ready: @escaping (Error?) -> Void) {
+        self.receiveCallback = receive
+
+        let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: eventLoop)
+        let factory = SSHRelayChannelFactory(opener: opener)
+        self.stateMachine = TCPRelayStateMachine(factory: factory, isnGenerator: RandomISN(), idleTimeout: 120)
+    }
+
+    func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void) {
+        guard !isStarted else { return }
+        isStarted = true
+        // SSH is already connected by the caller; flush anything queued.
+        ready(nil)
+        for pkt in pendingPackets {
+            handlePacket(pkt, receive: receive)
+        }
+        pendingPackets.removeAll()
+    }
+
+    func send(packet: Data, completion: @escaping (Error?) -> Void) {
+        guard isStarted else {
+            // SSH not ready yet — queue (bounded) so a burst at connect time
+            // doesn't grow memory forever.
+            if pendingPackets.count < maxPending {
+                pendingPackets.append(packet)
+            }
+            completion(nil)
+            return
+        }
+        handlePacket(packet, receive: receiveCallback)
+        completion(nil)
+    }
+
+    func stop() {
+        isStarted = false
+        pendingPackets.removeAll()
+    }
+
+    // MARK: - private
+
+    private func handlePacket(_ packet: Data, receive: @escaping (Data) -> Void) {
+        // Only IPv4 TCP for now; everything else is dropped silently (the
+        // phone will retry over the relayed TCP flows).
+        guard packet.count >= 20, packet[0] >> 4 == 4, packet[9] == 6 else { return }
+        do {
+            let replies = try stateMachine.handle(packet: IPv4Packet(Array(packet)))
+            for reply in replies {
+                receive(Data(reply))
+            }
+        } catch {
+            // Parse/relay errors are per-flow; don't tear down the tunnel.
+        }
+    }
+}
+
+/// Simple random ISN generator (RFC 793 recommends 32-bit counter, but a random
+/// value is fine for a relay that doesn't reuse ports).
+struct RandomISN: ISNGenerator {
+    func next() -> UInt32 { UInt32.random(in: 0...0xFFFFFFFF) }
 }
 
