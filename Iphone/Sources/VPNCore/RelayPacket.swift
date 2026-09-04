@@ -21,6 +21,15 @@ public struct ParsedTCPSegment: Sendable {
     public var flags: TCPFlags
     public var window: UInt16
     public var payload: Data
+    /// TCP options parsed from the header (only populated when needed).
+    public var options: TCPOptions
+}
+
+/// Parsed TCP options from a segment.  Zero values mean "not present".
+public struct TCPOptions: Sendable {
+    public var mss: UInt16 = 0
+    public var windowScale: UInt8 = 0
+    public var sackPermitted: Bool = false
 }
 
 public enum TCPParser {
@@ -28,13 +37,47 @@ public enum TCPParser {
         guard data.count >= 20 else { throw IPPacketError.truncated }
         let dataOffset = Int((data[12] >> 4) & 0x0F) * 4
         guard dataOffset >= 20, data.count >= dataOffset else { throw IPPacketError.invalidHeaderLength }
+        let options = parseOptions(Data(data[20..<dataOffset]))
         return ParsedTCPSegment(
             seq: u32(data, 4),
             ack: u32(data, 8),
             flags: TCPFlags(rawValue: data[13]),
             window: u16(data, 14),
-            payload: Data(data[dataOffset...])
+            payload: Data(data[dataOffset...]),
+            options: options
         )
+    }
+
+    /// Parses TCP options from the bytes between the fixed 20-byte header
+    /// and the start of payload.  Options are a sequence of TLV tuples:
+    ///   kind (1B) | length (1B, includes kind+length) | value (length-2 B)
+    static func parseOptions(_ data: Data) -> TCPOptions {
+        var opts = TCPOptions()
+        var i = data.startIndex
+        while i < data.endIndex {
+            let kind = data[i]
+            if kind == 0 { break }       // EOL
+            if kind == 1 { i += 1; continue }  // NOP
+            guard i + 1 < data.endIndex else { break }
+            let len = Int(data[i + 1])
+            guard len >= 2, i + len <= data.endIndex else { break }
+            switch kind {
+            case 2: // MSS
+                if len == 4, i + 4 <= data.endIndex {
+                    opts.mss = u16(data, i + 2)
+                }
+            case 3: // Window Scale
+                if len == 3, i + 3 <= data.endIndex {
+                    opts.windowScale = data[i + 2]
+                }
+            case 4: // SACK Permitted
+                opts.sackPermitted = true
+            default:
+                break
+            }
+            i += len
+        }
+        return opts
     }
 
     static func u16(_ d: Data, _ i: Int) -> UInt16 { (UInt16(d[i]) << 8) | UInt16(d[i + 1]) }
@@ -219,38 +262,54 @@ public enum Checksum {
 
 public enum TCPReplyBuilder {
     /// SYN-ACK answering a SYN: acknowledges peerSeq+1 (SYN consumes one).
-    public static func synAck(flow: RelayFlow, isn: UInt32, peerSeq: UInt32, mss: UInt16 = 1400, identification: UInt16 = 0) throws -> [UInt8] {
+    public static func synAck(flow: RelayFlow, isn: UInt32, peerSeq: UInt32,
+                              mss: UInt16 = 1400, windowScale: UInt8 = 0,
+                              identification: UInt16 = 0) throws -> [UInt8] {
         try build(flow: flow, seq: isn, ack: peerSeq &+ 1, flags: [.syn, .ack],
-                  payload: [], window: 65535, identification: identification, mss: mss)
+                  payload: [], window: 65535, identification: identification,
+                  mss: mss, windowScale: windowScale)
     }
 
     /// RST with explicit sequence/ack numbers supplied by the relay, which
     /// owns the flow state and knows what is in window.
     public static func rst(flow: RelayFlow, seq: UInt32, ack: UInt32, identification: UInt16 = 0) throws -> [UInt8] {
         try build(flow: flow, seq: seq, ack: ack, flags: [.rst, .ack],
-                  payload: [], window: 0, identification: identification, mss: nil)
+                  payload: [], window: 0, identification: identification, mss: nil, windowScale: nil)
     }
 
     /// FIN closing our side toward the phone (server side went away).
     public static func fin(flow: RelayFlow, seq: UInt32, ack: UInt32, identification: UInt16 = 0) throws -> [UInt8] {
         try build(flow: flow, seq: seq, ack: ack, flags: [.fin, .ack],
-                  payload: [], window: 65535, identification: identification, mss: nil)
+                  payload: [], window: 65535, identification: identification, mss: nil, windowScale: nil)
     }
 
     /// Data segment (ACK set, PSH when carrying payload).
-    public static func data(flow: RelayFlow, seq: UInt32, ack: UInt32, payload: [UInt8], window: UInt16 = 65535, identification: UInt16 = 0) throws -> [UInt8] {
+    public static func data(flow: RelayFlow, seq: UInt32, ack: UInt32, payload: [UInt8],
+                            window: UInt16 = 65535, identification: UInt16 = 0) throws -> [UInt8] {
         var flags: TCPFlags = [.ack]
         if !payload.isEmpty { flags.insert(.psh) }
         return try build(flow: flow, seq: seq, ack: ack, flags: flags,
-                         payload: payload, window: window, identification: identification, mss: nil)
+                         payload: payload, window: window, identification: identification,
+                         mss: nil, windowScale: nil)
     }
 
     private static func build(flow: RelayFlow, seq: UInt32, ack: UInt32, flags: TCPFlags,
-                              payload: [UInt8], window: UInt16, identification: UInt16, mss: UInt16?) throws -> [UInt8] {
+                              payload: [UInt8], window: UInt16, identification: UInt16,
+                              mss: UInt16?, windowScale: UInt8?) throws -> [UInt8] {
         let r = flow.reversed
         guard r.srcAddr.count == r.dstAddr.count, (r.srcAddr.count == 4 || r.srcAddr.count == 16) else {
             throw IPPacketError.invalidHeaderLength
         }
+        // --- TCP options ---
+        var opts = [UInt8]()
+        if let mss {
+            opts += [2, 4, UInt8(mss >> 8), UInt8(mss & 0xFF)]   // MSS (kind=2, len=4)
+        }
+        if let ws = windowScale, ws > 0 {
+            opts += [3, 3, ws]                                     // Window Scale (kind=3, len=3)
+        }
+        let headerWords: UInt8 = UInt8((20 + opts.count + 3) / 4)
+
         // --- TCP segment (checksum zeroed for now) ---
         var seg = [UInt8](repeating: 0, count: 20)
         seg[0] = UInt8(r.srcPort >> 8); seg[1] = UInt8(r.srcPort & 0xFF)
@@ -259,13 +318,9 @@ public enum TCPReplyBuilder {
         seg[6] = UInt8((seq >> 8) & 0xFF); seg[7] = UInt8(seq & 0xFF)
         seg[8] = UInt8(ack >> 24); seg[9] = UInt8((ack >> 16) & 0xFF)
         seg[10] = UInt8((ack >> 8) & 0xFF); seg[11] = UInt8(ack & 0xFF)
-        let headerWords: UInt8
-        if let mss {
-            seg += [2, 4, UInt8(mss >> 8), UInt8(mss & 0xFF)]
-            headerWords = 6
-        } else {
-            headerWords = 5
-        }
+        seg += opts
+        // Pad to 4-byte boundary if needed.
+        while seg.count % 4 != 0 { seg.append(0) }
         seg[12] = headerWords << 4
         seg[13] = flags.rawValue
         seg[14] = UInt8(window >> 8); seg[15] = UInt8(window & 0xFF)

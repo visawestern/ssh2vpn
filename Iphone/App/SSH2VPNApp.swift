@@ -194,7 +194,6 @@ final class AppModel: ObservableObject {
                 ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
                 self?.logExtensionInventory()
                 self?.schedulePostConnectCheck()
-                self?.runPostConnectSelfTest()
             case .disconnecting:
                 ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
             case .disconnected:
@@ -273,12 +272,17 @@ final class AppModel: ObservableObject {
 
     /// Re-checks counters a while after connect while still connected, so the
     /// dump shows whether traffic actually flows (call sites: .connected).
+    /// Runs 12s after connect and ONLY while still connected: fetches logs +
+    /// counters first, then the traffic self-test. No checks run on the fresh
+    /// CONNECTED event itself — the tunnel (channels, DNS relay, routes) needs
+    /// those seconds to settle, otherwise the verdict measures warmup noise.
     private func schedulePostConnectCheck() {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(12))
             guard connection == .connected else { return }
             await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager(), timeout: 2)
             logTunnelCounters(tag: "+12s")
+            self.runPostConnectSelfTest()
         }
     }
 

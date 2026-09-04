@@ -742,8 +742,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private let sshFactory: SSHTransportFactory
     /// Upstream DNS for port-53 relay (profile override or public fallback).
     private let dnsUpstream: String
-    private var dnsRelay: DNSRelay?
-    private var dnsChannel: RelayChannel?
+    /// Open per-query upstream DNS channels (bounded; oldest closed past cap).
+    private var dnsInFlight: [AnyObject] = []
+    private let maxDNSInFlight = 32
     private var sweepTimer: DispatchSourceTimer?
 
     /// pending packets received before SSH connected (bounded)
@@ -787,9 +788,11 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             guard let self else { return }
             self.relayQueue.async { [weak self] in
                 guard let self else { return }
+                let before = self.stateMachine.flowStats().first { $0.flow == flow }
+                let totals = before.map { "up=\($0.upBytes)B down=\($0.downBytes)B" } ?? "no stats"
                 let s = flow.srcAddr.map(String.init).joined(separator: ".")
                 let d = flow.dstAddr.map(String.init).joined(separator: ".")
-                elog(.info, "RELAY", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) server closed; FIN to phone")
+                elog(.info, "RELAY", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) server closed (\(totals)); FIN to phone")
                 for reply in self.stateMachine.channelClosed(flow: flow) {
                     self.receiveCallback(Data(reply))
                 }
@@ -813,11 +816,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         ready(nil)
         relayQueue.async { [weak self] in
             guard let self else { return }
-            // Arm the upstream DNS channel eagerly so it is ready before the
-            // first query (and before the post-connect SELFTEST runs) —
-            // otherwise the "DNS relay armed" line confusingly lands after
-            // the internet check that needs it.
-            self.ensureDNSChannel()
+            // NOTE: no eager DNS arming — each query opens its own short-lived
+            // upstream channel on demand (shared idle channels die on this
+            // path, so eagerness only buys confusion).
             for pkt in self.pendingPackets {
                 self.handlePacket(pkt, receive: receive)
             }
@@ -859,6 +860,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         isStarted = false
         sweepTimer?.cancel()
         sweepTimer = nil
+        for tracked in dnsInFlight {
+            (tracked as? RelayChannel)?.close()
+        }
+        dnsInFlight.removeAll()
         pendingPackets.removeAll()
     }
 
@@ -870,7 +875,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         // everything else is dropped (the phone retransmits / falls back).
         guard packet.count >= 20, packet[0] >> 4 == 4 else { return }
         if packet[9] == 17 {
-            handleDNSPacket(packet, receive: receive)
+            handleDNSPacket(packet)
             return
         }
         guard packet[9] == 6 else { return }
@@ -902,10 +907,14 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
 
     // MARK: - DNS relay (UDP port 53 over one shared upstream TCP connection)
 
-    /// Routes a utun IPv4/UDP packet: port-53 queries go upstream over TCP,
-    /// everything else UDP is dropped (TCP fallback covers real traffic).
-    /// Runs on relayQueue only.
-    private func handleDNSPacket(_ packet: Data, receive: @escaping (Data) -> Void) {
+    /// Routes a utun IPv4/UDP packet: port-53 queries each get their OWN
+    /// short-lived upstream channel (open -> query -> answer -> close).
+    /// Rationale: shared idle channels die on this path (observed ~2s idle
+    /// death with zero bytes in flight) for reasons outside our control
+    /// (middlebox sweeps / DNS-server idle kills); per-query channels never
+    /// sit idle, so the whole failure class disappears. Everything else UDP
+    /// is dropped (TCP fallback covers real traffic). Runs on relayQueue only.
+    private func handleDNSPacket(_ packet: Data) {
         guard let parsed = try? IPv4Parser.parse(packet),
               parsed.flow.transport == .udp,
               parsed.flow.destinationPort == 53 else { return }
@@ -916,42 +925,46 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         let flow = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
-        if dnsRelay == nil {
-            dnsRelay = DNSRelay(upstreamHost: dnsUpstream)
-            elog(.info, "RELAY", "DNS relay armed -> \(dnsUpstream):53")
-        }
-        guard let toSend = dnsRelay!.query(udp.payload, from: flow) else { return }
-        ensureDNSChannel()
-        dnsChannel?.send(toSend)
-    }
-
-    /// Lazily opens the single shared upstream DNS channel. Runs on relayQueue.
-    private func ensureDNSChannel() {
-        guard dnsChannel == nil else { return }
+        var demux = DNSRelay(upstreamHost: dnsUpstream)
+        guard let toSend = demux.query(udp.payload, from: flow) else { return }
+        let s = flow.srcAddr.map(String.init).joined(separator: ".")
+        let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
+        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) -> \(dnsUpstream):53")
         let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: sshEventLoop)
         guard let origin = try? SocketAddress(ipAddress: "127.0.0.1", port: 0) else { return }
-        dnsChannel = opener.open(
+        var channelRef: RelayChannel?
+        channelRef = opener.open(
             targetHost: dnsUpstream, targetPort: 53, originatorAddress: origin,
             onData: { [weak self] bytes in
                 guard let self else { return }
-                self.relayQueue.async { [weak self] in
+                // demux is per-query local: safe to drive inline here; only
+                // shared-state hops to relayQueue below.
+                var answered: [(RelayFlow, Data)] = []
+                for (f, resp) in demux.receive(bytes) { answered.append((f, resp)) }
+                guard !answered.isEmpty else { return }
+                channelRef?.close()
+                guard let id = channelRef.map({ ObjectIdentifier($0 as AnyObject) }) else { return }
+                self.relayQueue.async { [weak self, id] in
                     guard let self else { return }
-                    for (flow, resp) in self.dnsRelay?.receive(bytes) ?? [] {
-                        if let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(resp)) {
+                    self.dnsInFlight.removeAll { ObjectIdentifier($0) == id }
+                    for (f, resp) in answered {
+                        if let pkt = try? UDPReplyBuilder.reply(flow: f, payload: Array(resp)) {
                             self.repliesWritten += 1
                             self.receiveCallback(Data(pkt))
+                            elog(.info, "RELAY", "dns answer -> \(s):\(f.srcPort) (\(resp.count)B)")
                         }
                     }
                 }
             },
-            onClosed: { [weak self] in
-                guard let self else { return }
-                self.relayQueue.async { [weak self] in
-                    // Drop the dead channel; the next query re-opens it.
-                    self?.dnsChannel = nil
-                    elog(.warning, "RELAY", "upstream DNS channel closed; will reopen on next query")
-                }
-            })
+            onClosed: { })
+        if let channelRef {
+            if dnsInFlight.count > maxDNSInFlight,
+               let oldest = dnsInFlight.removeFirst() as? RelayChannel {
+                oldest.close()
+            }
+            dnsInFlight.append(channelRef as AnyObject)
+        }
+        channelRef?.send(toSend)
     }
 }
 
