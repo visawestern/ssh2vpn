@@ -260,6 +260,11 @@ public enum Checksum {
 
 // MARK: - Reply builders (server -> phone direction)
 
+/// Callers always pass the flow in the PHONE -> SERVER direction (as read
+/// from utun); `build` reverses it internally. Passing an already-reversed
+/// flow double-reverses it: the "reply" then carries phone->server address
+/// pairs and iOS drops it on the floor (observed on-device as SYN storms
+/// and a total egress blackhole while utun counters kept climbing).
 public enum TCPReplyBuilder {
     /// SYN-ACK answering a SYN: acknowledges peerSeq+1 (SYN consumes one).
     public static func synAck(flow: RelayFlow, isn: UInt32, peerSeq: UInt32,

@@ -183,7 +183,7 @@ public struct TCPRelayStateMachine {
                 fresh.peerRawWindow = seg.window
                 flows[key] = fresh
                 ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(key)) new SYN on \(st.state), reopening")
-                return [try TCPReplyBuilder.synAck(flow: key.reversed, isn: isn, peerSeq: seg.seq,
+                return [try TCPReplyBuilder.synAck(flow: key, isn: isn, peerSeq: seg.seq,
                                                    windowScale: fresh.localWindowScale)]
             }
 
@@ -221,7 +221,7 @@ public struct TCPRelayStateMachine {
             st.peerRawWindow = seg.window
             flows[key] = st
 
-            return [try TCPReplyBuilder.synAck(flow: key.reversed, isn: isn, peerSeq: seg.seq,
+            return [try TCPReplyBuilder.synAck(flow: key, isn: isn, peerSeq: seg.seq,
                                                windowScale: st.localWindowScale)]
         }
         // Anything else on an unknown flow (stray data/ACK after we expired
@@ -232,7 +232,7 @@ public struct TCPRelayStateMachine {
         let (rseq, rack): (UInt32, UInt32) = seg.flags.contains(.ack)
             ? (seg.ack, 0)
             : (0, seg.seq &+ UInt32(seg.payload.count))
-        return [try TCPReplyBuilder.rst(flow: key.reversed, seq: rseq, ack: rack)]
+        return [try TCPReplyBuilder.rst(flow: key, seq: rseq, ack: rack)]
     }
 
     // MARK: - SYN-RECEIVED handler
@@ -251,7 +251,7 @@ public struct TCPRelayStateMachine {
             return out
         } else if seg.flags.contains(.syn) {
             // Duplicate SYN: resend SYN-ACK (client may have missed it)
-            if let pkt = try? TCPReplyBuilder.synAck(flow: key.reversed, isn: st.isn, peerSeq: seg.seq) {
+            if let pkt = try? TCPReplyBuilder.synAck(flow: key, isn: st.isn, peerSeq: seg.seq) {
                 return [pkt]
             }
         }
@@ -296,7 +296,7 @@ public struct TCPRelayStateMachine {
             st.phoneFinSeen = true
             st.state = .closing
             st.channel.close()
-            if let pkt = try? TCPReplyBuilder.data(flow: key.reversed, seq: st.localSeq, ack: st.peerSeq, payload: []) {
+            if let pkt = try? TCPReplyBuilder.data(flow: key, seq: st.localSeq, ack: st.peerSeq, payload: []) {
                 replies.append(pkt)
             }
             return replies
@@ -313,7 +313,7 @@ public struct TCPRelayStateMachine {
         case .forwarded:
             // New contiguous data was forwarded.  ACK it immediately so
             // the phone's TCP stack doesn't retransmit.
-            if let pkt = try? TCPReplyBuilder.data(flow: key.reversed, seq: st.localSeq, ack: st.peerSeq, payload: []) {
+            if let pkt = try? TCPReplyBuilder.data(flow: key, seq: st.localSeq, ack: st.peerSeq, payload: []) {
                 replies.append(pkt)
             }
         case .acked(let ackPkts):
@@ -384,7 +384,7 @@ public struct TCPRelayStateMachine {
         }
 
         // For duplicate/out-of-order/partial, emit an ACK with current peerSeq.
-        if let pkt = try? TCPReplyBuilder.data(flow: key.reversed, seq: st.localSeq, ack: st.peerSeq, payload: []) {
+        if let pkt = try? TCPReplyBuilder.data(flow: key, seq: st.localSeq, ack: st.peerSeq, payload: []) {
             return .acked([pkt])
         }
         return .acked([])

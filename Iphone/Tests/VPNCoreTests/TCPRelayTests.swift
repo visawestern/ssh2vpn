@@ -800,4 +800,26 @@ final class TCPRelayTests: XCTestCase {
         let opts = TCPParser.parseOptions(Data(tcpData[tcpData.startIndex + 20..<tcpData.startIndex + dataOffset]))
         XCTAssertEqual(opts.windowScale, 7, "SYN-ACK advertises window scale=7")
     }
+
+    /// Regression: replies must travel SERVER -> PHONE. `TCPReplyBuilder`
+    /// reverses the flow internally, so the state machine must pass the
+    /// forward (phone->server) flow. A double reversal produced packets
+    /// addressed phone->server, which iOS drops silently — on-device this
+    /// looked like an "egress blackhole" (SYN retransmits every 1s,
+    /// up=0B/down=0B on every flow) while the utun read counter climbed.
+    func testRepliesAreAddressedServerToPhone() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let syn = synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)
+        let replies = try machine.handle(packet: IPv4Packet(syn))
+        XCTAssertEqual(replies.count, 1)
+        let synAck = replies[0]
+        XCTAssertEqual(synAck[0] >> 4, 4)
+        XCTAssertEqual(Array(synAck[12..<16]), v4(1, 1, 1, 1), "SYN-ACK src must be the SERVER")
+        XCTAssertEqual(Array(synAck[16..<20]), v4(10, 0, 0, 2), "SYN-ACK dst must be the PHONE")
+        XCTAssertEqual(UInt16(synAck[20]) << 8 | UInt16(synAck[21]), 443, "SYN-ACK src port = server port")
+        XCTAssertEqual(UInt16(synAck[22]) << 8 | UInt16(synAck[23]), 1234, "SYN-ACK dst port = phone port")
+        XCTAssertTrue(Checksum.isValidIPv4Packet(synAck), "SYN-ACK IP checksum must verify")
+        XCTAssertTrue(Checksum.isValidTCPSegment(packet: synAck), "SYN-ACK TCP checksum must verify")
+    }
 }
