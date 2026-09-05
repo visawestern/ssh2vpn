@@ -11,7 +11,7 @@ import Foundation
 /// drop the v4 tunnel settings (all IPv4 then bypasses the tunnel). The
 /// gateway computes the identical pair in gateway.py: keep them in sync.
 public struct TunnelDevice: Equatable, Sendable {
-    public static let v4SubnetMask = "255.255.255.252"
+    public static let v4SubnetMask = "255.255.255.0"
     public static let v6PrefixLength = 64
 
     /// The gateway end of the /30 link (real: gateway's own NAT exit).

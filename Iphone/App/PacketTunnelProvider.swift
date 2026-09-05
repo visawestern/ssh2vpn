@@ -44,13 +44,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let router = TunnelAppMessageRouter(
             serverStore: serverStore,
             statusProvider: { [weak self] in
-                ["phase": self?.tunnelPhase ?? "idle",
+                let lastReadAgo: String
+                if let at = self?.packetLoop?.lastReadAt {
+                    lastReadAgo = "\(max(0, Int(Date().timeIntervalSince(at))))s"
+                } else {
+                    lastReadAgo = "never"
+                }
+                return ["phase": self?.tunnelPhase ?? "idle",
                  "transport": self?.transport == nil ? "nil" : "set",
                  "stopReason": self?.lastStopReason ?? "none",
                  "packetsRead": "\(self?.packetLoop?.packetsRead ?? 0)",
                  "packetsWritten": "\(self?.packetLoop?.packetsWritten ?? 0)",
                  "replied": "\((self?.transport as? RelayTransport)?.repliedCount() ?? 0)",
-                 "sessions": "\((self?.transport as? RelayTransport)?.flowCount() ?? 0)"]
+                 "sessions": "\((self?.transport as? RelayTransport)?.flowCount() ?? 0)",
+                 "lastReadAgo": lastReadAgo]
             },
             errorProvider: { [weak self] in
                 ["error": self?.lastRuntimeError ?? "none"]
@@ -159,12 +166,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 elog(.error, "TUNNEL", msg)
                 tunnelPhase = "probe-failed"
                 lastRuntimeError = msg
+                TunnelLastError.write(msg)
                 startInFlight = false
                 completionHandler(probeError)
                 return
             }
             elog(.info, "TUNNEL", "SSH connected; starting relay transport")
 
+            let dnsUpstream = configuration.dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
             let relay = RelayTransport(factory: factory,
                                        sshHandler: sshHandler,
                                        eventLoop: sshChannel.eventLoop,
@@ -175,7 +184,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                            self.packetFlow.writePackets([packet], withProtocols: [NSNumber(value: proto)])
                                        },
                                        failure: { [weak self] error in
-                                           self?.lastRuntimeError = "relay: \(error.localizedDescription)"
+                                           let msg = "relay: \(error.localizedDescription)"
+                                           self?.lastRuntimeError = msg
+                                           TunnelLastError.write(msg)
                                            self?.cancelTunnelWithError(error)
                                        },
                                        ready: { _ in })
@@ -184,20 +195,39 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             elog(.info, "TUNNEL", "relay transport ready; calling setTunnelNetworkSettings")
 
             // Minimal network settings: route all IPv4/IPv6 to utun. The relay
-            // handles per-flow routing itself, so no excluded routes needed.
-            // Addresses MUST be unique per install (TunnelDevice-derived):
-            // a hardcoded 10.0.0.2 collides with common LAN subnets
-            // (10.0.0.0/24) and silently blackholes all traffic.
+            // handles per-flow routing itself. Addresses MUST be unique per install
+            // (TunnelDevice-derived): a hardcoded 10.0.0.2 collides with common LAN
+            // subnets (10.0.0.0/24) and silently blackholes all traffic.
+            // IMPORTANT: mask /24 (not /30) so iOS installs the default route.
+            // Exclude the VPN server IP so the SSH transport doesn't route through itself.
             let brokerID = Self.persistentDeviceIdentity()
             let device = try TunnelDevice.derive(brokerID: brokerID)
             elog(.info, "TUNNEL", "device derived ipv4=\(device.ipv4Address) ipv6=\(device.ipv6Address)")
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.host)
             settings.ipv4Settings = NEIPv4Settings(addresses: [device.ipv4Address], subnetMasks: [TunnelDevice.v4SubnetMask])
             settings.ipv4Settings?.includedRoutes = [NEIPv4Route.default()]
+            // Exclude VPN server IP to avoid routing loop (SSH transport must reach server directly).
+            // Use pre-resolved IP from app (avoids blocking DNS in startTunnel which caused early-death flake).
+            if let serverIP = configuration.serverIP {
+                let excludeRoute = NEIPv4Route(destinationAddress: serverIP, subnetMask: "255.255.255.255")
+                settings.ipv4Settings?.excludedRoutes = [excludeRoute]
+                elog(.info, "TUNNEL", "excluded server IP \(serverIP) from tunnel routes")
+            } else {
+                elog(.warning, "TUNNEL", "no pre-resolved server IP for route exclusion")
+            }
             settings.ipv6Settings = NEIPv6Settings(addresses: [device.ipv6Address], networkPrefixLengths: [NSNumber(value: TunnelDevice.v6PrefixLength)])
             settings.ipv6Settings?.includedRoutes = [NEIPv6Route.default()]
             if !configuration.dnsServers.isEmpty {
                 let dns = NEDNSSettings(servers: configuration.dnsServers)
+                dns.matchDomains = [""]
+                settings.dnsSettings = dns
+            } else {
+                // Always pin DNS to the relay's upstream: without dnsSettings
+                // the phone keeps querying the physical LAN resolver, whose
+                // address is unreachable from the VPS (LAN blackhole) — DNS
+                // dies and URLSession reports "offline". matchDomains [""] sends
+                // every lookup through utun into the DNS-over-TCP relay.
+                let dns = NEDNSSettings(servers: [dnsUpstream])
                 dns.matchDomains = [""]
                 settings.dnsSettings = dns
             }
@@ -207,6 +237,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 if let error {
                     elog(.error, "TUNNEL", "setTunnelNetworkSettings FAILED: \(error)")
                     self.lastRuntimeError = "setTunnelNetworkSettings: \(error.localizedDescription)"
+                    TunnelLastError.write(self.lastRuntimeError ?? "setTunnelNetworkSettings failed")
                     self.startInFlight = false
                     completionHandler(error)
                     return
@@ -222,10 +253,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     if let readyError {
                         elog(.error, "TUNNEL", "packet loop ready error: \(readyError)")
                         self?.lastRuntimeError = "packetLoop: \(readyError.localizedDescription)"
+                        TunnelLastError.write(self?.lastRuntimeError ?? "packetLoop failed")
                         self?.cancelTunnelWithError(readyError)
                     } else {
                         elog(.info, "TUNNEL", "packet loop ready OK")
                         self?.tunnelPhase = "ready"
+                        // Tunnel survived startup — any stale persisted failure
+                        // from an earlier death is now obsolete.
+                        TunnelLastError.clear()
                     }
                     completionHandler(readyError)
                 }
@@ -235,6 +270,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             tunnelPhase = "error"
             startInFlight = false
             lastRuntimeError = error.localizedDescription
+            // Persist: the process may be torn down within milliseconds and
+            // the message channel dies with it — without this the app sees
+            // extError=none and retries blindly into a fail2ban lockout.
+            TunnelLastError.write(error.localizedDescription)
             completionHandler(error)
         }
     }
@@ -252,11 +291,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
-        packetLoop?.suspend()
+        // NOTE: deliberately NOT suspending packet reads here. suspend() halts
+        // readPackets re-arming, and a missed/late wake() (observed in the
+        // wild) then leaves the tunnel "connected" with zero utun traffic
+        // forever — the exact delta=0 self-test signature. Background
+        // forwarding must continue while the device sleeps; iOS manages power
+        // itself. The sleep/wake lines stay so the next dump proves whether
+        // device sleep correlates with a stall.
+        elog(.info, "TUNNEL", "device sleep (reads continue)")
         completionHandler()
     }
 
     override func wake() {
+        elog(.info, "TUNNEL", "device wake (reads continue)")
         packetLoop?.resume()
     }
 
@@ -282,6 +329,7 @@ private struct TunnelConfiguration {
     let privateKey: NIOSSHPrivateKey?
     let hostKey: String?
     let dnsServers: [String]
+    let serverIP: String?
 
     init(providerConfiguration: [String: Any]?) throws {
         guard let providerConfiguration,
@@ -310,6 +358,8 @@ private struct TunnelConfiguration {
             throw SSHPacketTunnelError.invalidConfiguration
         }
         self.dnsServers = (providerConfiguration["dnsServers"] as? [String]) ?? []
+        // Pre-resolved server IPv4 from app (avoids blocking DNS in startTunnel).
+        self.serverIP = providerConfiguration["serverIP"] as? String
     }
 }
 

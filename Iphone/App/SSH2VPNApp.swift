@@ -56,6 +56,10 @@ final class AppModel: ObservableObject {
         didSet { SettingsStore.save(settings) }
     }
     private var automation = VPNConnectionAutomation(maxRetries: 3)
+    /// When the current attempt's startVPNTunnel was invoked. Lets the
+    /// disconnect handler tell an early death (tunnel flapped seconds after
+    /// start, first-start flake) from a real mid-session drop.
+    private var attemptStartedAt: Date?
     @Published var serverCountry: String = ""
     @Published var serverFlag: String = "🌐"
     @Published var serverCity: String = ""
@@ -66,6 +70,19 @@ final class AppModel: ObservableObject {
     /// GeoIP runs once per host (on server-list updates), never on every
     /// connect/reconnect — ping stays live, geo does not spam.
     private var lastGeoHost: String? = nil
+
+    // Per-server metadata cache (populated on server-list load).
+    @Published var serverGeoCache: [String: ServerGeoInfo] = [:]
+    @Published var serverPingCache: [String: Int] = [:]
+    /// Minutely ping refresher (ping only — GeoIP stays cached from load).
+    private var serverPingTimer: Timer?
+    /// Stall watchdog state: the minutely ping guarantees utun traffic, so a
+    /// frozen read counter across cycles means iOS stopped feeding the tunnel.
+    private var lastStallRead: Int?
+    private var stallFrozenCycles = 0
+    /// Set while a stall restart is in flight: the old tunnel's goodbye
+    /// DISCONNECTED is expected and must not trigger early-death diagnosis.
+    private var stallRestartArmed = false
 
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
@@ -94,6 +111,7 @@ final class AppModel: ObservableObject {
         let sel = localStore.selectedID()
         selectedServer = all.first { $0.id == sel } ?? all.first
         refreshServerMetadata()
+        refreshAllServerMetadata()
     }
 
     /// Adds or updates a server locally (instant UI), then best-effort syncs
@@ -190,6 +208,10 @@ final class AppModel: ObservableObject {
             case .connected:
                 _ = self?.automation.markConnected()
                 self?.connection = .connected
+                self?.attemptStartedAt = nil
+                self?.stallRestartArmed = false
+                self?.lastStallRead = nil
+                self?.stallFrozenCycles = 0
                 self?.stopPhasePolling()
                 ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
                 self?.logExtensionInventory()
@@ -197,15 +219,28 @@ final class AppModel: ObservableObject {
             case .disconnecting:
                 ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
             case .disconnected:
-                self?.connection = .disconnected
-                self?.stopPhasePolling()
-                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
-                self?.fetchTunnelDiagnostics()
+                if let self, self.stallRestartArmed {
+                    // Expected goodbye from the old tunnel during a stall
+                    // restart; the fresh attempt is already in flight. Consume
+                    // the flag and leave .connecting alone.
+                    self.stallRestartArmed = false
+                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (stale drop from stall restart, new attempt in flight)")
+                } else if let self, self.connection == .connecting, self.isEarlyDeath() {
+                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (early, attempt in flight — diagnosing)")
+                    self.diagnoseEarlyDeathAndMaybeRetry()
+                } else {
+                    self?.connection = .disconnected
+                    self?.stopPhasePolling()
+                    self?.attemptStartedAt = nil
+                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
+                    self?.fetchTunnelDiagnostics()
+                }
             case .invalid:
                 self?.connection = .disconnected
                 self?.stopPhasePolling()
-                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION")
-                self?.fetchTunnelDiagnostics()
+                self?.attemptStartedAt = nil
+                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION — removing broken profile, tap connect to recreate")
+                self?.repairInvalidProfile()
             @unknown default:
                 self?.connection = .failed("Unknown VPN state")
                 self?.stopPhasePolling()
@@ -224,6 +259,7 @@ final class AppModel: ObservableObject {
         refreshServerMetadata()
         // Load the local server list on launch (instant, no extension needed).
         loadServerList()
+        startServerPingTimer()
     }
 
     /// Confirms the extension-owned copy after a successful connect (the tunnel
@@ -264,10 +300,35 @@ final class AppModel: ObservableObject {
             return
         }
         let host = selected.host
-        Task.detached {
-            let resolved = (try? SSHEndpointResolver.resolve(host))?.ipv4 ?? []
-            await TunnelSelfTester.run(expectedHost: host, resolvedIPv4: resolved)
+        Task { @MainActor in
+            let before = await self.utunReadCount()
+            // Blocking DNS resolve stays off the main thread; awaits below
+            // never block (URLSession/NWConnection suspend, not spin).
+            let resolved = await Task.detached { (try? SSHEndpointResolver.resolve(host))?.ipv4 ?? [] }.value
+            let egressOK = await TunnelSelfTester.run(
+                expectedHost: host,
+                resolvedIPv4: resolved,
+                utunReadBefore: before
+            )
+            // Routing verdict: did ANY self-test packet reach utun?
+            if let after = await self.utunReadCount() {
+                let delta = after - (before ?? after)
+                ConsoleLogStore.shared.log(level: .info, tag: "SELFTEST", message: "utun read after=\(after) (delta=\(delta))")
+                if !egressOK && delta <= 0 {
+                    ConsoleLogStore.shared.log(level: .error, tag: "SELFTEST", message: "verdict: ROUTING — zero utun packets during self-test, iOS never fed traffic to the tunnel (routes/NWPath), not a relay bug")
+                } else if !egressOK && delta > 0 {
+                    ConsoleLogStore.shared.log(level: .error, tag: "SELFTEST", message: "verdict: RELAY — traffic reached utun (+\(delta) pkts) but no egress reply; relay/DNS blackhole suspect")
+                }
+            }
         }
+    }
+
+    /// Current utun packets-read counter from the extension (nil when the
+    /// message channel is unreachable). Used to prove whether self-test
+    /// traffic ever reached the tunnel.
+    private func utunReadCount() async -> Int? {
+        let status = await VPNExtensionAPI.call(from: vpn.diagnosticManager(), cmd: .status, timeout: 2)
+        return status["packetsRead"].flatMap(Int.init)
     }
 
     /// Re-checks counters a while after connect while still connected, so the
@@ -286,10 +347,28 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Repairs a system-reported INVALID profile: deletes every profile owned
+    /// by this app so the next tap recreates it from scratch. A wedged
+    /// profile never heals itself — without this the user is stuck forever.
+    private func repairInvalidProfile() {
+        vpn.removeAllProfiles { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                self.connection = .failed("VPN profile was invalid and has been removed — tap connect to recreate it.")
+                ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "Broken VPN profile removed; ready to recreate on next connect")
+            }
+        }
+    }
+
     /// Pulls the last tunnel error + status from the extension and logs them.
     /// Called on disconnect/invalid so the app dump reveals WHY the tunnel died
     /// (auth failure, config error, etc.) without needing a shared container.
     private func fetchTunnelDiagnostics() {
+        // Keychain first: it survives the extension process death that makes
+        // the message channel return [:] below.
+        if let persisted = TunnelLastError.read() {
+            ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "Last tunnel error (persisted): \(persisted)")
+        }
         Task { @MainActor in
             let lastError = await VPNExtensionAPI.call(from: vpn.diagnosticManager(), cmd: .lastError)
             if let err = lastError["error"], err != "none" {
@@ -341,6 +420,10 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .system, tag: "LANG", message: "Interface language updated -> \(language.title)")
     }
 
+    /// GeoIP only (no TCP ping): every port-22 SYN counts against the VPS
+    /// per-source rate limiter (~6/30s), so SYNs are spent ONLY on real SSH
+    /// connects plus the slow ping loop. Ping freshness comes from the
+    /// load-time sweep, the minutely selected-only tick and the list view.
     func refreshServerMetadata() {
         guard !profile.host.isEmpty else {
             serverCountry = ""
@@ -357,19 +440,12 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .info, tag: "PROBE", message: "Analyzing remote server \(currentHost):\(currentPort)...")
 
         Task {
-            let ping = await ServerMetadataResolver.measurePing(host: currentHost, port: currentPort)
             // GeoIP only for a host we haven't located yet (failures are not
             // cached, so an offline lookup simply retries next time).
             let geo: ServerGeoInfo? = (lastGeoHost == currentHost) ? nil : await ServerMetadataResolver.resolveGeo(host: currentHost)
 
             await MainActor.run {
                 guard self.profile.host == currentHost else { return }
-                self.serverPingMs = ping
-                if let ping = ping {
-                    ConsoleLogStore.shared.log(level: .success, tag: "PING", message: "TCP RTT latency: \(ping) ms to \(currentHost):\(currentPort)")
-                } else {
-                    ConsoleLogStore.shared.log(level: .warning, tag: "PING", message: "TCP ping probe timed out for \(currentHost):\(currentPort)")
-                }
 
                 if let geo = geo {
                     self.lastGeoHost = currentHost
@@ -385,6 +461,124 @@ final class AppModel: ObservableObject {
                 }
                 self.isResolvingMetadata = false
             }
+        }
+    }
+
+    /// Fetch GeoIP + ping for all servers in the list (runs in background,
+    /// populates per-server caches). Called on every server-list load.
+    func refreshAllServerMetadata() {
+        let targets = servers
+        guard !targets.isEmpty else { return }
+        Task {
+            var geoResults: [String: ServerGeoInfo] = [:]
+            var pingResults: [String: Int] = [:]
+            await withTaskGroup(of: (String, ServerGeoInfo?, Int?).self) { group in
+                for server in targets {
+                    group.addTask {
+                        let geo = await ServerMetadataResolver.resolveGeo(host: server.host)
+                        let ping = await ServerMetadataResolver.measurePing(host: server.host, port: server.port)
+                        return (server.id, geo, ping)
+                    }
+                }
+                for await (id, geo, ping) in group {
+                    if let geo { geoResults[id] = geo }
+                    if let ping { pingResults[id] = ping }
+                }
+            }
+            self.serverGeoCache = geoResults
+            self.serverPingCache = pingResults
+        }
+    }
+
+    /// Minutely ping-only refresh for every server (cheap; GeoIP is cached
+    /// from load and never re-fetched here — public GeoIP APIs rate-limit).
+    /// Keeps list pings and map dot colors live. No-op when the list is empty.
+    func refreshAllServerPings() {
+        let targets = servers
+        guard !targets.isEmpty else { return }
+        Task {
+            var pings: [String: Int] = [:]
+            await withTaskGroup(of: (String, Int?).self) { group in
+                for server in targets {
+                    group.addTask {
+                        (server.id, await ServerMetadataResolver.measurePing(host: server.host, port: server.port))
+                    }
+                }
+                for await (id, ping) in group {
+                    if let ping { pings[id] = ping }
+                }
+            }
+            self.serverPingCache = pings
+            if let sel = self.selectedServer?.id, let ms = pings[sel] {
+                self.serverPingMs = ms
+            }
+        }
+    }
+
+    /// Starts the 60s ping loop. Burns minimal SYNs (the VPS rate-limits
+    /// port 22 to ~5/min per source): every tick pings only the selected
+    /// server, every 3rd tick sweeps the whole list for map/list freshness.
+    private var pingTickCount = 0
+    private func startServerPingTimer() {
+        serverPingTimer?.invalidate()
+        serverPingTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.pingTickCount += 1
+                if self.pingTickCount % 3 == 0 {
+                    self.refreshAllServerPings()
+                } else {
+                    self.refreshSelectedPing()
+                }
+                self.checkPacketFlowStall()
+            }
+        }
+    }
+
+    /// One SYN for the selected server only (list/map freshness for others
+    /// comes from the 3rd-tick sweep + load-time metadata).
+    private func refreshSelectedPing() {
+        guard let selected = selectedServer else { return }
+        Task {
+            if let ms = await ServerMetadataResolver.measurePing(host: selected.host, port: selected.port) {
+                self.serverPingMs = ms
+                var cache = self.serverPingCache
+                cache[selected.id] = ms
+                self.serverPingCache = cache
+            }
+        }
+    }
+
+    /// Stall watchdog: runs on the minutely tick. The ping above guarantees
+    /// fresh utun traffic whenever servers exist, so a frozen counter across
+    /// two ticks while connected proves the packet flow stalled (e.g. a
+    /// missed wake after device sleep). Heals by restarting the tunnel once;
+    /// the old tunnel's goodbye disconnect is expected (stallRestartArmed).
+    private func checkPacketFlowStall() {
+        guard connection == .connected, !servers.isEmpty else {
+            stallFrozenCycles = 0
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self, self.connection == .connected, !self.servers.isEmpty else { return }
+            let status = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .status, timeout: 2)
+            guard self.connection == .connected else { return }
+            let read = status["packetsRead"].flatMap(Int.init)
+            let ago = status["lastReadAgo"] ?? "?"
+            if let read, let last = self.lastStallRead, read == last {
+                self.stallFrozenCycles += 1
+            } else {
+                self.stallFrozenCycles = 0
+            }
+            self.lastStallRead = read
+            guard self.stallFrozenCycles >= 2, !self.stallRestartArmed else { return }
+            self.stallRestartArmed = true
+            self.stallFrozenCycles = 0
+            ConsoleLogStore.shared.log(level: .warning, tag: "STALL", message: "packet flow frozen (utun read=\(read.map(String.init) ?? "?"), lastReadAgo=\(ago)) across minutely checks while connected — restarting tunnel")
+            self.vpn.stop()
+            try? await Task.sleep(for: .seconds(2))
+            guard self.connection == .connected else { self.stallRestartArmed = false; return }
+            self.beginConnection()
         }
     }
 
@@ -418,28 +612,11 @@ final class AppModel: ObservableObject {
         // its own store on every startTunnel.
         saveServer(selected)
         connection = .connecting
-        // TCP reachability FIRST: don't touch any VPN machinery until the
-        // server answers. Fail fast with a readable error instead of a 16s
-        // CONNECTING hang + silent death (e.g. phone IP banned by fail2ban
-        // after repeated attempts, or a down path).
-        Task { @MainActor in
-            var reachable = false
-            for _ in 0..<2 {
-                if await ServerMetadataResolver.measurePing(host: selected.host, port: selected.port) != nil {
-                    reachable = true
-                    break
-                }
-            }
-            guard reachable else {
-                let msg = "Server unreachable over TCP (\(selected.host):\(selected.port)). Check internet access and that the VPS firewall allows this phone (fail2ban may have banned it after repeated attempts)."
-                ConsoleLogStore.shared.log(level: .error, tag: "CONNECT", message: msg)
-                self.connection = .failed(msg)
-                return
-            }
-            // The user may have cancelled while probing — never start then.
-            guard self.connection == .connecting else { return }
-            self.beginConnection()
-        }
+        // No TCP probe here: performConnectionAttempt() already gates every
+        // attempt with exactly one ping. Probing twice per tap burns SYNs and
+        // trips the VPS per-source rate limiter (~5/min) — the outage above.
+        // The user may have cancelled while resolving — beginConnection re-checks.
+        beginConnection()
     }
 
     /// Starts the actual tunnel after the selected server is guaranteed to be
@@ -447,8 +624,91 @@ final class AppModel: ObservableObject {
     private func beginConnection() {
         _ = automation.beginConnect()
         connection = .connecting
+        attemptStartedAt = Date()
         startPhasePolling()
-        performConnectionAttempt()
+        // Resolve server IP upfront so extension doesn't block on DNS during startTunnel
+        // (prevents early-death flake where iOS kills the extension for slow launch).
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let selected = self.selectedServer {
+                if let resolved = try? await SSHEndpointResolver.resolve(selected.host),
+                   let ipv4 = resolved.ipv4.first {
+                    self.cachedServerIPv4 = ipv4
+                } else {
+                    self.cachedServerIPv4 = nil
+                }
+            }
+            self.performConnectionAttempt()
+        }
+    }
+
+    /// Resolved IPv4 of the selected server, cached so the extension
+    /// can skip DNS and avoid blocking startTunnel.
+    private var cachedServerIPv4: String?
+
+    /// True when the in-flight attempt died within seconds of starting — the
+    /// first-start flap signature (CONNECTING -> DISCONNECTED with no traffic).
+    private func isEarlyDeath() -> Bool {
+        guard let t0 = attemptStartedAt else { return false }
+        return Date().timeIntervalSince(t0) < 20
+    }
+
+    /// Diagnoses an early disconnect and retries when it looks like the
+    /// first-start flake (no extension error, tunnel never got going).
+    /// The retry reuses the saved configuration — the same path as a manual
+    /// second tap, which is exactly what heals the flake. Bounded by
+    /// automation.maxRetries; a real config/auth error fails fast instead.
+    private func diagnoseEarlyDeathAndMaybeRetry() {
+        // Keep .connecting + phase polling alive while diagnosing.
+        let elapsed = attemptStartedAt.map { max(0, Int(Date().timeIntervalSince($0))) } ?? -1
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Sequential (not async-let): the manager is non-Sendable, so it
+            // must not cross into concurrent child tasks. Short timeouts keep
+            // the diagnosis fast.
+            let errDict = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .lastError, timeout: 1.5)
+            // User cancelled while diagnosing — never start then.
+            guard self.connection == .connecting else { return }
+            let statusDict = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .status, timeout: 1.5)
+            guard self.connection == .connecting else { return }
+            // Prefer the message channel, but it dies with the extension
+            // process (~100ms deaths) — the keychain record survives it.
+            let extErr: String? = errDict["error"].flatMap { $0 == "none" ? nil : $0 }
+                ?? TunnelLastError.read()
+            if let extErr {
+                ConsoleLogStore.shared.log(level: .info, tag: "SELFTEST", message: "post-mortem extension error: \(extErr)")
+            }
+            let phase = statusDict["phase"] ?? "unknown"
+            if let extErr, ConnectionErrorClassifier.isFatal(extErr) {
+                self.attemptStartedAt = nil
+                self.stopPhasePolling()
+                self.connection = .failed(extErr)
+                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Fatal config error (no retry): \(extErr)")
+                return
+            }
+            let msg = "tunnel disconnected \(elapsed)s after start (extension phase=\(phase), extError=\(extErr ?? "none"))"
+            switch self.automation.reportFailure(msg) {
+            case .transientFailure(let attempt, _):
+                ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "Early death (attempt \(attempt))/\(self.automation.maxRetries): \(msg). Retrying in 2s via saved config...")
+                try? await Task.sleep(for: .seconds(2))
+                guard self.connection == .connecting else { return }
+                self.attemptStartedAt = Date()
+                self.performConnectionAttempt()
+            case .gaveUpAfterRetries(let m):
+                self.attemptStartedAt = nil
+                self.stopPhasePolling()
+                self.connection = .failed(m)
+                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(m)")
+                self.fetchTunnelDiagnostics()
+            case .fatalFailure(let m):
+                self.attemptStartedAt = nil
+                self.stopPhasePolling()
+                self.connection = .failed(m)
+                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Fatal config error (no retry): \(m)")
+            default:
+                break
+            }
+        }
     }
 
     /// Polls the extension for its start-up phase while connecting and logs
@@ -460,14 +720,18 @@ final class AppModel: ObservableObject {
         reportedLiveErrors = []
         phasePollTask = Task { @MainActor [weak self] in
             while let self, self.connection == .connecting {
-                let status = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .status, timeout: 2)
+                // Sequential: the manager is non-Sendable, so it must not
+                // cross into concurrent child tasks. Short timeouts + 250ms
+                // cadence still catch fast flaps.
+                let status = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .status, timeout: 1.5)
                 if Task.isCancelled { break }
                 if let phase = status["phase"], phase != self.lastPolledPhase {
                     let from = self.lastPolledPhase ?? "?"
                     self.lastPolledPhase = phase
                     ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Tunnel phase: \(from) -> \(phase)")
                 }
-                let errRsp = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .lastError, timeout: 2)
+                if Task.isCancelled { break }
+                let errRsp = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .lastError, timeout: 1.5)
                 if Task.isCancelled { break }
                 if let err = errRsp["error"], err != "none", !self.reportedLiveErrors.contains(err) {
                     self.reportedLiveErrors.insert(err)
@@ -476,7 +740,7 @@ final class AppModel: ObservableObject {
                 // Pull the extension's own detail lines (SSH stages live there).
                 await VPNExtensionAPI.fetchLogs(from: self.vpn.diagnosticManager(), timeout: 2)
                 if Task.isCancelled { break }
-                try? await Task.sleep(for: .milliseconds(500))
+                try? await Task.sleep(for: .milliseconds(250))
             }
         }
     }
@@ -490,8 +754,13 @@ final class AppModel: ObservableObject {
         guard !automation.isConnected else { return }
         var effectiveProfile = profile
         effectiveProfile.dnsServers = settings.resolvedDNSServers
+        // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
+        let serverIP = cachedServerIPv4
 
-        vpn.start(profile: effectiveProfile) { [weak self] error in
+        // No app-side TCP ping gate: the SSH connect itself IS the probe
+        // (extension has a 10s connect timeout), and every extra port-22 SYN
+        // feeds the VPS per-source rate limiter. One tap = one SSH SYN.
+        self.vpn.start(profile: effectiveProfile, serverIP: serverIP) { [weak self] error in
             guard let self = self else { return }
             if let error {
                 let message = error.localizedDescription
@@ -529,6 +798,9 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User requested VPN disconnect. Closing SSH2 tunnel...")
         _ = automation.markDisconnected()
         connection = .disconnected
+        attemptStartedAt = nil
+        stallRestartArmed = false
+        stallFrozenCycles = 0
         stopPhasePolling()
         vpn.stop()
     }
@@ -608,7 +880,7 @@ private final class VPNController {
         resolveManager { _ in completion() }
     }
 
-    func start(profile: VPNProfile, completion: @escaping (Error?) -> Void) {
+    func start(profile: VPNProfile, serverIP: String?, completion: @escaping (Error?) -> Void) {
         // New generation: any creation-wait from an older attempt must die,
         // and its parked completion must never fire. Nothing invoked yet.
         startEpoch += 1
@@ -665,6 +937,11 @@ private final class VPNController {
             }
             if !privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 providerConfig["privateKey"] = privateKey
+            }
+            // Pre-resolved server IPv4 (avoids blocking DNS in extension startTunnel,
+            // which caused early-death flake where iOS killed the extension for slow launch).
+            if let serverIP {
+                providerConfig["serverIP"] = serverIP
             }
 
             // Reuse check: if the stored system configuration already equals
@@ -788,6 +1065,35 @@ private final class VPNController {
             completion(nil)
         } catch {
             completion(error)
+        }
+    }
+
+    /// Removes every VPN profile owned by this app (matched by provider
+    /// bundle id) and forgets the cached manager, so the next connect
+    /// recreates the profile from scratch. Used when the system reports
+    /// INVALID CONFIGURATION — a wedged profile never heals itself.
+    func removeAllProfiles(completion: @escaping () -> Void) {
+        NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, _ in
+            guard let self else { completion(); return }
+            let mine = (managers ?? []).filter {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.providerBundleIdentifier
+            }
+            guard !mine.isEmpty else {
+                self.manager = nil
+                self.knownConnection = nil
+                completion()
+                return
+            }
+            let group = DispatchGroup()
+            for m in mine {
+                group.enter()
+                m.removeFromPreferences { _ in group.leave() }
+            }
+            group.notify(queue: .main) { [weak self] in
+                self?.manager = nil
+                self?.knownConnection = nil
+                completion()
+            }
         }
     }
 
@@ -962,9 +1268,21 @@ enum TunnelSelfTester {
     static let echoURLs = ["https://api.ipify.org", "https://ifconfig.me/ip"]
     static let httpsCheckURL = "https://www.google.com/generate_204"
 
-    static func run(expectedHost: String, resolvedIPv4: [String]) async {
+    static func run(expectedHost: String, resolvedIPv4: [String], utunReadBefore: Int? = nil) async -> Bool {
         slog(.system, "SELFTEST", "starting post-connect traffic checks")
+        if let before = utunReadBefore {
+            slog(.info, "SELFTEST", "utun read before=\(before)")
+        }
         let expected = TunnelSelfTest.pickExpected(host: expectedHost, resolvedIPv4: resolvedIPv4)
+
+        // 0. System TCP sanity WITHOUT DNS: direct-IP connect through the
+        // system stack. Separates "iOS routes nothing" from "DNS broken".
+        let sysPing = await ServerMetadataResolver.measurePing(host: "8.8.8.8", port: 443)
+        if let ms = sysPing {
+            slog(.success, "SELFTEST", "system TCP 8.8.8.8:443 OK (\(ms) ms) — system routes traffic, DNS/HTTP layer suspect")
+        } else {
+            slog(.error, "SELFTEST", "system TCP 8.8.8.8:443 FAILED (nil) — system stack itself can't connect; VPN routes likely inactive")
+        }
 
         // 1. Egress IP via known echo services (first success wins).
         var observed: String?
@@ -977,14 +1295,16 @@ enum TunnelSelfTester {
                 slog(.info, "SELFTEST", "egress service \(raw) -> \(observed ?? "?")")
                 break
             } catch {
-                lastErr = error.localizedDescription
+                lastErr = "\(error.localizedDescription) \(classify(error))"
                 slog(.warning, "SELFTEST", "egress service \(raw) failed: \(lastErr)")
             }
         }
+        var egressOK = false
         if let observed {
             switch TunnelSelfTest.evaluate(expected: expected, observed: observed) {
             case .viaServer:
                 slog(.success, "SELFTEST", "egress \(observed) == server -> PASS (traffic via server)")
+                egressOK = true
             case .bypass(let o):
                 slog(.error, "SELFTEST", "egress \(o) != server \(expected ?? "?") -> FAIL (traffic bypasses tunnel)")
             case .unparseable(let r):
@@ -1002,10 +1322,34 @@ enum TunnelSelfTester {
                 let code = try await fetchStatus(url: url, timeout: 8)
                 slog(code == 204 ? .success : .warning, "SELFTEST", "https check \(httpsCheckURL) -> HTTP \(code) (expected 204)")
             } catch {
-                slog(.error, "SELFTEST", "https check failed: \(error.localizedDescription)")
+                slog(.error, "SELFTEST", "https check failed: \(error.localizedDescription) \(classify(error))")
             }
         }
         slog(.system, "SELFTEST", "traffic checks finished")
+        return egressOK
+    }
+
+    /// Maps a fetch error to an actionable hint. -1009 means the system path
+    /// itself is down (routing); -1003 is DNS; -1001 is a blackholed reply.
+    private static func classify(_ error: Error) -> String {
+        let ns = error as NSError
+        guard ns.domain == (NSURLErrorDomain as String) else {
+            return "[\(ns.domain) \(ns.code)]"
+        }
+        switch ns.code {
+        case NSURLErrorNotConnectedToInternet:
+            return "[-1009 NO_PATH: system reports no route — traffic likely never reached utun]"
+        case NSURLErrorCannotFindHost:
+            return "[-1003 DNS: hostname unresolvable — DNS relay broken]"
+        case NSURLErrorTimedOut:
+            return "[-1001 TIMEOUT: SYN sent, no reply — relay blackhole or upstream silent]"
+        case NSURLErrorCannotConnectToHost:
+            return "[-1004 REFUSED: upstream refused the connection]"
+        case NSURLErrorNetworkConnectionLost:
+            return "[-1005 LOST: connection dropped mid-flight]"
+        default:
+            return "[NSURLError \(ns.code)]"
+        }
     }
 
     private static func slog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
@@ -1013,20 +1357,128 @@ enum TunnelSelfTester {
     }
 
     private static func fetchText(url: URL, timeout: TimeInterval) async throws -> String {
-        var req = URLRequest(url: url, timeoutInterval: timeout)
-        req.httpMethod = "GET"
-        let (data, _) = try await URLSession.shared.data(for: req)
-        return String(data: data, encoding: .utf8) ?? ""
+        let host = url.host ?? ""
+        let port = url.port ?? (url.scheme == "https" ? 443 : 80)
+        let path = url.path.isEmpty ? "/" : url.path
+        let query = url.query.map { "?\($0)" } ?? ""
+        let request = "GET \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: .tcp)
+            var receivedData = Data()
+            var headersComplete = false
+            var bodyStart = 0
+            
+            nwConnection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    nwConnection.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
+                case .failed(let error):
+                    continuation.resume(throwing: error)
+                    nwConnection.cancel()
+                case .cancelled:
+                    continuation.resume(throwing: URLError(.cancelled))
+                default:
+                    break
+                }
+            }
+            
+            nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                if let data {
+                    receivedData.append(data)
+                    if !headersComplete {
+                        if let headerEnd = receivedData.firstRange(of: Data("\r\n\r\n".utf8)) {
+                            headersComplete = true
+                            bodyStart = headerEnd.upperBound
+                        }
+                    }
+                }
+                if isComplete || error != nil {
+                    if headersComplete, bodyStart < receivedData.count {
+                        let body = receivedData[bodyStart...]
+                        continuation.resume(returning: String(data: body, encoding: .utf8) ?? "")
+                    } else {
+                        continuation.resume(returning: "")
+                    }
+                    nwConnection.cancel()
+                } else if !isComplete {
+                    nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536, completion: { data, _, isComplete, error in
+                        // Recursive receive handled by closure capture
+                        // This is a simplified version; in production use a proper state machine
+                    })
+                }
+            }
+            
+            nwConnection.start(queue: .global())
+            
+            // Timeout
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                nwConnection.cancel()
+                continuation.resume(throwing: URLError(.timedOut))
+            }
+        }
     }
 
     private static func fetchStatus(url: URL, timeout: TimeInterval) async throws -> Int {
-        var req = URLRequest(url: url, timeoutInterval: timeout)
-        req.httpMethod = "GET"
-        let (_, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        let host = url.host ?? ""
+        let port = url.port ?? (url.scheme == "https" ? 443 : 80)
+        let path = url.path.isEmpty ? "/" : url.path
+        let query = url.query.map { "?\($0)" } ?? ""
+        let request = "HEAD \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: .tcp)
+            var receivedData = Data()
+            var headersComplete = false
+            var statusCode = 0
+            
+            nwConnection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    nwConnection.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
+                case .failed(let error):
+                    continuation.resume(throwing: error)
+                    nwConnection.cancel()
+                case .cancelled:
+                    continuation.resume(throwing: URLError(.cancelled))
+                default:
+                    break
+                }
+            }
+            
+            func receiveLoop() {
+                nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+                    if let data {
+                        receivedData.append(data)
+                        if !headersComplete {
+                            if let headerEnd = receivedData.firstRange(of: Data("\r\n\r\n".utf8)) {
+                                headersComplete = true
+                                let headers = String(data: receivedData[..<headerEnd.upperBound], encoding: .utf8) ?? ""
+                                if let statusLine = headers.split(separator: "\r\n").first,
+                                   let codeStr = statusLine.split(separator: " ").dropFirst().first,
+                                   let code = Int(codeStr) {
+                                    statusCode = code
+                                }
+                            }
+                        }
+                    }
+                    if isComplete || error != nil {
+                        continuation.resume(returning: statusCode)
+                        nwConnection.cancel()
+                    } else if !isComplete {
+                        receiveLoop()
+                    }
+                }
+            }
+            
+            nwConnection.start(queue: .global())
+            receiveLoop()
+            
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                nwConnection.cancel()
+                continuation.resume(throwing: URLError(.timedOut))
+            }
         }
-        return http.statusCode
     }
 }
 

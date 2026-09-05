@@ -465,6 +465,28 @@ struct WorldMapView: View {
                     .frame(width: mapWidth, height: mapHeight)
                     .opacity(0.9)
 
+                // Static dots for inactive servers, colored by ping
+                ForEach(model.servers) { server in
+                    let isSelected = server.id == model.selectedServer?.id
+                    if !isSelected, let geo = model.serverGeoCache[server.id] {
+                        let lon = (geo.lon + 180.0) / 360.0
+                        let lat = (90.0 - geo.lat) / 180.0
+                        let x = min(max(lon * mapWidth, 12), mapWidth - 12)
+                        let y = min(max(lat * mapHeight, 12), mapHeight - 12)
+                        let ping = model.serverPingCache[server.id]
+                        let dotColor: Color = {
+                            guard let ms = ping else { return Color.octGray40 }
+                            if ms <= 80 { return Color.green }
+                            if ms <= 150 { return Color.orange }
+                            return Color.red
+                        }()
+                        Circle()
+                            .fill(dotColor)
+                            .frame(width: 6, height: 6)
+                            .position(x: x, y: y)
+                    }
+                }
+
                 if hasServer {
                     // Pulsing animated server dot
                     ZStack {
@@ -563,88 +585,29 @@ struct ServerDot: Identifiable {
 
 struct LocationsView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var editingServerID: String?
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
+    @State private var deleteTargetID: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Your Server card
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(model.copy.text(.yourServer))
-                            .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 8)
-
-                        if model.profile.host.isEmpty {
-                            HStack {
-                                Text(model.copy.text(.noServerConfigured))
-                                    .foregroundStyle(Color.octGray60)
-                                Spacer()
-                            }
-                            .padding(16)
-                        } else {
-                            HStack(spacing: 12) {
-                                Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
-                                    .font(.system(size: 26))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(model.serverCountry.isEmpty ? model.serverName : model.serverCountry)
-                                            .font(.openSans(16, weight: .semibold))
-                                            .foregroundStyle(Color.octGray100)
-                                        if let ping = model.serverPingMs {
-                                            Text("\(ping) ms")
-                                                .font(.openSans(11, weight: .semibold))
-                                                .foregroundStyle(Color.prim50)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Color.prim50.opacity(0.12), in: Capsule())
-                                        }
-                                    }
-                                    Text("\(model.profile.host):\(model.profile.port)")
-                                        .font(.openSans(12))
-                                        .foregroundStyle(Color.octGray60)
-                                }
-                                Spacer()
-                                if model.connection == .connected {
-                                    Text(model.copy.text(.active))
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(Color.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.prim50, in: Capsule())
-                                }
-                                Button {
-                                    showEdit = true
-                                } label: {
-                                    Image(systemName: "pencil")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(Color.sec50)
-                                        .frame(width: 30, height: 30)
-                                        .background(Color.sec50.opacity(0.12), in: Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(model.copy.text(.editServerTitle))
-
-                                Button {
-                                    showDeleteConfirm = true
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(Color.red)
-                                        .frame(width: 30, height: 30)
-                                        .background(Color.red.opacity(0.12), in: Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(model.copy.text(.deleteServer))
-                            }
-                            .padding(16)
-                        }
+                VStack(spacing: 12) {
+                    ForEach(model.servers) { server in
+                        serverCard(server)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    if model.servers.isEmpty {
+                        HStack {
+                            Text(model.copy.text(.noServerConfigured))
+                                .foregroundStyle(Color.octGray60)
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    }
 
                     // Add Server button
                     NavigationLink(destination: AddServerView()) {
@@ -674,19 +637,109 @@ struct LocationsView: View {
             }
             .background(Color.appBg)
             .navigationTitle(model.copy.text(.locations))
+            .task {
+                // Fresh pings when the list opens (the 60s timer only pings
+                // the selected server between 3rd-tick sweeps).
+                model.refreshAllServerPings()
+            }
             .sheet(isPresented: $showEdit) {
-                AddServerView(editing: true, editingID: model.selectedServer?.id)
+                AddServerView(editing: true, editingID: editingServerID)
                     .environmentObject(model)
             }
             .confirmationDialog(model.copy.text(.deleteServerConfirm),
                                 isPresented: $showDeleteConfirm,
                                 titleVisibility: .visible) {
                 Button(model.copy.text(.deleteServer), role: .destructive) {
-                    model.deleteProfile()
+                    if let id = deleteTargetID { model.deleteServer(id: id) }
                 }
                 Button(model.copy.text(.cancel), role: .cancel) { }
             }
         }
+    }
+
+    @ViewBuilder
+    private func serverCard(_ server: ServerProfile) -> some View {
+        let isSelected = server.id == model.selectedServer?.id
+        let isConnected = isSelected && model.connection == .connected
+        let geo = isSelected ? nil : model.serverGeoCache[server.id]
+        let ping = isSelected ? model.serverPingMs : model.serverPingCache[server.id]
+        let flag: String = {
+            if isSelected { return model.serverFlag.isEmpty ? "🌐" : model.serverFlag }
+            return geo?.flag ?? "🌐"
+        }()
+        let country: String = {
+            if isSelected && !model.serverCountry.isEmpty { return model.serverCountry }
+            if let geo { return geo.country }
+            return server.name.isEmpty ? server.host : server.name
+        }()
+
+        Button {
+            model.selectServer(id: server.id)
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                Text(flag)
+                    .font(.system(size: 26))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(country)
+                            .font(.openSans(16, weight: .semibold))
+                            .foregroundStyle(Color.octGray100)
+                        if let ping {
+                            Text("\(ping) ms")
+                                .font(.openSans(11, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.prim50.opacity(0.12), in: Capsule())
+                        }
+                        if isConnected {
+                            Circle()
+                                .fill(Color.prim50)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    Text("\(server.host):\(server.port)")
+                        .font(.openSans(12))
+                        .foregroundStyle(Color.octGray60)
+                }
+                Spacer()
+                if isSelected {
+                    Button {
+                        editingServerID = server.id
+                        showEdit = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.sec50)
+                            .frame(width: 30, height: 30)
+                            .background(Color.sec50.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.editServerTitle))
+
+                    Button {
+                        deleteTargetID = server.id
+                        showDeleteConfirm = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.red)
+                            .frame(width: 30, height: 30)
+                            .background(Color.red.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.deleteServer))
+                }
+            }
+            .padding(16)
+        }
+        .buttonStyle(.plain)
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.prim50, lineWidth: isConnected ? 1.5 : 0)
+        )
     }
 }
 

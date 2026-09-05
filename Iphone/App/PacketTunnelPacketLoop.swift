@@ -21,6 +21,11 @@ final class PacketTunnelPacketLoop: @unchecked Sendable {
     /// access is practically atomic and these are read-only diagnostics.
     private(set) var packetsRead = 0
     private(set) var packetsWritten = 0
+    /// Last time a non-empty batch arrived from utun. The stall watchdog
+    /// (app side) uses this to tell "user idle" apart from "iOS stopped
+    /// feeding the tunnel": the minutely ping guarantees traffic, so a
+    /// frozen timestamp across cycles means a dead packet flow.
+    private(set) var lastReadAt: Date?
 
     init(packetFlow: NEPacketTunnelFlow, transport: PacketTunnelTransport) {
         self.packetFlow = packetFlow
@@ -72,6 +77,7 @@ final class PacketTunnelPacketLoop: @unchecked Sendable {
         packetFlow.readPackets { [weak self] packets, _ in
             guard let self, self.isRunning, !self.isSuspended else { return }
             self.packetsRead += packets.count
+            if !packets.isEmpty { self.lastReadAt = Date() }
             for packet in packets {
                 self.transport.send(packet: packet) { _ in
                     // Transient send failures (backpressure while the gateway
