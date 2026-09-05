@@ -515,8 +515,7 @@ public struct TCPRelayStateMachine {
         return [pkt]
     }
 
-    public mutating func expireIdle() -> Int {
-        var expired = 0
+        public mutating func expireIdle() -> Int {        var expired = 0
         let now = Date()
         for (key, var st) in flows {
             if now.timeIntervalSince(st.lastActivity) > idleTimeout && st.state != .closed {
@@ -529,5 +528,16 @@ public struct TCPRelayStateMachine {
             }
         }
         return expired
+    }
+
+    /// Flows stuck in SYN-RECEIVED longer than `olderThan`: SYN-ACK was sent
+    /// but the phone never ACKed (or the channel open never confirmed).
+    /// Diagnostic only — distinguishes "SYN never answered by us" (would not
+    /// be listed) from "SYN-ACK lost / channel hung" (listed here).
+    public func stuckSynReceived(olderThan: TimeInterval) -> [RelayFlow] {
+        let now = Date()
+        return flows.compactMap { key, st in
+            (st.state == .synReceived && now.timeIntervalSince(st.lastActivity) > olderThan) ? key : nil
+        }
     }
 }

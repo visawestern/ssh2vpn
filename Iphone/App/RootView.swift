@@ -638,9 +638,9 @@ struct LocationsView: View {
             .background(Color.appBg)
             .navigationTitle(model.copy.text(.locations))
             .task {
-                // Fresh pings when the list opens (the 60s timer only pings
-                // the selected server between 3rd-tick sweeps).
-                model.refreshAllServerPings()
+                // Fresh pings when the list opens — skipped when the boot
+                // sweep is still fresh (no double SYN spend).
+                model.refreshAllServerPingsIfStale()
             }
             .sheet(isPresented: $showEdit) {
                 AddServerView(editing: true, editingID: editingServerID)

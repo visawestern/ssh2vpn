@@ -11,6 +11,7 @@ final class VPNConfigComparerTests: XCTestCase {
         bundleID: String = "com.ssh2vpn.app.packet-tunnel",
         server: String = "1.2.3.4",
         enforceRoutes: Bool = true,
+        includeAllNetworks: Bool = true,
         isEnabled: Bool = true,
         config: [String: Any]? = nil
     ) -> VPNProtocolSnapshot {
@@ -18,6 +19,7 @@ final class VPNConfigComparerTests: XCTestCase {
             providerBundleIdentifier: bundleID,
             serverAddress: server,
             enforceRoutes: enforceRoutes,
+            includeAllNetworks: includeAllNetworks,
             isEnabled: isEnabled,
             providerConfiguration: config ?? [
                 "host": "1.2.3.4",
@@ -68,6 +70,10 @@ final class VPNConfigComparerTests: XCTestCase {
         var b = snapshot()
         b.providerConfiguration["dnsServers"] = ["8.8.8.8", "1.1.1.1"]
         XCTAssertTrue(VPNConfigComparer.isSame(current: a, desired: b))
+    }
+
+    func testDifferentIncludeAllNetworksDoesNotMatch() {
+        XCTAssertFalse(VPNConfigComparer.isSame(current: snapshot(includeAllNetworks: false), desired: snapshot()))
     }
 
     func testPlistRoundTripStillMatches() {

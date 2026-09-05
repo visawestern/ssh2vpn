@@ -8,6 +8,7 @@ public struct VPNProtocolSnapshot {
     public var providerBundleIdentifier: String
     public var serverAddress: String
     public var enforceRoutes: Bool
+    public var includeAllNetworks: Bool
     public var isEnabled: Bool
     public var providerConfiguration: [String: Any]
 
@@ -15,12 +16,14 @@ public struct VPNProtocolSnapshot {
         providerBundleIdentifier: String,
         serverAddress: String,
         enforceRoutes: Bool,
+        includeAllNetworks: Bool = true,
         isEnabled: Bool,
         providerConfiguration: [String: Any]
     ) {
         self.providerBundleIdentifier = providerBundleIdentifier
         self.serverAddress = serverAddress
         self.enforceRoutes = enforceRoutes
+        self.includeAllNetworks = includeAllNetworks
         self.isEnabled = isEnabled
         self.providerConfiguration = providerConfiguration
     }
@@ -35,6 +38,7 @@ public enum VPNConfigComparer {
         current.providerBundleIdentifier == desired.providerBundleIdentifier &&
         current.serverAddress == desired.serverAddress &&
         current.enforceRoutes == desired.enforceRoutes &&
+        current.includeAllNetworks == desired.includeAllNetworks &&
         current.isEnabled == desired.isEnabled &&
         NSDictionary(dictionary: current.providerConfiguration).isEqual(to: desired.providerConfiguration)
     }

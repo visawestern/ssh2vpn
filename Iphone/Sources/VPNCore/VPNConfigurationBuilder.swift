@@ -33,9 +33,12 @@ public struct VPNProfileInput: Equatable {
 public struct VPNConfiguration: Equatable {
     public var providerBundleIdentifier: String
     public var serverAddress: String
-    /// includeAllNetworks must stay OFF: PacketTunnelProvider installs its own
-    /// default routes / exclusion rules, so capturing all networks here would
-    /// conflict and cause NEVPNErrorDomain Code=1.
+    /// includeAllNetworks must stay ON: per Apple docs, without it the system
+    /// routes only "designated system services" (DNS, some system traffic)
+    /// through the tunnel while app traffic bypasses it (our delta=0
+    /// signature: DNS arrives, app TCP never does). The old Code=1 fear
+    /// dated from before the save→reload→start fix; the flag itself is the
+    /// documented way to scope connections to a packet tunnel.
     public var includeAllNetworks: Bool
     public var enforceRoutes: Bool
     public var providerConfiguration: [String: Any]
@@ -107,7 +110,7 @@ public enum VPNConfigurationBuilder {
         return VPNConfiguration(
             providerBundleIdentifier: providerBundleIdentifier,
             serverAddress: host,
-            includeAllNetworks: false,
+            includeAllNetworks: true,
             enforceRoutes: true,
             providerConfiguration: providerConfig
         )

@@ -22,14 +22,14 @@ final class VPNConfigurationBuilderTests: XCTestCase {
         XCTAssertEqual(config.providerConfiguration["hostKey"] as? String, "AAAAB3NzaC1yc2E...")
     }
 
-    // MARK: - includeAllNetworks MUST be off (route conflict fix)
+    // MARK: - includeAllNetworks MUST be on (app traffic must enter tunnel)
 
-    func testIncludeAllNetworksIsOff() throws {
+    func testIncludeAllNetworksIsOn() throws {
         let config = try VPNConfigurationBuilder.build(
             profile: VPNProfileInput(host: "203.0.113.10", port: 22, username: "root", password: "x"),
             providerBundleIdentifier: "com.sshtunnel.app.packet-tunnel"
         )
-        XCTAssertFalse(config.includeAllNetworks, "includeAllNetworks must be OFF so PacketTunnelProvider can install its own routes")
+        XCTAssertTrue(config.includeAllNetworks, "includeAllNetworks must be ON so app traffic is scoped to the tunnel (otherwise DNS arrives but app TCP bypasses it)")
     }
 
     func testEnforceRoutesIsOn() throws {

@@ -57,6 +57,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                  "packetsWritten": "\(self?.packetLoop?.packetsWritten ?? 0)",
                  "replied": "\((self?.transport as? RelayTransport)?.repliedCount() ?? 0)",
                  "sessions": "\((self?.transport as? RelayTransport)?.flowCount() ?? 0)",
+                 "proto": self?.packetLoop?.protoSummary ?? "none",
                  "lastReadAgo": lastReadAgo]
             },
             errorProvider: { [weak self] in
@@ -202,21 +203,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Exclude the VPN server IP so the SSH transport doesn't route through itself.
             let brokerID = Self.persistentDeviceIdentity()
             let device = try TunnelDevice.derive(brokerID: brokerID)
-            elog(.info, "TUNNEL", "device derived ipv4=\(device.ipv4Address) ipv6=\(device.ipv6Address)")
+            // Subnet occupancy (silent to the user, loud in logs): if our /24
+            // sits inside a live local network, iOS drops the v4 settings
+            // without a word and all IPv4 bypasses the tunnel. Take the
+            // stable primary when free, otherwise the first free fallback.
+            let occupied = LocalInterfaceNets.listIPv4Networks()
+            let choice = TunnelSubnetPicker.pick(brokerID: brokerID, occupied: occupied)
+            let occDesc = occupied.map(\.description).joined(separator: ",")
+            elog(.info, "TUNNEL", "subnet check occupied=[\(occDesc.isEmpty ? "none" : occDesc)] -> \(choice.net) device=\(choice.deviceAddress)\(choice.collided ? " ALL-COLLIDED(using primary anyway)" : "")")
+            elog(.info, "TUNNEL", "device derived ipv4=\(choice.deviceAddress) ipv6=\(device.ipv6Address)")
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: configuration.host)
-            settings.ipv4Settings = NEIPv4Settings(addresses: [device.ipv4Address], subnetMasks: [TunnelDevice.v4SubnetMask])
+            settings.ipv4Settings = NEIPv4Settings(addresses: [choice.deviceAddress], subnetMasks: [TunnelDevice.v4SubnetMask])
             settings.ipv4Settings?.includedRoutes = [NEIPv4Route.default()]
-            // Exclude VPN server IP to avoid routing loop (SSH transport must reach server directly).
-            // Use pre-resolved IP from app (avoids blocking DNS in startTunnel which caused early-death flake).
-            if let serverIP = configuration.serverIP {
-                let excludeRoute = NEIPv4Route(destinationAddress: serverIP, subnetMask: "255.255.255.255")
-                settings.ipv4Settings?.excludedRoutes = [excludeRoute]
-                elog(.info, "TUNNEL", "excluded server IP \(serverIP) from tunnel routes")
-            } else {
-                elog(.warning, "TUNNEL", "no pre-resolved server IP for route exclusion")
-            }
-            settings.ipv6Settings = NEIPv6Settings(addresses: [device.ipv6Address], networkPrefixLengths: [NSNumber(value: TunnelDevice.v6PrefixLength)])
-            settings.ipv6Settings?.includedRoutes = [NEIPv6Route.default()]
+            // NOTE: no manual excludedRoutes for the server IP. iOS already
+            // excludes tunnelRemoteAddress from the tunnel automatically; our
+            // explicit exclusion duplicated it and (evidence across dumps:
+            // IPv6 gateway present, IPv4 gateway missing, v4 dead after T+0)
+            // appears to break the v4-gateway synthesis, silently dropping
+            // the v4 default while setTunnelNetworkSettings still returns OK.
+            // SSH stays loop-free via the automatic exclusion (as in all
+            // pre-2300 builds). serverIP stays in providerConfiguration
+            // (harmless, keeps the reuse-path snapshot stable).
+            // EXPERIMENT (v4-only): the dual-stack utun (real v4 + synthetic
+            // fd00 ULA) correlates with a missing IPv4 gateway — NWPath shows
+            // an IPv6-only gateway, v6 packets arrive, v4 TCP gets ENETDOWN
+            // from the kernel. Hypothesis: the artificial ULA poisons v4
+            // gateway synthesis. Relay is v4-only anyway, so drop v6 settings
+            // and force iOS to deal with a pure v4 tunnel. Reversible.
+            settings.ipv6Settings = nil
+            // Settings echo: proves WHAT we installed (vs what iOS honored —
+            // compare with the NWPath gateways line in the self-test).
+            elog(.info, "TUNNEL", "netsettings v4=\(choice.deviceAddress)/24 default excluded=0 v6=none(v4-only-experiment) dns=\(dnsUpstream)")
             if !configuration.dnsServers.isEmpty {
                 let dns = NEDNSSettings(servers: configuration.dnsServers)
                 dns.matchDomains = [""]
@@ -230,6 +247,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 let dns = NEDNSSettings(servers: [dnsUpstream])
                 dns.matchDomains = [""]
                 settings.dnsSettings = dns
+            }
+
+            // Route-debug: dump the ACTUAL installed objects (not our intent).
+            // If includedRoutes ever shows NONE here, the default route was
+            // never even handed to iOS.
+            if let v4 = settings.ipv4Settings {
+                let inc = (v4.includedRoutes ?? []).map { "\($0.destinationAddress)/\($0.destinationSubnetMask)" }.joined(separator: ",")
+                let exc = (v4.excludedRoutes ?? []).map { "\($0.destinationAddress)/\($0.destinationSubnetMask)" }.joined(separator: ",")
+                elog(.info, "TUNNEL", "routes v4 addr=\(v4.addresses) mask=\(v4.subnetMasks) included=[\(inc.isEmpty ? "NONE" : inc)] excluded=[\(exc.isEmpty ? "none" : exc)]")
+            } else {
+                elog(.error, "TUNNEL", "routes v4Settings is NIL!")
             }
 
             setTunnelNetworkSettings(settings) { [weak self] error in
@@ -858,6 +886,12 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// Reply packets emitted toward utun (all paths). Read off-queue like the
     /// other counters — informational only.
     func repliedCount() -> Int { repliesWritten }
+    /// Dropped-packet ledger for the 30s journal (reset each sweep): QUIC and
+    /// other non-DNS UDP would spam per-packet, so they aggregate here.
+    private var droppedUDPNonDNS = 0
+    private var droppedNonTCPUDP = 0
+    private var droppedParse = 0
+    private var lastDroppedDst = "none"
 
     func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void) {
         guard !isStarted else { return }
@@ -882,6 +916,34 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             let n = self.stateMachine.expireIdle()
             if n > 0 {
                 elog(.info, "RELAY", "sweep expired \(n) idle flow(s)")
+            }
+            // Stuck-SYN watch: SYN-ACK sent but phone never ACKed (or channel
+            // open hung). Listed flows prove the SYN arrived AND we answered —
+            // if the phone's retransmits never follow, iOS stopped feeding us.
+            let stuck = self.stateMachine.stuckSynReceived(olderThan: 10)
+            for flow in stuck {
+                let s = flow.srcAddr.map(String.init).joined(separator: ".")
+                let d = flow.dstAddr.map(String.init).joined(separator: ".")
+                elog(.warning, "RELAY", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) stuck SYN-RECEIVED >10s (answered, never ACKed)")
+            }
+            // Tunnel journal (every 30s): who talks to whom RIGHT NOW plus
+            // what was dropped. The per-packet lines above show births; this
+            // shows the living and the refused.
+            let live = self.stateMachine.flowStats().filter { $0.state != .closed }
+            if !live.isEmpty {
+                let shown = live.prefix(8).map {
+                    let s = $0.flow.srcAddr.map(String.init).joined(separator: ".")
+                    let d = $0.flow.dstAddr.map(String.init).joined(separator: ".")
+                    return "\(s):\($0.flow.srcPort)->\(d):\($0.flow.dstPort)[\($0.state)] up=\($0.upBytes) down=\($0.downBytes)"
+                }.joined(separator: " | ")
+                let more = live.count > 8 ? " (+\(live.count - 8) more)" : ""
+                elog(.info, "RELAY", "live \(live.count) flow(s): \(shown)\(more)")
+            }
+            if self.droppedUDPNonDNS > 0 || self.droppedNonTCPUDP > 0 || self.droppedParse > 0 {
+                elog(.info, "RELAY", "dropped/30s udp-nonDNS=\(self.droppedUDPNonDNS) nonTCPUDP=\(self.droppedNonTCPUDP) parse=\(self.droppedParse) lastDst=\(self.lastDroppedDst)")
+                self.droppedUDPNonDNS = 0
+                self.droppedNonTCPUDP = 0
+                self.droppedParse = 0
             }
         }
         timer.resume()
@@ -919,16 +981,42 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
 
     // MARK: - private
 
+    /// "a.b.c.d:port -> e.f.g.h:port" for a fresh inbound TCP SYN (SYN set,
+    /// ACK clear), nil otherwise. Pure bounds-checked byte peek, no parsing.
+    private func inboundSYNSummary(_ packet: Data) -> String? {
+        guard packet.count >= 40 else { return nil }
+        let ihl = Int(packet[0] & 0x0F) * 4
+        guard ihl >= 20, packet.count >= ihl + 14 else { return nil }
+        let flags = packet[ihl + 13]
+        guard flags & 0x02 != 0, flags & 0x10 == 0 else { return nil }
+        let s = "\(packet[12]).\(packet[13]).\(packet[14]).\(packet[15]):\(UInt16(packet[ihl]) << 8 | UInt16(packet[ihl + 1]))"
+        let d = "\(packet[16]).\(packet[17]).\(packet[18]).\(packet[19]):\(UInt16(packet[ihl + 2]) << 8 | UInt16(packet[ihl + 3]))"
+        return "\(s) -> \(d)"
+    }
+
     private func handlePacket(_ packet: Data, receive: @escaping (Data) -> Void) {
         // Runs on relayQueue only (see send/start). IPv4 TCP goes through the
         // flow state machine; IPv4 UDP port 53 goes through the DNS relay;
         // everything else is dropped (the phone retransmits / falls back).
+        // v6+loop counters already classify non-v4; drops below aggregate
+        // into the 30s journal (per-packet QUIC spam would drown the log).
         guard packet.count >= 20, packet[0] >> 4 == 4 else { return }
         if packet[9] == 17 {
             handleDNSPacket(packet)
             return
         }
-        guard packet[9] == 6 else { return }
+        guard packet[9] == 6 else {
+            droppedNonTCPUDP += 1
+            lastDroppedDst = "\(packet[12]).\(packet[13]).\(packet[14]).\(packet[15]):* -> \(packet[16]).\(packet[17]).\(packet[18]).\(packet[19]):* proto=\(packet[9])"
+            return
+        }
+        // Full-trace: every fresh inbound SYN with headers. This is THE
+        // smoking-gun line: if app SYNs never appear here while the app
+        // claims timeouts, iOS is not feeding utun (not a relay bug).
+        // Bounds-checked, never throws, ~1 line per connection.
+        if let syn = inboundSYNSummary(packet) {
+            elog(.info, "RELAY", "utun SYN \(syn)")
+        }
         do {
             let replies = try stateMachine.handle(packet: IPv4Packet(Array(packet)))
             if !replies.isEmpty {
@@ -951,6 +1039,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             }
         } catch {
             // Parse/relay errors are per-flow; don't tear down the tunnel.
+            droppedParse += 1
             elog(.warning, "RELAY", "drop packet: \(error.localizedDescription)")
         }
     }
@@ -966,12 +1055,17 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// is dropped (TCP fallback covers real traffic). Runs on relayQueue only.
     private func handleDNSPacket(_ packet: Data) {
         guard let parsed = try? IPv4Parser.parse(packet),
-              parsed.flow.transport == .udp,
-              parsed.flow.destinationPort == 53 else { return }
+              parsed.flow.transport == .udp else { return } // unreachable: caller checked
+        guard parsed.flow.destinationPort == 53 else {
+            let d = parsed.flow.destinationAddressBytes.map(String.init).joined(separator: ".")
+            droppedUDPNonDNS += 1
+            lastDroppedDst = "\(d):\(parsed.flow.destinationPort)/udp"
+            return
+        }
         let total = Int(UInt16(packet[2]) << 8 | UInt16(packet[3]))
-        guard total >= 28, packet.count >= total else { return }
+        guard total >= 28, packet.count >= total else { droppedParse += 1; return }
         guard let udp = try? UDPParser.parse(Data(packet[20..<total])),
-              !udp.payload.isEmpty else { return }
+              !udp.payload.isEmpty else { droppedParse += 1; return }
         let flow = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
@@ -979,7 +1073,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         guard let toSend = demux.query(udp.payload, from: flow) else { return }
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
-        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) -> \(dnsUpstream):53")
+        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(dnsUpstream):53")
         let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: sshEventLoop)
         guard let origin = try? SocketAddress(ipAddress: "127.0.0.1", port: 0) else { return }
         var channelRef: RelayChannel?

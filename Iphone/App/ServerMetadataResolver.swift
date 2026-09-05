@@ -135,7 +135,7 @@ public enum ServerMetadataResolver {
         return nil
     }
 
-    public static func measurePing(host: String, port: Int) async -> Int? {
+    public static func measurePing(host: String, port: Int, onState: ((String) -> Void)? = nil) async -> Int? {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, port > 0 && port <= 65535 else { return nil }
 
@@ -151,7 +151,26 @@ public enum ServerMetadataResolver {
             let conn = NWConnection(host: endpointHost, port: endpointPort, using: .tcp)
             context.setConnection(conn)
 
+            // Boxed so the @Sendable state handler can call it.
+            final class StateSink: @unchecked Sendable {
+                let fn: ((String) -> Void)?
+                init(_ fn: ((String) -> Void)?) { self.fn = fn }
+            }
+            let sink = StateSink(onState)
             conn.stateUpdateHandler = { state in
+                // Full state trace (only when a logger is attached — the
+                // self-test passes one; minutely pings stay silent).
+                if let fn = sink.fn {
+                    switch state {
+                    case .setup: fn("setup")
+                    case .waiting(let e): fn("waiting(\(e))")
+                    case .preparing: fn("preparing")
+                    case .ready: fn("ready")
+                    case .failed(let e): fn("failed(\(e))")
+                    case .cancelled: fn("cancelled")
+                    @unknown default: fn("unknown")
+                    }
+                }
                 switch state {
                 case .ready:
                     let end = DispatchTime.now()

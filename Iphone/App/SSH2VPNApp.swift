@@ -1,4 +1,5 @@
 import SwiftUI
+import Network
 import NetworkExtension
 import VPNCore
 import os
@@ -76,6 +77,10 @@ final class AppModel: ObservableObject {
     @Published var serverPingCache: [String: Int] = [:]
     /// Minutely ping refresher (ping only — GeoIP stays cached from load).
     private var serverPingTimer: Timer?
+    /// Decorative-ping budget: max 4 port-22 SYNs per 30s (server allows ~6;
+    /// the rest is headroom for real SSH connects). Stops the UI from
+    /// tripping the VPS rate limiter during burst testing.
+    private let pingBudget = PingBudget()
     /// Stall watchdog state: the minutely ping guarantees utun traffic, so a
     /// frozen read counter across cycles means iOS stopped feeding the tunnel.
     private var lastStallRead: Int?
@@ -287,7 +292,8 @@ final class AppModel: ObservableObject {
             let replied = status["replied"] ?? "?"
             let s = status["sessions"] ?? "?"
             let phase = status["phase"] ?? "?"
-            ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Tunnel counters [\(tag)]: utun read=\(r) written=\(w) replied=\(replied) sessions=\(s) phase=\(phase)")
+            let proto = status["proto"] ?? "?"
+            ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Tunnel counters [\(tag)]: utun read=\(r) written=\(w) replied=\(replied) sessions=\(s) phase=\(phase) proto[\(proto)]")
         }
     }
 
@@ -475,8 +481,10 @@ final class AppModel: ObservableObject {
             await withTaskGroup(of: (String, ServerGeoInfo?, Int?).self) { group in
                 for server in targets {
                     group.addTask {
-                        let geo = await ServerMetadataResolver.resolveGeo(host: server.host)
+                        // Ping FIRST (user-visible badge); GeoIP lags behind.
+                        // Previously geo (up to 6s) blocked the ping.
                         let ping = await ServerMetadataResolver.measurePing(host: server.host, port: server.port)
+                        let geo = await ServerMetadataResolver.resolveGeo(host: server.host)
                         return (server.id, geo, ping)
                     }
                 }
@@ -487,6 +495,7 @@ final class AppModel: ObservableObject {
             }
             self.serverGeoCache = geoResults
             self.serverPingCache = pingResults
+            self.lastSweepAt = Date()
         }
     }
 
@@ -496,16 +505,29 @@ final class AppModel: ObservableObject {
     func refreshAllServerPings() {
         let targets = servers
         guard !targets.isEmpty else { return }
+        lastSweepAt = Date()
+        let names = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, "\($0.host):\($0.port)") })
         Task {
             var pings: [String: Int] = [:]
             await withTaskGroup(of: (String, Int?).self) { group in
                 for server in targets {
-                    group.addTask {
-                        (server.id, await ServerMetadataResolver.measurePing(host: server.host, port: server.port))
+                    group.addTask { [pingBudget] in
+                        // Budgeted: skip (keep last cached value) instead of
+                        // feeding the VPS rate limiter.
+                        guard pingBudget.allow() else {
+                            ConsoleLogStore.shared.log(level: .info, tag: "PING", message: "skipped for \(server.host):\(server.port) (budget) — keeping last known")
+                            return (server.id, nil as Int?)
+                        }
+                        return (server.id, await ServerMetadataResolver.measurePing(host: server.host, port: server.port))
                     }
                 }
                 for await (id, ping) in group {
-                    if let ping { pings[id] = ping }
+                    if let ping {
+                        pings[id] = ping
+                        ConsoleLogStore.shared.log(level: .success, tag: "PING", message: "TCP RTT latency: \(ping) ms to \(names[id] ?? id)")
+                    } else {
+                        ConsoleLogStore.shared.log(level: .warning, tag: "PING", message: "TCP ping probe timed out for \(names[id] ?? id)")
+                    }
                 }
             }
             self.serverPingCache = pings
@@ -513,6 +535,18 @@ final class AppModel: ObservableObject {
                 self.serverPingMs = ms
             }
         }
+    }
+
+    /// When the last full-list sweep ran. The list view skips its appear
+    /// sweep when the boot sweep is still fresh — otherwise two sweeps race
+    /// at launch and burn the SYN budget twice for the same badges.
+    private var lastSweepAt: Date?
+
+    /// Full-list sweep, but only when the previous one is older than `ttl`
+    /// (prevents boot-sweep + appear-sweep double spend).
+    func refreshAllServerPingsIfStale(ttl: TimeInterval = 60) {
+        if let last = lastSweepAt, Date().timeIntervalSince(last) < ttl { return }
+        refreshAllServerPings()
     }
 
     /// Starts the 60s ping loop. Burns minimal SYNs (the VPS rate-limits
@@ -539,6 +573,7 @@ final class AppModel: ObservableObject {
     /// comes from the 3rd-tick sweep + load-time metadata).
     private func refreshSelectedPing() {
         guard let selected = selectedServer else { return }
+        guard pingBudget.allow() else { return }
         Task {
             if let ms = await ServerMetadataResolver.measurePing(host: selected.host, port: selected.port) {
                 self.serverPingMs = ms
@@ -565,8 +600,17 @@ final class AppModel: ObservableObject {
             guard self.connection == .connected else { return }
             let read = status["packetsRead"].flatMap(Int.init)
             let ago = status["lastReadAgo"] ?? "?"
-            if let read, let last = self.lastStallRead, read == last {
-                self.stallFrozenCycles += 1
+            let proto = status["proto"] ?? "?"
+            if let read, let last = self.lastStallRead {
+                let delta = read - last
+                // Minutely heartbeat: continuous liveness trace of the packet
+                // flow (the +12s counters only cover post-connect).
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "utun heartbeat read=\(read) (+\(delta)/60s) lastReadAgo=\(ago) proto[\(proto)]")
+                if read == last {
+                    self.stallFrozenCycles += 1
+                } else {
+                    self.stallFrozenCycles = 0
+                }
             } else {
                 self.stallFrozenCycles = 0
             }
@@ -597,6 +641,8 @@ final class AppModel: ObservableObject {
             return
         }
         ConsoleLogStore.shared.log(level: .system, tag: "CONNECT", message: "Starting VPN connection to \(selected.host):\(selected.port) user=\(selected.username)...")
+        let mgr = vpn.diagnosticSnapshot()
+        ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "manager hasManager=\(mgr.hasManager) onDemandEnabled=\(mgr.onDemandEnabled) onDemandRules=\(mgr.onDemandRuleCount)")
         if selected.hasPrivateKey {
             ConsoleLogStore.shared.log(level: .ssh, tag: "AUTH", message: "Using Ed25519 private key authentication")
         } else if selected.hasPassword {
@@ -872,6 +918,14 @@ private final class VPNController {
     /// fresh tap and orphan its whole attempt).
     nonisolated(unsafe) var didInvokeStart = false
 
+    /// Read-only snapshot for diagnostics: stale on-demand rules from older
+    /// builds persist on the manager across reconfigures (we never clear
+    /// them) and can silently split-tunnel traffic around our default route.
+    func diagnosticSnapshot() -> (onDemandEnabled: Bool, onDemandRuleCount: Int, hasManager: Bool) {
+        guard let manager else { return (false, 0, false) }
+        return (manager.isOnDemandEnabled, manager.onDemandRules?.count ?? 0, true)
+    }
+
     /// Loads (or creates) the single app manager WITHOUT starting the tunnel.
     /// Lets the app talk to the extension over the message channel before a
     /// connection exists.
@@ -923,9 +977,12 @@ private final class VPNController {
             configurationProtocol.providerBundleIdentifier = self.providerBundleIdentifier
             configurationProtocol.serverAddress = configuration.serverAddress
             configurationProtocol.enforceRoutes = configuration.enforceRoutes
-            // includeAllNetworks is intentionally NOT set: the PacketTunnelProvider
-            // installs its own default routes / exclusion rules. Capturing all
-            // networks here would conflict and cause NEVPNErrorDomain Code=1.
+            // includeAllNetworks ON: per Apple docs, without it the system
+            // routes only "designated system services" (DNS, some system
+            // traffic) through the tunnel while app TCP bypasses it — our
+            // delta=0 signature. The old Code=1 fear predates the
+            // save→reload→start fix; a Code=1 now surfaces via automation.
+            configurationProtocol.includeAllNetworks = configuration.includeAllNetworks
 
             // Embed credentials directly in the tunnel provider configuration
             // (plain local storage, matching how the profile is persisted) so
@@ -952,6 +1009,7 @@ private final class VPNController {
                 providerBundleIdentifier: self.providerBundleIdentifier,
                 serverAddress: configuration.serverAddress,
                 enforceRoutes: configuration.enforceRoutes,
+                includeAllNetworks: configuration.includeAllNetworks,
                 isEnabled: true,
                 providerConfiguration: providerConfig
             )
@@ -960,6 +1018,7 @@ private final class VPNController {
                     providerBundleIdentifier: live.providerBundleIdentifier ?? "",
                     serverAddress: live.serverAddress ?? "",
                     enforceRoutes: live.enforceRoutes,
+                    includeAllNetworks: live.includeAllNetworks,
                     isEnabled: manager.isEnabled,
                     providerConfiguration: live.providerConfiguration ?? [:]
                 )
@@ -1270,6 +1329,10 @@ enum TunnelSelfTester {
 
     static func run(expectedHost: String, resolvedIPv4: [String], utunReadBefore: Int? = nil) async -> Bool {
         slog(.system, "SELFTEST", "starting post-connect traffic checks")
+        logSystemPath()
+        // Interface table AS THE APP SEES IT: if utun is missing here while
+        // the extension sees it, the app's sockets can never use the tunnel.
+        slog(.info, "SELFTEST", "app-ifaces [\(LocalInterfaceNets.describeInterfaces().joined(separator: ","))]")
         if let before = utunReadBefore {
             slog(.info, "SELFTEST", "utun read before=\(before)")
         }
@@ -1277,7 +1340,11 @@ enum TunnelSelfTester {
 
         // 0. System TCP sanity WITHOUT DNS: direct-IP connect through the
         // system stack. Separates "iOS routes nothing" from "DNS broken".
-        let sysPing = await ServerMetadataResolver.measurePing(host: "8.8.8.8", port: 443)
+        // State machine fully traced: hangs in setup/waiting (no route) look
+        // different from instant failed(RST) and from ready-then-stall.
+        let sysPing = await ServerMetadataResolver.measurePing(host: "8.8.8.8", port: 443) { st in
+            slog(.info, "SELFTEST", "probe 8.8.8.8:443 state=\(st)")
+        }
         if let ms = sysPing {
             slog(.success, "SELFTEST", "system TCP 8.8.8.8:443 OK (\(ms) ms) — system routes traffic, DNS/HTTP layer suspect")
         } else {
@@ -1329,27 +1396,40 @@ enum TunnelSelfTester {
         return egressOK
     }
 
-    /// Maps a fetch error to an actionable hint. -1009 means the system path
-    /// itself is down (routing); -1003 is DNS; -1001 is a blackholed reply.
+    /// Maps a fetch error to an actionable hint. Fetches run on raw
+    /// NWConnection (no URLSession), so errors are URLError(.timedOut /
+    /// .cancelled) or NWError — not the old -1009 family.
     private static func classify(_ error: Error) -> String {
+        if let urlErr = error as? URLError {
+            switch urlErr.code {
+            case .timedOut:
+                return "[TIMEOUT: no reply within window — SYN never answered (routing stall) or upstream silent]"
+            case .cancelled:
+                return "[CANCELLED]"
+            case .notConnectedToInternet:
+                return "[-1009 NO_PATH: system reports no route]"
+            case .cannotFindHost:
+                return "[-1003 DNS: hostname unresolvable]"
+            default:
+                return "[URLError \(urlErr.code.rawValue)]"
+            }
+        }
         let ns = error as NSError
-        guard ns.domain == (NSURLErrorDomain as String) else {
-            return "[\(ns.domain) \(ns.code)]"
+        return "[\(ns.domain) \(ns.code): \(error.localizedDescription)]"
+    }
+
+    /// One-shot snapshot of what the SYSTEM thinks about networking: does it
+    /// see our utun at all? Decisive for the delta=0 mystery (app traffic
+    /// never reaching the tunnel while the extension sits alive).
+    private static func logSystemPath() {
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { path in
+            let ifs = path.availableInterfaces.map { "\($0.name):\($0.type)" }.joined(separator: ",")
+            let gws = path.gateways.map { "\($0)" }.joined(separator: ",")
+            slog(.info, "SELFTEST", "NWPath status=\(path.status) ifs=[\(ifs)] expensive=\(path.isExpensive) v4=\(path.supportsIPv4) v6=\(path.supportsIPv6) gateways=[\(gws)]")
+            monitor.cancel()
         }
-        switch ns.code {
-        case NSURLErrorNotConnectedToInternet:
-            return "[-1009 NO_PATH: system reports no route — traffic likely never reached utun]"
-        case NSURLErrorCannotFindHost:
-            return "[-1003 DNS: hostname unresolvable — DNS relay broken]"
-        case NSURLErrorTimedOut:
-            return "[-1001 TIMEOUT: SYN sent, no reply — relay blackhole or upstream silent]"
-        case NSURLErrorCannotConnectToHost:
-            return "[-1004 REFUSED: upstream refused the connection]"
-        case NSURLErrorNetworkConnectionLost:
-            return "[-1005 LOST: connection dropped mid-flight]"
-        default:
-            return "[NSURLError \(ns.code)]"
-        }
+        monitor.start(queue: DispatchQueue.global())
     }
 
     private static func slog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
@@ -1357,127 +1437,116 @@ enum TunnelSelfTester {
     }
 
     private static func fetchText(url: URL, timeout: TimeInterval) async throws -> String {
-        let host = url.host ?? ""
-        let port = url.port ?? (url.scheme == "https" ? 443 : 80)
-        let path = url.path.isEmpty ? "/" : url.path
-        let query = url.query.map { "?\($0)" } ?? ""
-        let request = "GET \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: .tcp)
-            var receivedData = Data()
-            var headersComplete = false
-            var bodyStart = 0
-            
-            nwConnection.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    nwConnection.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
-                case .failed(let error):
-                    continuation.resume(throwing: error)
-                    nwConnection.cancel()
-                case .cancelled:
-                    continuation.resume(throwing: URLError(.cancelled))
-                default:
-                    break
-                }
-            }
-            
-            nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                if let data {
-                    receivedData.append(data)
-                    if !headersComplete {
-                        if let headerEnd = receivedData.firstRange(of: Data("\r\n\r\n".utf8)) {
-                            headersComplete = true
-                            bodyStart = headerEnd.upperBound
-                        }
-                    }
-                }
-                if isComplete || error != nil {
-                    if headersComplete, bodyStart < receivedData.count {
-                        let body = receivedData[bodyStart...]
-                        continuation.resume(returning: String(data: body, encoding: .utf8) ?? "")
-                    } else {
-                        continuation.resume(returning: "")
-                    }
-                    nwConnection.cancel()
-                } else if !isComplete {
-                    nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536, completion: { data, _, isComplete, error in
-                        // Recursive receive handled by closure capture
-                        // This is a simplified version; in production use a proper state machine
-                    })
-                }
-            }
-            
-            nwConnection.start(queue: .global())
-            
-            // Timeout
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                nwConnection.cancel()
-                continuation.resume(throwing: URLError(.timedOut))
+        let (_, body) = try await fetchTLS(url: url, method: "GET", timeout: timeout)
+        return String(data: body, encoding: .utf8) ?? ""
+    }
+
+    private static func fetchStatus(url: URL, timeout: TimeInterval) async throws -> Int {
+        let (code, _) = try await fetchTLS(url: url, method: "HEAD", timeout: timeout)
+        guard code != 0 else { throw URLError(.badServerResponse) }
+        return code
+    }
+
+    /// One-shot guard: NWConnection state/receive/timeout callbacks can all
+    /// fire for one fetch — resuming a continuation twice CRASHES the app
+    /// (this killed us mid-self-test). Same pattern as PingContext.
+    private final class TLSFetchOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        private let continuation: CheckedContinuation<(Int, Data), Error>
+        var connection: NWConnection?
+        init(_ c: CheckedContinuation<(Int, Data), Error>) { continuation = c }
+        func finish(_ result: Result<(Int, Data), Error>) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !done else { return }
+            done = true
+            connection?.cancel()
+            switch result {
+            case .success(let v): continuation.resume(returning: v)
+            case .failure(let e): continuation.resume(throwing: e)
             }
         }
     }
 
-    private static func fetchStatus(url: URL, timeout: TimeInterval) async throws -> Int {
+    /// Mutable fetch state boxed so @Sendable NWConnection closures can
+    /// share it without capturing a local var (Swift 6 concurrency).
+    private final class TLSFetchState: @unchecked Sendable {
+        var received = Data()
+    }
+
+    /// Raw HTTPS fetch over an explicit TLS connection. Bypasses URLSession's
+    /// NWPath reachability gate (reports "offline" for the virtual utun
+    /// interface) and speaks real TLS — plaintext HTTP to :443 never worked.
+    private static func fetchTLS(url: URL, method: String, timeout: TimeInterval) async throws -> (Int, Data) {
         let host = url.host ?? ""
         let port = url.port ?? (url.scheme == "https" ? 443 : 80)
         let path = url.path.isEmpty ? "/" : url.path
         let query = url.query.map { "?\($0)" } ?? ""
-        let request = "HEAD \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
-        
         return try await withCheckedThrowingContinuation { continuation in
-            let nwConnection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: .tcp)
-            var receivedData = Data()
-            var headersComplete = false
-            var statusCode = 0
-            
-            nwConnection.stateUpdateHandler = { state in
+            let once = TLSFetchOnce(continuation)
+            let box = TLSFetchState()
+            let params: NWParameters
+            if url.scheme == "https" {
+                let tls = NWProtocolTLS.Options()
+                host.withCString { sec_protocol_options_set_tls_server_name(tls.securityProtocolOptions, $0) }
+                params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+            } else {
+                params = .tcp
+            }
+            let conn = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: params)
+            once.connection = conn
+            let request = "\(method) \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
+            conn.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    nwConnection.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
+                    conn.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
                 case .failed(let error):
-                    continuation.resume(throwing: error)
-                    nwConnection.cancel()
+                    if box.received.isEmpty { once.finish(.failure(error)) } else { Self.tlsParseAndFinish(box: box, once: once) }
                 case .cancelled:
-                    continuation.resume(throwing: URLError(.cancelled))
+                    once.finish(.failure(URLError(.cancelled)))
                 default:
                     break
                 }
             }
-            
-            func receiveLoop() {
-                nwConnection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-                    if let data {
-                        receivedData.append(data)
-                        if !headersComplete {
-                            if let headerEnd = receivedData.firstRange(of: Data("\r\n\r\n".utf8)) {
-                                headersComplete = true
-                                let headers = String(data: receivedData[..<headerEnd.upperBound], encoding: .utf8) ?? ""
-                                if let statusLine = headers.split(separator: "\r\n").first,
-                                   let codeStr = statusLine.split(separator: " ").dropFirst().first,
-                                   let code = Int(codeStr) {
-                                    statusCode = code
-                                }
-                            }
-                        }
-                    }
-                    if isComplete || error != nil {
-                        continuation.resume(returning: statusCode)
-                        nwConnection.cancel()
-                    } else if !isComplete {
-                        receiveLoop()
-                    }
-                }
-            }
-            
-            nwConnection.start(queue: .global())
-            receiveLoop()
-            
+            conn.start(queue: .global())
+            Self.tlsPump(conn: conn, box: box, once: once)
+            // Timeout can only win the race once (see TLSFetchOnce).
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                nwConnection.cancel()
-                continuation.resume(throwing: URLError(.timedOut))
+                once.finish(.failure(URLError(.timedOut)))
             }
+        }
+    }
+
+    /// TLS response parser (type-level: must not capture caller state — it
+    /// runs inside @Sendable NWConnection callbacks).
+    private static func tlsParseAndFinish(box: TLSFetchState, once: TLSFetchOnce) {
+        let received = box.received
+        guard let headerEnd = received.firstRange(of: Data("\r\n\r\n".utf8)) else {
+            once.finish(.failure(URLError(.badServerResponse)))
+            return
+        }
+        let head = String(data: received[..<headerEnd.lowerBound], encoding: .utf8) ?? ""
+        let code = head.split(separator: "\r\n").first
+            .flatMap { $0.split(separator: " ").dropFirst().first }
+            .flatMap { Int($0) } ?? 0
+        once.finish(.success((code, Data(received[headerEnd.upperBound...]))))
+    }
+
+    /// Receive-until-close pump (type-level for the same Sendable reason).
+    private static func tlsPump(conn: NWConnection, box: TLSFetchState, once: TLSFetchOnce) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
+            if let data { box.received.append(data) }
+            if isComplete || error != nil {
+                // Server closed (or failed) — parse whatever arrived.
+                if box.received.isEmpty, let error {
+                    once.finish(.failure(error))
+                } else {
+                    tlsParseAndFinish(box: box, once: once)
+                }
+                return
+            }
+            tlsPump(conn: conn, box: box, once: once)
         }
     }
 }
