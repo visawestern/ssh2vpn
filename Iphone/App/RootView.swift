@@ -295,9 +295,13 @@ struct ConnectView: View {
                 }
             }
             .buttonStyle(PowerButtonStyle())
-            // Double-tap protection: disabled mid-connect plus a fixed 2s
-            // cooldown after every press (model guards cover runloop races).
-            .disabled(model.connection == .connecting || powerCooldown)
+            // Double-tap protection: a fixed 2s cooldown after every press.
+            // Mid-connect the button STAYS tappable (after the cooldown):
+            // a press cancels the in-flight connection cleanly (the model
+            // stops the manager; the extension unwinds its start at the next
+            // checkpoint instead of wedging).
+            .disabled(powerCooldown)
+            .opacity(powerCooldown ? 0.75 : 1.0)
         }
     }
 
@@ -377,7 +381,9 @@ struct ConnectView: View {
         if model.connection == .connected {
             model.disconnect()
         } else if model.connection == .connecting {
-            return
+            // Cancel mid-connect: clean stop, no wedge — the extension
+            // unwinds its in-flight start at the next checkpoint.
+            model.disconnect()
         } else {
             if model.profile.host.isEmpty {
                 showAddServer = true
@@ -673,7 +679,11 @@ struct LocationsView: View {
             return server.name.isEmpty ? server.host : server.name
         }()
 
-        Button {
+        // Server switching is only possible while fully disconnected: tapping
+        // a card mid-connect would split the session (UI points at the new
+        // server, the live tunnel still runs the old one).
+        let switchLocked = model.connection == .connected || model.connection == .connecting
+        return Button {
             model.selectServer(id: server.id)
             dismiss()
         } label: {
@@ -735,6 +745,8 @@ struct LocationsView: View {
             .padding(16)
         }
         .buttonStyle(.plain)
+        .disabled(switchLocked)
+        .opacity(switchLocked && !isSelected ? 0.55 : 1.0)
         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)

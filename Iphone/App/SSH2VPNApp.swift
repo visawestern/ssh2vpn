@@ -154,7 +154,14 @@ final class AppModel: ObservableObject {
     }
 
     /// Selects the active server (the one used for the next connection).
+    /// Locked while a connection exists or is being established: switching
+    /// servers mid-flight would silently split the session (old tunnel keeps
+    /// the old server, UI shows the new one). Disconnect first.
     func selectServer(id: String) {
+        guard connection != .connected, connection != .connecting else {
+            ConsoleLogStore.shared.log(level: .warning, tag: "SERVER", message: "Server switch BLOCKED: a connection is active or starting — disconnect first")
+            return
+        }
         localStore.select(id: id)
         selectedServer = servers.first { $0.id == id }
         refreshServerMetadata()
@@ -815,7 +822,13 @@ final class AppModel: ObservableObject {
                     ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "Transient failure (attempt \(attempt))/\(self.automation.maxRetries): \(message). Retrying in 2s...")
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(2))
-                        self.connection = .connecting
+                        // A user cancel (or anything else that left .connecting)
+                        // during the backoff kills the retry chain here — a stale
+                        // retry must never resurrect the tunnel on its own.
+                        guard self.connection == .connecting else {
+                            ConsoleLogStore.shared.log(level: .info, tag: "RETRY", message: "retry dropped — connection no longer in progress (cancelled?)")
+                            return
+                        }
                         self.performConnectionAttempt()
                     }
                 case .gaveUpAfterRetries(let msg):
@@ -836,12 +849,16 @@ final class AppModel: ObservableObject {
     func disconnect() {
         // Idempotent: double-taps collapse into a single stop.
         switch connection {
-        case .connected, .connecting:
-            break
+        case .connected:
+            ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User requested VPN disconnect. Closing SSH2 tunnel...")
+        case .connecting:
+            // Cancel BEFORE the tunnel came up: same teardown, different log
+            // line (the extension unwinds its in-flight start instead of
+            // finishing a tunnel the user no longer wants).
+            ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User cancelled mid-connect. Aborting tunnel start and closing SSH2...")
         default:
             return
         }
-        ConsoleLogStore.shared.log(level: .system, tag: "DISCONN", message: "User requested VPN disconnect. Closing SSH2 tunnel...")
         _ = automation.markDisconnected()
         connection = .disconnected
         attemptStartedAt = nil

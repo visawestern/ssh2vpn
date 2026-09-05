@@ -28,6 +28,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     // flight means something is restacking attempts (retry loop / double tap).
     private var startInFlight = false
     private var loopStartCompleted = false
+    /// Cancel handshake between stopTunnel and the async start sequence:
+    /// stopTunnel during an in-flight start sets the flag and parks its
+    /// completion; the start unwinds at the next cancel checkpoint and only
+    /// THEN fires the parked stop completion. Serializes the trio.
+    private let stopLock = NSLock()
+    private var startCancelled = false
+    private var pendingStopCompletion: (() -> Void)?
 
     private let serverStore = TunnelServerStore()
 
@@ -70,11 +77,27 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         elog(.info, "TUNNEL", "startTunnel BEGIN (relay mode — no root/TUN needed on server)")
+        stopLock.lock()
         if startInFlight {
+            stopLock.unlock()
             elog(.warning, "TUNNEL", "startTunnel RE-ENTERED while a start is already in flight")
             lastRuntimeError = "startTunnel re-entered while previous start in flight"
         }
         startInFlight = true
+        startCancelled = false
+        stopLock.unlock()
+        // CRITICAL: never block THIS thread. It used to run the SSH connect
+        // and the forwarding probe inline (connect().wait() + a semaphore),
+        // so a stopTunnel delivered mid-start had to queue behind up to ~15s
+        // of blocking work — the "VPN hangs when cancelled" flake. The whole
+        // start sequence now runs on a background queue; stopTunnel cancels
+        // it at the checkpoints inside runStartSequence.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.runStartSequence(completionHandler: completionHandler)
+        }
+    }
+
+    private func runStartSequence(completionHandler: @escaping (Error?) -> Void) {
         tunnelPhase = "begin"
         do {
             var providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
@@ -136,6 +159,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let sshChannel = try factory.connect(credentials).wait()
             let sshHandler = try sshChannel.pipeline.handler(type: NIOSSHHandler.self).wait()
             tunnelPhase = "ssh-connected"
+            // Cancel checkpoint #1: the user hit disconnect while we were
+            // blocking on the SSH connect. Close the parent channel and get
+            // out — never install half a tunnel.
+            if abandonStartIfCancelled(completionHandler, stage: "post-ssh-connect") {
+                sshChannel.close(promise: nil)
+                return
+            }
             elog(.info, "TUNNEL", "SSH connected; probing TCP forwarding (direct-tcpip)")
             // Pre-flight probe: one throwaway direct-tcpip open proves auth is
             // done AND the server forwards. Without it, later fire-and-forget
@@ -168,16 +198,35 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 tunnelPhase = "probe-failed"
                 lastRuntimeError = msg
                 TunnelLastError.write(msg)
-                startInFlight = false
-                completionHandler(probeError)
+                completeStart(probeError, completionHandler: completionHandler)
+                return
+            }
+            // Cancel checkpoint #2: probe round is over, the tunnel is not
+            // installed yet — bailing now leaves no utun/route cleanup debt.
+            if abandonStartIfCancelled(completionHandler, stage: "post-probe") {
+                sshChannel.close(promise: nil)
                 return
             }
             elog(.info, "TUNNEL", "SSH connected; starting relay transport")
 
+            // Parallel SSH pool: starts with the one already-authenticated
+            // connection, grows on demand (all channels saturated) up to the
+            // policy max, and logs every step under the POOL tag.
+            let connector: SSHConnectionPool.Connector = { completion in
+                factory.connect(credentials)
+                    .flatMap { ch in
+                        ch.pipeline.handler(type: NIOSSHHandler.self)
+                            .map { SSHConnectionPool.Link(channel: ch, handler: $0) }
+                    }
+                    .whenComplete { completion($0) }
+            }
+            let pool = SSHConnectionPool(initial: SSHConnectionPool.Link(channel: sshChannel, handler: sshHandler),
+                                         connector: connector)
+            elog(.info, "POOL", "ssh pool ready: 1 connection (grows on demand, max 4)")
+
             let dnsUpstream = configuration.dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
             let relay = RelayTransport(factory: factory,
-                                       sshHandler: sshHandler,
-                                       eventLoop: sshChannel.eventLoop,
+                                       pool: pool,
                                        dnsServers: configuration.dnsServers,
                                        receive: { [weak self] packet in
                                            guard let self else { return }
@@ -266,8 +315,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     elog(.error, "TUNNEL", "setTunnelNetworkSettings FAILED: \(error)")
                     self.lastRuntimeError = "setTunnelNetworkSettings: \(error.localizedDescription)"
                     TunnelLastError.write(self.lastRuntimeError ?? "setTunnelNetworkSettings failed")
-                    self.startInFlight = false
-                    completionHandler(error)
+                    self.completeStart(error, completionHandler: completionHandler)
                     return
                 }
                 self.tunnelPhase = "network-settings"
@@ -277,7 +325,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.loopStartCompleted = false
                 loop.start { [weak self] readyError in
                     self?.loopStartCompleted = true
-                    self?.startInFlight = false
                     if let readyError {
                         elog(.error, "TUNNEL", "packet loop ready error: \(readyError)")
                         self?.lastRuntimeError = "packetLoop: \(readyError.localizedDescription)"
@@ -290,26 +337,84 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                         // from an earlier death is now obsolete.
                         TunnelLastError.clear()
                     }
-                    completionHandler(readyError)
+                    self?.completeStart(readyError, completionHandler: completionHandler)
                 }
             }
         } catch {
             elog(.error, "TUNNEL", "startTunnel THREW: \(error)")
             tunnelPhase = "error"
-            startInFlight = false
             lastRuntimeError = error.localizedDescription
             // Persist: the process may be torn down within milliseconds and
             // the message channel dies with it — without this the app sees
             // extError=none and retries blindly into a fail2ban lockout.
             TunnelLastError.write(error.localizedDescription)
-            completionHandler(error)
+            completeStart(error, completionHandler: completionHandler)
         }
+    }
+
+    // MARK: - Start/stop coordination
+
+    /// Single exit point for the start sequence: clears the in-flight flag,
+    /// fires the start completion, and — if stopTunnel arrived while the
+    /// start was mid-flight — fires the parked stop completion right after.
+    /// Ordering guarantee: the system never sees stop-completed before
+    /// start-completed, which is exactly what the old blocking start broke.
+    private func completeStart(_ error: Error?, completionHandler: @escaping (Error?) -> Void) {
+        stopLock.lock()
+        startInFlight = false
+        let pendingStop = pendingStopCompletion
+        pendingStopCompletion = nil
+        startCancelled = false
+        stopLock.unlock()
+        // If the cancel landed late (loop already started), a live tunnel is
+        // running — tear it down before telling the system the stop is done,
+        // otherwise it stays up with NetworkExtension believing it stopped.
+        if pendingStop != nil {
+            packetLoop?.stop()
+            packetLoop = nil
+            transport?.stop()
+            transport = nil
+        }
+        completionHandler(error)
+        if let pendingStop {
+            elog(.info, "TUNNEL", "start unwound after cancel — completing the queued stop now")
+            pendingStop()
+        }
+    }
+
+    /// True when the start was cancelled (also finishes the start if so):
+    /// the caller closes whatever SSH channel it holds and returns.
+    private func abandonStartIfCancelled(_ completionHandler: @escaping (Error?) -> Void, stage: String) -> Bool {
+        stopLock.lock()
+        let cancelled = startCancelled
+        stopLock.unlock()
+        guard cancelled else { return false }
+        elog(.info, "TUNNEL", "start CANCELLED at \(stage) — unwinding cleanly, tunnel never installed")
+        tunnelPhase = "cancelled"
+        let err = NSError(domain: "com.ssh2vpn", code: 20,
+                          userInfo: [NSLocalizedDescriptionKey: "connection start cancelled by user"])
+        completeStart(err, completionHandler: completionHandler)
+        return true
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         let text = TunnelStopReason.text(forRawValue: reason.rawValue)
         lastStopReason = text
+        stopLock.lock()
+        if startInFlight {
+            // A start is blocked in SSH connect/probe on its background
+            // queue; stopping the loop now would not reach it. Flag the
+            // cancel and park OUR completion — completeStart fires it as
+            // soon as the start sequence has fully unwound. This is what
+            // makes mid-connect cancels instant instead of "wedged".
+            startCancelled = true
+            pendingStopCompletion = completionHandler
+            stopLock.unlock()
+            elog(.info, "TUNNEL", "stopTunnel reason=\(text) mid-start — cancelling in-flight start (phase=\(tunnelPhase))")
+            return
+        }
         startInFlight = false
+        stopLock.unlock()
         elog(.info, "TUNNEL", "stopTunnel reason=\(text) phase=\(tunnelPhase) lastError=\(lastRuntimeError ?? "none")")
         packetLoop?.stop()
         packetLoop = nil
@@ -810,8 +915,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// sweep timer). NIO callbacks arrive on event loops, utun reads on the
     /// packet thread — without this the structs race.
     private let relayQueue = DispatchQueue(label: "com.ssh2vpn.relay")
-    private let sshHandler: NIOSSHHandler
-    private let sshEventLoop: EventLoop
+    /// Parallel SSH connections to the server; every new flow/DNS query opens
+    /// its direct-tcpip channel on the least-loaded one. The pool grows on
+    /// demand (see SSHPoolPolicy) and logs every grow event (POOL tag).
+    private let pool: SSHConnectionPool
     /// Retains the SSH factory (and its event loop group) for the tunnel's
     /// lifetime. Without this the factory deallocs when startTunnel returns,
     /// its deinit shuts the group down, and every later channel open hangs
@@ -835,21 +942,17 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var repliesWritten = 0
 
     init(factory: SSHTransportFactory,
-         sshHandler: NIOSSHHandler,
-         eventLoop: EventLoop,
+         pool: SSHConnectionPool,
          dnsServers: [String] = [],
          receive: @escaping (Data) -> Void,
          failure: @escaping (Error) -> Void,
          ready: @escaping (Error?) -> Void) {
         self.receiveCallback = receive
         self.sshFactory = factory
-        self.sshHandler = sshHandler
-        self.sshEventLoop = eventLoop
+        self.pool = pool
         self.dnsUpstream = dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
 
-        let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: eventLoop)
-        let factory = SSHRelayChannelFactory(opener: opener)
-        self.stateMachine = TCPRelayStateMachine(factory: factory, isnGenerator: RandomISN(), idleTimeout: 120)
+        self.stateMachine = TCPRelayStateMachine(factory: pool, isnGenerator: RandomISN(), idleTimeout: 120)
         // Server-to-phone splice: channel callbacks arrive on NIO threads and
         // hop onto the relay queue, where they mutate the same state machine
         // the utun send path uses. Replies go straight back into utun.
@@ -945,6 +1048,13 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                 self.droppedNonTCPUDP = 0
                 self.droppedParse = 0
             }
+            // Parallelism journal: per-SSH-connection live channel counts.
+            // Shows how the pool spread the load (ssh#1=8 ssh#2=3 ...).
+            let loads = self.pool.snapshotInFlight()
+            if loads.reduce(0, +) > 0 || loads.count > 1 {
+                let spread = loads.enumerated().map { "ssh#\($0.offset + 1)=\($0.element)" }.joined(separator: " ")
+                elog(.info, "POOL", "load [\(spread)]")
+            }
         }
         timer.resume()
         sweepTimer = timer
@@ -977,6 +1087,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         }
         dnsInFlight.removeAll()
         pendingPackets.removeAll()
+        // Tears down EVERY pooled SSH connection (parent channels); the pool
+        // itself refuses further opens afterwards.
+        pool.closeAll()
     }
 
     // MARK: - private
@@ -1074,11 +1187,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
         elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(dnsUpstream):53")
-        let opener = NIOSSHChannelOpener(handler: sshHandler, eventLoop: sshEventLoop)
-        guard let origin = try? SocketAddress(ipAddress: "127.0.0.1", port: 0) else { return }
         var channelRef: RelayChannel?
-        channelRef = opener.open(
-            targetHost: dnsUpstream, targetPort: 53, originatorAddress: origin,
+        channelRef = pool.open(
+            flow: flow,
             onData: { [weak self] bytes in
                 guard let self else { return }
                 // demux is per-query local: safe to drive inline here; only

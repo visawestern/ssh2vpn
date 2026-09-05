@@ -286,7 +286,11 @@ public struct HackerConsoleSidebarView: View {
                         .font(.system(size: 11, design: .monospaced))
                         .padding(12)
                     } else {
-                        ForEach(entries) { entry in
+                        // Newest-first: the freshest line is always at the
+                        // top, right where the eye lands when the drawer
+                        // opens — no scrolling down a growing backlog to see
+                        // what just happened. Older entries drift downward.
+                        ForEach(entries.reversed()) { entry in
                             logRow(entry)
                                 .id(entry.id)
                         }
@@ -297,9 +301,9 @@ public struct HackerConsoleSidebarView: View {
             }
             .background(Color(red: 0.04, green: 0.05, blue: 0.08))
             .onChange(of: entries.count) { _ in
-                if autoScroll, let last = entries.last {
+                if autoScroll, let newest = entries.last {
                     withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        proxy.scrollTo(newest.id, anchor: .top)
                     }
                 }
             }
