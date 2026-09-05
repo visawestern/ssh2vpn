@@ -64,6 +64,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                  "packetsWritten": "\(self?.packetLoop?.packetsWritten ?? 0)",
                  "replied": "\((self?.transport as? RelayTransport)?.repliedCount() ?? 0)",
                  "sessions": "\((self?.transport as? RelayTransport)?.flowCount() ?? 0)",
+                 "sshConns": "\((self?.transport as? RelayTransport)?.sshConnectionCount() ?? 0)",
+                 "channels": "\((self?.transport as? RelayTransport)?.activeChannelCount() ?? 0)",
+                 "upBytes": "\((self?.transport as? RelayTransport)?.byteTotals().up ?? 0)",
+                 "downBytes": "\((self?.transport as? RelayTransport)?.byteTotals().down ?? 0)",
                  "proto": self?.packetLoop?.protoSummary ?? "none",
                  "lastReadAgo": lastReadAgo]
             },
@@ -989,6 +993,12 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// Reply packets emitted toward utun (all paths). Read off-queue like the
     /// other counters — informational only.
     func repliedCount() -> Int { repliesWritten }
+
+    /// Live numbers for the app's stats strip. Read off-queue like the other
+    /// counters (a few ms of staleness is fine for a UI readout).
+    func sshConnectionCount() -> Int { pool.connectionCount }
+    func activeChannelCount() -> Int { pool.snapshotInFlight().reduce(0, +) }
+    func byteTotals() -> (up: Int, down: Int) { (stateMachine.totalUpBytes, stateMachine.totalDownBytes) }
     /// Dropped-packet ledger for the 30s journal (reset each sweep): QUIC and
     /// other non-DNS UDP would spam per-packet, so they aggregate here.
     private var droppedUDPNonDNS = 0

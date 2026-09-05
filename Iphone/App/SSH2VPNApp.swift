@@ -24,6 +24,21 @@ final class AppModel: ObservableObject {
     }
     @Published var serverName = "My VPS"
 
+    // MARK: - Live tunnel stats (polled from the extension every 2s)
+    /// Pooled SSH connections to the server right now.
+    @Published var sshConnectionCount = 0
+    /// Live direct-tcpip channels across the pool (real active data streams).
+    @Published var activeChannelCount = 0
+    /// Cumulative tunnel bytes this session (phone -> server / server -> phone).
+    @Published var tunnelUpBytes = 0
+    @Published var tunnelDownBytes = 0
+    private var statsPollTask: Task<Void, Never>?
+
+    // MARK: - Free-time quota (3h free, then +3h per rewarded-ad view)
+    @Published var quota: AdQuota = AdQuotaStore().load()
+    /// True while the ad stub is "playing" (disables the button).
+    @Published var adPlaying = false
+
     // Local copy of the server list (plain UserDefaults in the app container).
     // This is the UI source of truth: add/select/delete apply instantly even
     // when the extension isn't reachable (fresh install, tunnel down). The
@@ -220,6 +235,7 @@ final class AppModel: ObservableObject {
             case .connected:
                 _ = self?.automation.markConnected()
                 self?.connection = .connected
+                self?.startStatsPolling()
                 self?.attemptStartedAt = nil
                 self?.stallRestartArmed = false
                 self?.lastStallRead = nil
@@ -243,6 +259,7 @@ final class AppModel: ObservableObject {
                 } else {
                     self?.connection = .disconnected
                     self?.stopPhasePolling()
+                    self?.stopStatsPolling()
                     self?.attemptStartedAt = nil
                     ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
                     self?.fetchTunnelDiagnostics()
@@ -647,6 +664,13 @@ final class AppModel: ObservableObject {
             ConsoleLogStore.shared.log(level: .error, tag: "CONNECT", message: "No server selected")
             return
         }
+        // Free-tier gate: no quota, no tunnel. The user earns more by
+        // watching a rewarded ad (stub) from the main screen.
+        guard remainingQuotaSeconds > 0 else {
+            ConsoleLogStore.shared.log(level: .error, tag: "QUOTA", message: "Connect blocked: free time exhausted — watch an ad to earn +3h")
+            connection = .failed("freeTimeExhausted")
+            return
+        }
         ConsoleLogStore.shared.log(level: .system, tag: "CONNECT", message: "Starting VPN connection to \(selected.host):\(selected.port) user=\(selected.username)...")
         let mgr = vpn.diagnosticSnapshot()
         ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "manager hasManager=\(mgr.hasManager) onDemandEnabled=\(mgr.onDemandEnabled) onDemandRules=\(mgr.onDemandRuleCount)")
@@ -865,15 +889,87 @@ final class AppModel: ObservableObject {
         stallRestartArmed = false
         stallFrozenCycles = 0
         stopPhasePolling()
+        stopStatsPolling()
         vpn.stop()
     }
 
     func tickConnectionTimer() {
         objectWillChange.send()
         automation.tick()
+        // Free-time drain: one quota second per connected second. When the
+        // well runs dry the session ends itself — the UI already shows the
+        // countdown and the ad button.
+        guard connection == .connected else { return }
+        quota.consume(1)
+        AdQuotaStore().save(quota)
+        if remainingQuotaSeconds <= 0 {
+            ConsoleLogStore.shared.log(level: .warning, tag: "QUOTA",
+                                       message: "Free time exhausted — disconnecting until an ad is watched")
+            disconnect()
+            connection = .failed("freeTimeExhausted")
+        }
     }
 
     var connectionActiveSeconds: Int { automation.activeSeconds }
+
+    // MARK: - Live tunnel stats + ad quota
+
+    /// Remaining quota accounting for the LIVE session too (the struct only
+    /// gets drained via ticks — subtracting activeSeconds keeps the countdown
+    /// real between ticks).
+    var remainingQuotaSeconds: TimeInterval {
+        max(0, quota.remainingSeconds - TimeInterval(automation.activeSeconds))
+    }
+
+    /// Seconds until the ad button unlocks (0 = ready to watch now).
+    var adCooldownRemaining: TimeInterval { quota.adCooldownRemaining(now: Date()) }
+
+    var canWatchAd: Bool { quota.canWatchAd(now: Date()) && !adPlaying }
+
+    /// Rewarded-ad stub: simulates a 2s ad view, then banks +3h. Real SDK
+    /// slots in here later — only this function changes.
+    func watchAd() {
+        guard canWatchAd else { return }
+        adPlaying = true
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (STUB — 2s simulated view)")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self else { return }
+            self.adPlaying = false
+            if self.quota.watchAd(now: Date()) {
+                AdQuotaStore().save(self.quota)
+                let hours = Int(self.quota.bankedSeconds / 3600)
+                ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "reward credited: +3h (banked \(hours)h total)")
+            } else {
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (cooldown or bank full)")
+            }
+        }
+    }
+
+    /// Polls the extension status every 2s while connected: SSH pool size,
+    /// live channels, cumulative byte counters. Drives the stats strip.
+    private func startStatsPolling() {
+        stopStatsPolling()
+        statsPollTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled, self.connection == .connected {
+                let status = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .status, timeout: 2)
+                self.sshConnectionCount = Int(status["sshConns"] ?? "") ?? 0
+                self.activeChannelCount = Int(status["channels"] ?? "") ?? 0
+                self.tunnelUpBytes = Int(status["upBytes"] ?? "") ?? 0
+                self.tunnelDownBytes = Int(status["downBytes"] ?? "") ?? 0
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private func stopStatsPolling() {
+        statsPollTask?.cancel()
+        statsPollTask = nil
+        sshConnectionCount = 0
+        activeChannelCount = 0
+        tunnelUpBytes = 0
+        tunnelDownBytes = 0
+    }
 }
 
 struct VPNProfile: Equatable {

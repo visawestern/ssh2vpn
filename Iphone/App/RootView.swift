@@ -163,6 +163,12 @@ struct ConnectView: View {
                     .font(.system(size: 15, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color.octGray60)
                     .padding(.bottom, 8)
+
+                // Live tunnel telemetry: SSH pool size, live data channels,
+                // transferred bytes, and the minutely ping.
+                statsStrip
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
             } else if case .failed(let msg) = model.connection {
                 Text("connectionError: \(msg)")
                     .font(.system(size: 12, weight: .medium))
@@ -174,6 +180,11 @@ struct ConnectView: View {
             }
 
             Spacer(minLength: 8)
+
+            // Free-time quota + rewarded-ad refill (stub ad for now)
+            quotaBar
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
 
             // Selected Location Card
             selectedLocationCard
@@ -407,6 +418,105 @@ struct ConnectView: View {
         let s = Int(t) % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%02d:%02d", m, s)
+    }
+
+    // MARK: - Live stats strip (connected only)
+
+    private var statsStrip: some View {
+        HStack(spacing: 0) {
+            statCell(value: "\(model.sshConnectionCount)", label: "SSH")
+            dividerDot
+            statCell(value: "\(model.activeChannelCount)", label: "FLOWS")
+            dividerDot
+            statCell(value: "↓\(fmtMB(model.tunnelDownBytes)) ↑\(fmtMB(model.tunnelUpBytes))", label: "MB")
+            dividerDot
+            statCell(value: model.serverPingMs.map { "\($0) ms" } ?? "—", label: "PING")
+        }
+        .padding(.vertical, 8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 2)
+    }
+
+    private var dividerDot: some View {
+        Circle().fill(Color.octGray40).frame(width: 3, height: 3)
+    }
+
+    private func statCell(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.octGray100)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.octGray40)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func fmtMB(_ bytes: Int) -> String {
+        String(format: "%.1f", Double(bytes) / 1_048_576)
+    }
+
+    // MARK: - Free-time quota / rewarded-ad bar
+
+    private var quotaBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: model.remainingQuotaSeconds > 0 ? "hourglass" : "hourglass.badge.exclamationmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(model.copy.text(.freeTimeLeft))
+                    .font(.openSans(10, weight: .semibold))
+                    .foregroundStyle(Color.octGray40)
+                Text(formatTime(model.remainingQuotaSeconds))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.octGray100)
+            }
+
+            Spacer()
+
+            Button { model.watchAd() } label: {
+                HStack(spacing: 5) {
+                    if model.adPlaying {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 12))
+                    }
+                    Text(model.adPlaying
+                         ? "…"
+                         : (model.canWatchAd
+                            ? model.copy.text(.watchAdPlus3h)
+                            : cooldownText))
+                        .font(.openSans(12, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    (model.canWatchAd ? Color.sec50 : Color.octGray40),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canWatchAd)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
+    }
+
+    /// "59m" while the 1-view-per-hour cooldown runs, "MAX" when the
+    /// 3-view bank is full.
+    private var cooldownText: String {
+        if model.quota.bankedSeconds >= 3 * 3600 { return "MAX" }
+        let s = Int(model.adCooldownRemaining)
+        return s > 0 ? "\((s + 59) / 60)m" : "…"
     }
 }
 

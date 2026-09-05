@@ -129,6 +129,12 @@ public struct TCPRelayStateMachine {
     /// Live flow census for status reporting (replaces placeholder counts).
     public var flowCount: Int { flows.count }
 
+    /// Cumulative payload bytes, phone -> server, across ALL flows (live and
+    /// closed). The per-flow counters die with their flow; these never do.
+    public private(set) var totalUpBytes: Int = 0
+    /// Cumulative payload bytes, server -> phone, across ALL flows.
+    public private(set) var totalDownBytes: Int = 0
+
     public func state(for flow: IPv4Flow) -> RelayFlowState? {
         let key = RelayFlow(srcAddr: flow.sourceAddressBytes, srcPort: flow.sourcePort,
                             dstAddr: flow.destinationAddressBytes, dstPort: flow.destinationPort, transport: .tcp)
@@ -348,6 +354,7 @@ public struct TCPRelayStateMachine {
             st.channel.send(seg.payload)
             st.peerSeq = segEnd
             st.upBytes += payloadCount
+            totalUpBytes += payloadCount
             if !st.loggedFirstUp {
                 st.loggedFirstUp = true
                 ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(key)) up: first \(payloadCount)B")
@@ -376,6 +383,7 @@ public struct TCPRelayStateMachine {
                 st.channel.send(newData)
                 st.peerSeq = segEnd
                 st.upBytes += newData.count
+                totalUpBytes += newData.count
                 if !st.loggedFirstUp {
                     st.loggedFirstUp = true
                     ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(key)) up: first \(newData.count)B")
@@ -475,6 +483,7 @@ public struct TCPRelayStateMachine {
         state.localSeq += UInt32(toSend.count)
         state.outstandingToPhone += UInt32(toSend.count)
         state.downBytes += toSend.count
+        totalDownBytes += toSend.count
         if !state.loggedFirstDown {
             state.loggedFirstDown = true
             ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(flow)) down: first \(toSend.count)B")
