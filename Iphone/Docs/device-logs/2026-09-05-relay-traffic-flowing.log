@@ -1,0 +1,256 @@
+==================================================================
+                SSH2VPN HACKER TERMINAL LOG DUMP                  
+==================================================================
+Generated: 2026-09-05 16:04:15 +0000
+Entries: 247
+------------------------------------------------------------------
+[23:02:58.861] ## [SYSTEM] [BOOT] SSH2VPN v1.0.0 Cyber Terminal Logger Initialized
+[23:02:58.863] >> [INFO] [PROBE] Analyzing remote server 192.250.228.44:22...
+[23:02:59.101] ++ [SUCCESS] [GEOIP] GeoIP located: 🇸🇬 Singapore (Singapore) [1.2899882, 103.850277]
+[23:03:08.174] ## [SYSTEM] [CONNECT] Starting VPN connection to 192.250.228.44:22 user=browser...
+[23:03:08.174] >> [INFO] [VPN] manager hasManager=false onDemandEnabled=false onDemandRules=0
+[23:03:08.174] >> [SSH2] [AUTH] Using password authentication
+[23:03:08.178] >> [INFO] [PROBE] Analyzing remote server 192.250.228.44:22...
+[23:03:12.271] >> [INFO] [TUNNEL] startVPNTunnel invoked; awaiting NEVPNStatusDidChange
+[23:03:12.293] >> [SSH2] [TUNNEL] PacketTunnel state -> CONNECTING...
+[23:03:13.808] ++ [SUCCESS] [TUNNEL] >> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active
+[23:03:13.830] >> [INFO] [TUNNEL] Extension store holds 2 server(s), selected=D5DF18B9-61BD-4799-A996-DF354C6E0763
+[23:03:12.442] >> [INFO] [TUNNEL] startTunnel BEGIN (relay mode — no root/TUN needed on server)
+[23:03:12.443] >> [INFO] [TUNNEL] providerConfiguration keys: ["host", "password", "port", "serverIP", "username"]
+[23:03:12.444] >> [INFO] [TUNNEL] using extension-owned server id=D5DF18B9-61BD-4799-A996-DF354C6E0763 host=192.250.228.44
+[23:03:12.444] >> [INFO] [TUNNEL] TunnelConfiguration OK host=192.250.228.44 port=22 user=browser
+[23:03:12.565] >> [INFO] [TUNNEL] SSH connected; probing TCP forwarding (direct-tcpip)
+[23:03:13.610] >> [INFO] [TUNNEL] forwarding probe OK via 8.8.8.8:53
+[23:03:13.610] >> [INFO] [TUNNEL] SSH connected; starting relay transport
+[23:03:13.611] >> [INFO] [RELAY] transport created; DNS upstream 8.8.8.8
+[23:03:13.611] >> [INFO] [TUNNEL] relay transport ready; calling setTunnelNetworkSettings
+[23:03:13.621] >> [INFO] [TUNNEL] subnet check occupied=[192.168.8.100/24] -> 10.203.113.0/24 device=10.203.113.2
+[23:03:13.622] >> [INFO] [TUNNEL] device derived ipv4=10.203.113.2 ipv6=fd00:203:717e::2
+[23:03:13.622] >> [INFO] [TUNNEL] netsettings v4=10.203.113.2/24 default excluded=0 v6=none(v4-only-experiment) dns=8.8.8.8
+[23:03:13.622] >> [INFO] [TUNNEL] routes v4 addr=["10.203.113.2"] mask=["255.255.255.0"] included=[0.0.0.0/0.0.0.0] excluded=[none]
+[23:03:13.806] >> [INFO] [TUNNEL] setTunnelNetworkSettings OK
+[23:03:13.806] >> [INFO] [TUNNEL] packet loop ready OK
+[23:03:13.814] >> [INFO] [RELAY] dns query 10.203.113.2:60473 id=0xe983 (44B) -> 8.8.8.8:53
+[23:03:13.815] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:13.817] >> [INFO] [RELAY] dns query 10.203.113.2:59427 id=0xe5b5 (44B) -> 8.8.8.8:53
+[23:03:13.817] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:13.817] >> [INFO] [RELAY] dns query 10.203.113.2:52372 id=0x803b (36B) -> 8.8.8.8:53
+[23:03:13.817] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:13.835] >> [INFO] [TUNNEL] Tunnel counters [up]: utun read=3 written=0 replied=0 sessions=0 phase=ready proto[v4tcp=0 v4udp=3 v4other=0 v6=0 nonIP=0]
+[23:03:28.740] >> [INFO] [RELAY] flow 10.203.113.2:54095 -> 99.86.182.116:443 opened
+[23:03:28.741] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:28.742] >> [INFO] [RELAY] flow 10.203.113.2:54095 -> 99.86.182.116:443 up: first 1400B
+[23:03:28.784] >> [INFO] [RELAY] flow 10.203.113.2:54094 -> 17.248.224.27:443 down: first 4096B
+[23:03:28.855] >> [INFO] [RELAY] utun SYN 10.203.113.2:54096 -> 151.101.131.6:443
+[23:03:28.856] >> [INFO] [RELAY] flow 10.203.113.2:54096 -> 151.101.131.6:443 opened
+[23:03:28.856] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:28.857] >> [INFO] [RELAY] flow 10.203.113.2:54096 -> 151.101.131.6:443 up: first 1400B
+[23:03:28.874] >> [INFO] [RELAY] direct-tcpip open ok: 99.86.182.116:443
+[23:03:28.888] >> [INFO] [RELAY] utun SYN 10.203.113.2:54097 -> 151.101.3.6:443
+[23:03:28.889] >> [INFO] [RELAY] flow 10.203.113.2:54097 -> 151.101.3.6:443 opened
+[23:03:28.889] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:28.890] >> [INFO] [RELAY] flow 10.203.113.2:54097 -> 151.101.3.6:443 up: first 1400B
+[23:03:28.926] >> [INFO] [RELAY] utun SYN 10.203.113.2:54098 -> 74.125.200.93:443
+[23:03:28.926] >> [INFO] [RELAY] flow 10.203.113.2:54098 -> 74.125.200.93:443 opened
+[23:03:28.927] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:28.927] >> [INFO] [RELAY] utun SYN 10.203.113.2:54099 -> 74.125.200.93:443
+[23:03:28.927] >> [INFO] [RELAY] flow 10.203.113.2:54099 -> 74.125.200.93:443 opened
+[23:03:28.927] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:28.928] >> [INFO] [RELAY] flow 10.203.113.2:54098 -> 74.125.200.93:443 up: first 1400B
+[23:03:28.928] >> [INFO] [RELAY] flow 10.203.113.2:54099 -> 74.125.200.93:443 up: first 1400B
+[23:03:28.974] >> [INFO] [RELAY] direct-tcpip open ok: 74.125.200.93:443
+[23:03:28.978] >> [INFO] [RELAY] direct-tcpip open ok: 74.125.200.93:443
+[23:03:29.012] >> [INFO] [RELAY] flow 10.203.113.2:54095 -> 99.86.182.116:443 down: first 2856B
+[23:03:29.093] >> [INFO] [RELAY] flow 10.203.113.2:54098 -> 74.125.200.93:443 down: first 6225B
+[23:03:29.144] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.131.6:443
+[23:03:29.145] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.3.6:443
+[23:03:29.146] >> [INFO] [RELAY] flow 10.203.113.2:54099 -> 74.125.200.93:443 down: first 6224B
+[23:03:29.422] >> [INFO] [RELAY] flow 10.203.113.2:54096 -> 151.101.131.6:443 down: first 6537B
+[23:03:29.438] >> [INFO] [RELAY] utun SYN 10.203.113.2:54100 -> 151.101.131.6:443
+[23:03:29.438] >> [INFO] [RELAY] flow 10.203.113.2:54100 -> 151.101.131.6:443 opened
+[23:03:29.438] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:29.440] >> [INFO] [RELAY] flow 10.203.113.2:54100 -> 151.101.131.6:443 up: first 1400B
+[23:03:29.466] >> [INFO] [RELAY] flow 10.203.113.2:54097 -> 151.101.3.6:443 down: first 5776B
+[23:03:29.678] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.131.6:443
+[23:03:29.958] >> [INFO] [RELAY] flow 10.203.113.2:54100 -> 151.101.131.6:443 down: first 6537B
+[23:03:30.149] >> [INFO] [RELAY] utun SYN 10.203.113.2:54101 -> 172.217.119.4:443
+[23:03:30.150] >> [INFO] [RELAY] flow 10.203.113.2:54101 -> 172.217.119.4:443 opened
+[23:03:30.150] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:30.152] >> [INFO] [RELAY] flow 10.203.113.2:54101 -> 172.217.119.4:443 up: first 1400B
+[23:03:30.216] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.119.4:443
+[23:03:30.267] >> [INFO] [RELAY] utun SYN 10.203.113.2:54102 -> 17.248.224.41:443
+[23:03:30.267] >> [INFO] [RELAY] flow 10.203.113.2:54102 -> 17.248.224.41:443 opened
+[23:03:30.267] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:30.269] >> [INFO] [RELAY] flow 10.203.113.2:54102 -> 17.248.224.41:443 up: first 1400B
+[23:03:30.324] >> [INFO] [RELAY] flow 10.203.113.2:54101 -> 172.217.119.4:443 down: first 5564B
+[23:03:30.482] >> [INFO] [RELAY] direct-tcpip open ok: 17.248.224.41:443
+[23:03:30.716] >> [INFO] [RELAY] flow 10.203.113.2:54102 -> 17.248.224.41:443 down: first 4677B
+[23:03:30.861] >> [INFO] [RELAY] utun SYN 10.203.113.2:54103 -> 151.101.195.6:443
+[23:03:30.862] >> [INFO] [RELAY] flow 10.203.113.2:54103 -> 151.101.195.6:443 opened
+[23:03:30.862] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:30.865] >> [INFO] [RELAY] flow 10.203.113.2:54103 -> 151.101.195.6:443 up: first 1400B
+[23:03:31.093] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.195.6:443
+[23:03:31.382] >> [INFO] [RELAY] flow 10.203.113.2:54103 -> 151.101.195.6:443 down: first 6537B
+[23:03:31.530] >> [INFO] [RELAY] utun SYN 10.203.113.2:54104 -> 151.101.195.6:443
+[23:03:31.530] >> [INFO] [RELAY] flow 10.203.113.2:54104 -> 151.101.195.6:443 opened
+[23:03:31.530] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:31.532] >> [INFO] [RELAY] flow 10.203.113.2:54104 -> 151.101.195.6:443 up: first 1400B
+[23:03:31.754] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.195.6:443
+[23:03:32.034] >> [INFO] [RELAY] flow 10.203.113.2:54104 -> 151.101.195.6:443 down: first 6537B
+[23:03:32.156] >> [INFO] [RELAY] utun SYN 10.203.113.2:54105 -> 172.217.117.4:443
+[23:03:32.157] >> [INFO] [RELAY] flow 10.203.113.2:54105 -> 172.217.117.4:443 opened
+[23:03:32.157] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:32.159] >> [INFO] [RELAY] flow 10.203.113.2:54105 -> 172.217.117.4:443 up: first 1400B
+[23:03:32.221] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.117.4:443
+[23:03:32.324] >> [INFO] [RELAY] flow 10.203.113.2:54105 -> 172.217.117.4:443 down: first 5564B
+[23:03:32.865] >> [INFO] [RELAY] utun SYN 10.203.113.2:54106 -> 151.101.195.6:443
+[23:03:32.865] >> [INFO] [RELAY] flow 10.203.113.2:54106 -> 151.101.195.6:443 opened
+[23:03:32.865] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:32.867] >> [INFO] [RELAY] flow 10.203.113.2:54106 -> 151.101.195.6:443 up: first 1400B
+[23:03:33.115] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.195.6:443
+[23:03:33.117] >> [INFO] [RELAY] flow 10.203.113.2:54064 -> 74.125.200.190:443 server closed (up=1534B down=6224B); FIN to phone
+[23:03:33.175] >> [INFO] [RELAY] flow 10.203.113.2:54062 -> 74.125.200.190:443 server closed (up=1534B down=6225B); FIN to phone
+[23:03:33.239] >> [INFO] [RELAY] flow 10.203.113.2:54067 -> 142.251.10.97:443 server closed (up=1547B down=5785B); FIN to phone
+[23:03:33.404] >> [INFO] [RELAY] flow 10.203.113.2:54106 -> 151.101.195.6:443 down: first 6537B
+[23:03:33.571] >> [INFO] [RELAY] utun SYN 10.203.113.2:54107 -> 151.101.195.6:443
+[23:03:33.571] >> [INFO] [RELAY] flow 10.203.113.2:54107 -> 151.101.195.6:443 opened
+[23:03:33.571] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:33.573] >> [INFO] [RELAY] flow 10.203.113.2:54107 -> 151.101.195.6:443 up: first 1400B
+[23:03:33.794] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.195.6:443
+[23:03:34.079] >> [INFO] [RELAY] flow 10.203.113.2:54107 -> 151.101.195.6:443 down: first 6537B
+[23:03:34.163] >> [INFO] [RELAY] utun SYN 10.203.113.2:54108 -> 172.217.115.4:443
+[23:03:34.164] >> [INFO] [RELAY] flow 10.203.113.2:54108 -> 172.217.115.4:443 opened
+[23:03:34.164] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:34.165] >> [INFO] [RELAY] flow 10.203.113.2:54108 -> 172.217.115.4:443 up: first 1400B
+[23:03:34.220] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.115.4:443
+[23:03:34.324] >> [INFO] [RELAY] flow 10.203.113.2:54108 -> 172.217.115.4:443 down: first 5564B
+[23:03:34.872] >> [INFO] [RELAY] utun SYN 10.203.113.2:54109 -> 151.101.131.6:443
+[23:03:34.872] >> [INFO] [RELAY] flow 10.203.113.2:54109 -> 151.101.131.6:443 opened
+[23:03:34.872] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:34.874] >> [INFO] [RELAY] flow 10.203.113.2:54109 -> 151.101.131.6:443 up: first 1400B
+[23:03:34.962] >> [INFO] [RELAY] dns query 10.203.113.2:55141 id=0xb8c7 (44B) -> 8.8.8.8:53
+[23:03:34.962] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:35.038] >> [INFO] [RELAY] flow 10.203.113.2:54081 -> 74.125.200.91:443 server closed (up=1534B down=6224B); FIN to phone
+[23:03:35.073] >> [INFO] [RELAY] utun SYN 10.203.113.2:54110 -> 172.253.144.113:443
+[23:03:35.073] >> [INFO] [RELAY] flow 10.203.113.2:54110 -> 172.253.144.113:443 opened
+[23:03:35.073] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:35.075] >> [INFO] [RELAY] flow 10.203.113.2:54110 -> 172.253.144.113:443 up: first 1400B
+[23:03:35.099] >> [INFO] [RELAY] direct-tcpip open ok: 8.8.8.8:53
+[23:03:35.150] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.131.6:443
+[23:03:35.150] >> [INFO] [RELAY] direct-tcpip open ok: 172.253.144.113:443
+[23:03:35.192] >> [INFO] [RELAY] utun SYN 10.203.113.2:54111 -> 18.155.99.110:443
+[23:03:35.192] >> [INFO] [RELAY] flow 10.203.113.2:54111 -> 18.155.99.110:443 opened
+[23:03:35.193] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:35.194] >> [INFO] [RELAY] flow 10.203.113.2:54111 -> 18.155.99.110:443 up: first 1400B
+[23:03:35.197] >> [INFO] [RELAY] dns answer -> 10.203.113.2:55141 (101B)
+[23:03:35.198] >> [INFO] [RELAY] flow 10.203.113.2:54080 -> 74.125.200.91:443 server closed (up=1534B down=6223B); FIN to phone
+[23:03:35.232] >> [INFO] [RELAY] flow 10.203.113.2:54063 -> 18.155.99.110:443 server closed (up=2290B down=18957B); FIN to phone
+[23:03:35.266] >> [INFO] [RELAY] flow 10.203.113.2:54110 -> 172.253.144.113:443 down: first 5784B
+[23:03:35.309] >> [INFO] [RELAY] direct-tcpip open ok: 18.155.99.110:443
+[23:03:35.416] >> [INFO] [RELAY] flow 10.203.113.2:54111 -> 18.155.99.110:443 down: first 2856B
+[23:03:35.487] >> [INFO] [RELAY] flow 10.203.113.2:54109 -> 151.101.131.6:443 down: first 6537B
+[23:03:35.607] >> [INFO] [RELAY] utun SYN 10.203.113.2:54112 -> 151.101.131.6:443
+[23:03:35.608] >> [INFO] [RELAY] flow 10.203.113.2:54112 -> 151.101.131.6:443 opened
+[23:03:35.608] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:35.610] >> [INFO] [RELAY] flow 10.203.113.2:54112 -> 151.101.131.6:443 up: first 1400B
+[23:03:35.850] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.131.6:443
+[23:03:36.007] >> [INFO] [RELAY] dns query 10.203.113.2:60197 id=0x8244 (36B) -> 8.8.8.8:53
+[23:03:36.007] >> [INFO] [RELAY] dns query 10.203.113.2:57000 id=0x7433 (36B) -> 8.8.8.8:53
+[23:03:36.007] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:36.008] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:36.064] >> [INFO] [RELAY] direct-tcpip open ok: 8.8.8.8:53
+[23:03:36.094] >> [INFO] [RELAY] direct-tcpip open ok: 8.8.8.8:53
+[23:03:36.133] >> [INFO] [RELAY] flow 10.203.113.2:54112 -> 151.101.131.6:443 down: first 5776B
+[23:03:36.168] >> [INFO] [RELAY] utun SYN 10.203.113.2:54113 -> 172.217.113.4:443
+[23:03:36.168] >> [INFO] [RELAY] flow 10.203.113.2:54113 -> 172.217.113.4:443 opened
+[23:03:36.168] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:36.171] >> [INFO] [RELAY] flow 10.203.113.2:54113 -> 172.217.113.4:443 up: first 1400B
+[23:03:36.183] >> [INFO] [RELAY] dns answer -> 10.203.113.2:57000 (100B)
+[23:03:36.184] >> [INFO] [RELAY] dns answer -> 10.203.113.2:60197 (117B)
+[23:03:36.188] >> [INFO] [RELAY] utun SYN 10.203.113.2:54114 -> 18.161.216.22:443
+[23:03:36.188] >> [INFO] [RELAY] flow 10.203.113.2:54114 -> 18.161.216.22:443 opened
+[23:03:36.188] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:36.190] >> [INFO] [RELAY] flow 10.203.113.2:54114 -> 18.161.216.22:443 up: first 1400B
+[23:03:36.263] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.113.4:443
+[23:03:36.314] >> [INFO] [RELAY] direct-tcpip open ok: 18.161.216.22:443
+[23:03:36.315] >> [INFO] [RELAY] flow 10.203.113.2:54086 -> 172.217.116.4:443 server closed (up=1542B down=5565B); FIN to phone
+[23:03:36.365] >> [INFO] [RELAY] flow 10.203.113.2:54113 -> 172.217.113.4:443 down: first 5564B
+[23:03:36.483] >> [INFO] [RELAY] flow 10.203.113.2:54114 -> 18.161.216.22:443 down: first 2856B
+[23:03:36.874] >> [INFO] [RELAY] utun SYN 10.203.113.2:54115 -> 151.101.67.6:443
+[23:03:36.874] >> [INFO] [RELAY] flow 10.203.113.2:54115 -> 151.101.67.6:443 opened
+[23:03:36.874] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:36.875] >> [INFO] [RELAY] flow 10.203.113.2:54115 -> 151.101.67.6:443 up: first 1400B
+[23:03:37.077] >> [INFO] [RELAY] utun SYN 10.203.113.2:54116 -> 172.253.144.139:443
+[23:03:37.078] >> [INFO] [RELAY] flow 10.203.113.2:54116 -> 172.253.144.139:443 opened
+[23:03:37.078] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:37.080] >> [INFO] [RELAY] flow 10.203.113.2:54116 -> 172.253.144.139:443 up: first 1400B
+[23:03:37.661] >> [INFO] [RELAY] utun SYN 10.203.113.2:54117 -> 151.101.67.6:443
+[23:03:37.662] >> [INFO] [RELAY] flow 10.203.113.2:54117 -> 151.101.67.6:443 opened
+[23:03:37.662] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:37.663] >> [INFO] [RELAY] flow 10.203.113.2:54117 -> 151.101.67.6:443 up: first 1400B
+[23:03:37.939] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.67.6:443
+[23:03:37.947] >> [INFO] [RELAY] direct-tcpip open ok: 172.253.144.139:443
+[23:03:37.947] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.67.6:443
+[23:03:38.010] >> [INFO] [RELAY] flow 10.203.113.2:54090 -> 74.125.200.136:443 server closed (up=1534B down=6224B); FIN to phone
+[23:03:38.010] >> [INFO] [RELAY] flow 10.203.113.2:54091 -> 74.125.200.136:443 server closed (up=1534B down=6225B); FIN to phone
+[23:03:38.058] >> [INFO] [RELAY] flow 10.203.113.2:54116 -> 172.253.144.139:443 down: first 5786B
+[23:03:38.175] >> [INFO] [RELAY] utun SYN 10.203.113.2:54118 -> 172.217.118.4:443
+[23:03:38.175] >> [INFO] [RELAY] flow 10.203.113.2:54118 -> 172.217.118.4:443 opened
+[23:03:38.175] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:38.176] >> [INFO] [RELAY] flow 10.203.113.2:54118 -> 172.217.118.4:443 up: first 1400B
+[23:03:38.193] >> [INFO] [RELAY] flow 10.203.113.2:54115 -> 151.101.67.6:443 down: first 6537B
+[23:03:38.254] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.118.4:443
+[23:03:38.255] >> [INFO] [RELAY] flow 10.203.113.2:54117 -> 151.101.67.6:443 down: first 6537B
+[23:03:38.310] >> [INFO] [RELAY] flow 10.203.113.2:54093 -> 172.217.112.4:443 server closed (up=1542B down=5564B); FIN to phone
+[23:03:38.356] >> [INFO] [RELAY] flow 10.203.113.2:54118 -> 172.217.118.4:443 down: first 5564B
+[23:03:38.555] >> [INFO] [RELAY] flow 10.203.113.2:54054 -> 17.8.131.124:443 server closed (up=2254B down=65990B); FIN to phone
+[23:03:38.880] >> [INFO] [RELAY] utun SYN 10.203.113.2:54119 -> 151.101.3.6:443
+[23:03:38.881] >> [INFO] [RELAY] flow 10.203.113.2:54119 -> 151.101.3.6:443 opened
+[23:03:38.881] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:38.882] >> [INFO] [RELAY] flow 10.203.113.2:54119 -> 151.101.3.6:443 up: first 1400B
+[23:03:39.080] >> [INFO] [RELAY] utun SYN 10.203.113.2:54120 -> 172.253.144.100:443
+[23:03:39.080] >> [INFO] [RELAY] flow 10.203.113.2:54120 -> 172.253.144.100:443 opened
+[23:03:39.080] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:39.082] >> [INFO] [RELAY] flow 10.203.113.2:54120 -> 172.253.144.100:443 up: first 1400B
+[23:03:39.123] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.3.6:443
+[23:03:39.125] >> [INFO] [RELAY] flow 10.203.113.2:54099 -> 74.125.200.93:443 server closed (up=1534B down=6224B); FIN to phone
+[23:03:39.179] >> [INFO] [RELAY] direct-tcpip open ok: 172.253.144.100:443
+[23:03:39.181] >> [INFO] [RELAY] flow 10.203.113.2:54098 -> 74.125.200.93:443 server closed (up=1534B down=6225B); FIN to phone
+[23:03:39.261] >> [INFO] [RELAY] flow 10.203.113.2:54120 -> 172.253.144.100:443 down: first 5784B
+[23:03:39.377] >> [INFO] [RELAY] flow 10.203.113.2:54119 -> 151.101.3.6:443 down: first 5776B
+[23:03:39.740] >> [INFO] [RELAY] utun SYN 10.203.113.2:54121 -> 151.101.3.6:443
+[23:03:39.741] >> [INFO] [RELAY] flow 10.203.113.2:54121 -> 151.101.3.6:443 opened
+[23:03:39.741] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:39.743] >> [INFO] [RELAY] flow 10.203.113.2:54121 -> 151.101.3.6:443 up: first 1400B
+[23:03:39.976] >> [INFO] [RELAY] direct-tcpip open ok: 151.101.3.6:443
+[23:03:40.182] >> [INFO] [RELAY] utun SYN 10.203.113.2:54122 -> 172.217.114.4:443
+[23:03:40.182] >> [INFO] [RELAY] flow 10.203.113.2:54122 -> 172.217.114.4:443 opened
+[23:03:40.183] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:40.184] >> [INFO] [RELAY] flow 10.203.113.2:54122 -> 172.217.114.4:443 up: first 1400B
+[23:03:40.239] >> [INFO] [RELAY] flow 10.203.113.2:54121 -> 151.101.3.6:443 down: first 6537B
+[23:03:40.304] >> [INFO] [RELAY] direct-tcpip open ok: 172.217.114.4:443
+[23:03:40.350] >> [INFO] [RELAY] flow 10.203.113.2:54101 -> 172.217.119.4:443 server closed (up=1542B down=5564B); FIN to phone
+[23:03:40.509] >> [INFO] [RELAY] flow 10.203.113.2:54122 -> 172.217.114.4:443 down: first 5563B
+[23:03:41.086] >> [INFO] [RELAY] utun SYN 10.203.113.2:54123 -> 172.253.144.102:443
+[23:03:41.087] >> [INFO] [RELAY] flow 10.203.113.2:54123 -> 172.253.144.102:443 opened
+[23:03:41.087] >> [INFO] [RELAY] direct-tcpip channel attached (ready for splice)
+[23:03:41.089] >> [INFO] [RELAY] flow 10.203.113.2:54123 -> 172.253.144.102:443 up: first 1400B
+[23:03:41.206] >> [INFO] [RELAY] direct-tcpip open ok: 172.253.144.102:443
+[23:03:41.377] >> [INFO] [RELAY] flow 10.203.113.2:54123 -> 172.253.144.102:443 down: first 5786B
+[23:03:42.034] >> [INFO] [TUNNEL] Tunnel counters [+12s]: utun read=1577 written=0 replied=442 sessions=92 phase=ready proto[v4tcp=800 v4udp=765 v4other=12 v6=0 nonIP=0]
+[23:03:42.047] ## [SYSTEM] [SELFTEST] starting post-connect traffic checks
+[23:03:42.048] >> [INFO] [SELFTEST] app-ifaces [anpi0 fam=18,awdl0 fam=18,awdl0 v6,en0 192.168.8.100/24,en0 fam=18,en0 v6,en1 fam=18,en2 fam=18,ipsec0 fam=18,ipsec1 fam=18,ipsec2 fam=18,ipsec3 fam=18,ipsec4 fam=18,ipsec5 fam=18,ipsec5 v6,ipsec5 v6,ipsec6 fam=18,ipsec6 v6,ipsec6 v6,llw0 fam=18,llw0 v6,pdp_ip1 fam=18,pdp_ip1 v6,pdp_ip1 v6,pdp_ip1 v6,rd0 fam=18,rd0 v6,rd0 v6,utun0 fam=18,utun0 v6,utun1 fam=18,utun1 v6,utun2 fam=18,utun2 v6,utun3 fam=18,utun3 v6,utun4 10.203.113.2/24,utun4 fam=18]
+[23:03:42.048] >> [INFO] [SELFTEST] utun read before=1577
+[23:03:42.048] >> [INFO] [SELFTEST] NWPath status=satisfied ifs=[utun4:other,utun4:other,en0:wifi] expensive=false v4=true v6=false gateways=[]
+[23:03:42.049] >> [INFO] [SELFTEST] probe 8.8.8.8:443 state=preparing
+[23:03:42.051] >> [INFO] [SELFTEST] probe 8.8.8.8:443 state=ready
+[23:03:42.051] ++ [SUCCESS] [SELFTEST] system TCP 8.8.8.8:443 OK (2 ms) — system routes traffic, DNS/HTTP layer suspect
+[23:03:42.051] >> [INFO] [SELFTEST] probe 8.8.8.8:443 state=cancelled
+[23:03:42.634] >> [INFO] [SELFTEST] egress service https://api.ipify.org -> 192.250.228.44
+[23:03:42.635] ++ [SUCCESS] [SELFTEST] egress 192.250.228.44 == server -> PASS (traffic via server)
+[23:03:50.833] XX [ERROR] [SELFTEST] https check failed: The operation couldn’t be completed. (NSURLErrorDomain error -1001.) [TIMEOUT: no reply within window — SYN never answered (routing stall) or upstream silent]
+[23:03:50.834] ## [SYSTEM] [SELFTEST] traffic checks finished
+[23:03:50.851] >> [INFO] [SELFTEST] utun read after=1688 (delta=111)
+==================================================================
+                        END OF LOG DUMP                           
+==================================================================
