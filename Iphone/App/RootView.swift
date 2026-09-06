@@ -1707,12 +1707,99 @@ struct DNSView: View {
                     .font(.openSans(12))
                     .foregroundStyle(Color.octGray60)
                     .padding(.horizontal, 16)
+                Text(model.copy.text(.dnsPresetsHint))
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+
+                // Curated public presets: tap to fill the fields with a known
+                // good resolver (incl. content-filtering ones). The manual
+                // fields stay editable — a preset is just a quick start.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("PUBLIC PRESETS")
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(DNSPresets.all.enumerated()), id: \.element.id) { index, preset in
+                            if index > 0 {
+                                Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            }
+                            presetRow(preset)
+                        }
+                    }
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
             }
             .padding(16)
         }
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.dnsSettings))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func presetRow(_ preset: DNSPreset) -> some View {
+        let selected = preset.matches(primary: model.settings.primaryDNS, secondary: model.settings.secondaryDNS)
+        return Button {
+            // Tapping a preset turns custom DNS on (a preset IS a custom
+            // choice) and fills the fields; applied on the next connect.
+            model.settings.useCustomDNS = true
+            model.settings.primaryDNS = preset.primary
+            model.settings.secondaryDNS = preset.secondary
+            ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary)) — \(presetFilterText(preset))")
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(preset.name)
+                            .font(.openSans(15, weight: .medium))
+                            .foregroundStyle(Color.octGray100)
+                        filterBadge(preset)
+                    }
+                    Text("\(preset.primary) • \(preset.secondary)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.octGray60)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+            }
+            .padding(14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// One-word badge naming what the resolver blocks.
+    @ViewBuilder
+    private func filterBadge(_ preset: DNSPreset) -> some View {
+        let (text, color): (String, Color) = {
+            switch preset.filter {
+            case .none: return ("NO FILTER", Color.octGray40)
+            case .malware: return ("MALWARE+", Color(red: 0.13, green: 0.44, blue: 0.85))
+            case .ads: return ("ADS+", Color(red: 0.85, green: 0.45, blue: 0.1))
+            case .family: return ("FAMILY", Color(red: 0.16, green: 0.62, blue: 0.35))
+            }
+        }()
+        Text(text)
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+    }
+
+    private func presetFilterText(_ preset: DNSPreset) -> String {
+        switch preset.filter {
+        case .none: return "no filtering"
+        case .malware: return "blocks malware & phishing"
+        case .ads: return "blocks ads & trackers"
+        case .family: return "blocks adult content (family-safe)"
+        }
     }
 
     private func dnsField(label: String, text: Binding<String>) -> some View {

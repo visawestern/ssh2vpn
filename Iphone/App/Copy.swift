@@ -44,6 +44,8 @@ enum CopyKey {
     case debugSection, enableLogging, enableLoggingDesc
     // Free-time quota / rewarded ads
     case freeTimeLeft, watchAdPlus3h
+    // DNS presets
+    case dnsPresetsHint
 }
 
 struct AppCopy {
@@ -91,6 +93,7 @@ struct AppCopy {
         .sshTimeout: "Connection timed out", .unknownError: "Unknown error",
         .vpnProtocol: "VPN Protocol", .ssh2Recommended: "SSH2 is recommended. It provides the best security for your VPN tunnel.",
         .freeTimeLeft: "TIME LEFT", .watchAdPlus3h: "+3h free",
+        .dnsPresetsHint: "Applied on the next connection. Invalid entries are ignored with a log warning.",
         .ssh2Desc: "Secure Shell v2 with tunnel", .sshLegacy: "Legacy Secure Shell",
         .useCustomDNS: "Use Custom DNS", .primaryDNS: "Primary DNS", .secondaryDNS: "Secondary DNS",
         .customDNSHint: "Custom DNS servers are used when the VPN tunnel is active.",
@@ -102,6 +105,7 @@ struct AppCopy {
     // MARK: - Russian
     private let russian: [CopyKey: String] = [
         .freeTimeLeft: "ОСТАЛОСЬ ВРЕМЕНИ", .watchAdPlus3h: "+3ч бесплатно",
+        .dnsPresetsHint: "Применится при следующем подключении. Неверные адреса игнорируются с записью в лог.",
         .chooseLanguage: "Выберите язык", .selectLanguageHint: "Выберите язык SSH2VPN", .connected: "Подключено",
         .connecting: "Подключение…", .disconnected: "Отключено", .connect: "Подключить", .disconnect: "Отключить",
         .ready: "Готов", .yourVPS: "Ваш VPS", .addExistingServer: "Добавить свой сервер", .addServer: "Добавить сервер",
