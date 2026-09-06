@@ -254,3 +254,19 @@ Entries: 247
 ==================================================================
                         END OF LOG DUMP                           
 ==================================================================
+==================================================================
+VERIFICATION ADDENDUM (2026-09-06)
+==================================================================
+On-device verification after commits 5cc3ebe + e4b459c:
+
+- Throughput: MSS segmentation (1400B segments toward phone) + fast
+  pool scale-out (4 channels/connection soft cap, whole deficit
+  launched at once) visibly increased browsing/download speed.
+  User-confirmed on iPhone 16e against the Singapore VPS.
+- Self-healing: mid-connect cancels and disconnects no longer leave
+  the phone without internet; zombie-tunnel watchdog (HEAL tag)
+  unwinds dead utun routes automatically when iOS flakes.
+- Stats strip, free-time quota and rewarded-ad stub verified working.
+
+Status: end-to-end traffic, throughput and stability all confirmed
+on device.
