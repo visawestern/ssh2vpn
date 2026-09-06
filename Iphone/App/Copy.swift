@@ -54,6 +54,7 @@ enum CopyKey {
     case dnsFilterMalware, dnsFilterAds
     case dnsEditRule, dnsEditRuleTitle, dnsSaveRule
     case dnsRuleScope, dnsRuleScopeExact, dnsRuleScopeSubtree
+    case failureFreeTimeExhausted
     case chipNoFilter, chipPrivacy, chipPhishing, chipTrackers, chipAdult, chipSafeSearch
     case dnsInvalidDomain, dnsInvalidIP, dnsDuplicateRule
     case dnsRulesCount, dnsRulesCountPlural
@@ -75,6 +76,7 @@ struct AppCopy {
 
     // MARK: - English
     private let english: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Free time is over. Watch an ad for +3 hours.",
         .dnsRuleScope: "Applies to", .dnsRuleScopeExact: "This domain only", .dnsRuleScopeSubtree: "Domain + subdomains",
         .dnsEditRule: "Edit rule", .dnsEditRuleTitle: "Edit DNS rule", .dnsSaveRule: "Save",
         .chipNoFilter: "NO FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
@@ -130,6 +132,7 @@ struct AppCopy {
 
     // MARK: - Russian
     private let russian: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Бесплатное время закончилось. Посмотрите рекламу, чтобы получить +3 часа.",
         .dnsRuleScope: "Действует на", .dnsRuleScopeExact: "Только этот домен", .dnsRuleScopeSubtree: "Домен + поддомены",
         .dnsEditRule: "Изменить правило", .dnsEditRuleTitle: "Изменение DNS-правила", .dnsSaveRule: "Сохранить",
         .chipNoFilter: "БЕЗ ФИЛЬТРА", .chipPrivacy: "ПРИВАТНОСТЬ", .chipPhishing: "ФИШИНГ+",
@@ -186,6 +189,7 @@ struct AppCopy {
 
     // MARK: - Spanish
     private let spanish: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Se acabó el tiempo gratis. Mira un anuncio para conseguir +3 horas.",
         .dnsRuleScope: "Se aplica a", .dnsRuleScopeExact: "Solo este dominio", .dnsRuleScopeSubtree: "Dominio + subdominios",
         .dnsEditRule: "Editar regla", .dnsEditRuleTitle: "Editar regla DNS", .dnsSaveRule: "Guardar",
         .chipNoFilter: "SIN FILTRO", .chipPrivacy: "PRIVACIDAD", .chipPhishing: "PHISHING+",
@@ -235,6 +239,7 @@ struct AppCopy {
 
     // MARK: - German
     private let german: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Die Gratiszeit ist vorbei. Schau eine Werbung für +3 Stunden.",
         .dnsRuleScope: "Gilt für", .dnsRuleScopeExact: "Nur diese Domain", .dnsRuleScopeSubtree: "Domain + Subdomains",
         .dnsEditRule: "Regel bearbeiten", .dnsEditRuleTitle: "DNS-Regel bearbeiten", .dnsSaveRule: "Speichern",
         .chipNoFilter: "OHNE FILTER", .chipPrivacy: "PRIVATSPHÄRE", .chipPhishing: "PHISHING+",
@@ -284,6 +289,7 @@ struct AppCopy {
 
     // MARK: - Japanese
     private let japanese: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "無料時間が終了しました。動画を見ると+3時間もらえます。",
         .dnsRuleScope: "適用範囲", .dnsRuleScopeExact: "このドメインのみ", .dnsRuleScopeSubtree: "ドメイン + サブドメイン",
         .dnsEditRule: "ルールを編集", .dnsEditRuleTitle: "DNSルールの編集", .dnsSaveRule: "保存",
         .chipNoFilter: "フィルタなし", .chipPrivacy: "プライバシー", .chipPhishing: "フィッシング+",
@@ -325,6 +331,7 @@ struct AppCopy {
 
     // MARK: - Chinese (Simplified)
     private let chinese: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "免费时长已用完。观看广告可获得 +3 小时。",
         .dnsRuleScope: "作用于", .dnsRuleScopeExact: "仅此域名", .dnsRuleScopeSubtree: "域名 + 子域名",
         .dnsEditRule: "编辑规则", .dnsEditRuleTitle: "编辑 DNS 规则", .dnsSaveRule: "保存",
         .chipNoFilter: "无过滤", .chipPrivacy: "隐私", .chipPhishing: "钓鱼+",
@@ -364,6 +371,7 @@ struct AppCopy {
 
     // MARK: - French
     private let french: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Le temps gratuit est écoulé. Regardez une pub pour +3 heures.",
         .dnsRuleScope: "S'applique à", .dnsRuleScopeExact: "Ce domaine seulement", .dnsRuleScopeSubtree: "Domaine + sous-domaines",
         .dnsEditRule: "Modifier la règle", .dnsEditRuleTitle: "Modifier la règle DNS", .dnsSaveRule: "Enregistrer",
         .chipNoFilter: "SANS FILTRE", .chipPrivacy: "CONFIDENTIALITÉ", .chipPhishing: "PHISHING+",
@@ -413,6 +421,7 @@ struct AppCopy {
 
     // MARK: - Italian
     private let italian: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Il tempo gratuito è finito. Guarda una pubblicità per +3 ore.",
         .dnsRuleScope: "Si applica a", .dnsRuleScopeExact: "Solo questo dominio", .dnsRuleScopeSubtree: "Dominio + sottodomini",
         .dnsEditRule: "Modifica regola", .dnsEditRuleTitle: "Modifica regola DNS", .dnsSaveRule: "Salva",
         .chipNoFilter: "SENFILTRI", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
@@ -462,6 +471,7 @@ struct AppCopy {
 
     // MARK: - Portuguese (Brazil)
     private let portuguese: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "O tempo grátis acabou. Assista um anúncio para +3 horas.",
         .dnsRuleScope: "Aplica-se a", .dnsRuleScopeExact: "Apenas este domínio", .dnsRuleScopeSubtree: "Domínio + subdomínios",
         .dnsEditRule: "Editar regra", .dnsEditRuleTitle: "Editar regra DNS", .dnsSaveRule: "Salvar",
         .chipNoFilter: "SEM FILTRO", .chipPrivacy: "PRIVACIDADE", .chipPhishing: "PHISHING+",
@@ -511,6 +521,7 @@ struct AppCopy {
 
     // MARK: - Korean
     private let korean: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "무료 시간이 끝났습니다. 광고를 보면 +3시간을 얻습니다.",
         .dnsRuleScope: "적용 대상", .dnsRuleScopeExact: "이 도메인만", .dnsRuleScopeSubtree: "도메인 + 하위 도메인",
         .dnsEditRule: "규칙 편집", .dnsEditRuleTitle: "DNS 규칙 편집", .dnsSaveRule: "저장",
         .chipNoFilter: "필터 없음", .chipPrivacy: "개인정보", .chipPhishing: "피싱+",
@@ -551,6 +562,7 @@ struct AppCopy {
 
     // MARK: - Arabic
     private let arabic: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "انتهى الوقت المجاني. شاهد إعلانًا للحصول على +3 ساعات.",
         .dnsRuleScope: "ينطبق على", .dnsRuleScopeExact: "هذا النطاق فقط", .dnsRuleScopeSubtree: "النطاق + النطاقات الفرعية",
         .dnsEditRule: "تعديل القاعدة", .dnsEditRuleTitle: "تعديل قاعدة DNS", .dnsSaveRule: "حفظ",
         .chipNoFilter: "بدون فلتر", .chipPrivacy: "خصوصية", .chipPhishing: "تصيّد+",
@@ -597,6 +609,7 @@ struct AppCopy {
 
     // MARK: - Hindi
     private let hindi: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "फ़्री समय समाप्त हुआ। +3 घंटे के लिए विज्ञापन देखें।",
         .dnsRuleScope: "लागू होता है", .dnsRuleScopeExact: "केवल यह डोमेन", .dnsRuleScopeSubtree: "डोमेन + सबडोमेन",
         .dnsEditRule: "नियम संपादित करें", .dnsEditRuleTitle: "DNS नियम संपादित करें", .dnsSaveRule: "सहेजें",
         .chipNoFilter: "बिना फ़िल्टर", .chipPrivacy: "गोपनीयता", .chipPhishing: "फ़िशिंग+",
@@ -644,6 +657,7 @@ struct AppCopy {
 
     // MARK: - Thai
     private let thai: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "หมดเวลาฟรีแล้ว ดูโฆษณาเพื่อรับ +3 ชม.",
         .dnsRuleScope: "ใช้กับ", .dnsRuleScopeExact: "โดเมนนี้เท่านั้น", .dnsRuleScopeSubtree: "โดเมน + โดเมนย่อย",
         .dnsEditRule: "แก้ไขกฎ", .dnsEditRuleTitle: "แก้ไขกฎ DNS", .dnsSaveRule: "บันทึก",
         .chipNoFilter: "ไม่กรอง", .chipPrivacy: "ความเป็นส่วนตัว", .chipPhishing: "ฟิชชิง+",
@@ -692,6 +706,7 @@ struct AppCopy {
 
     // MARK: - Turkish
     private let turkish: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Ücretsiz süre doldu. +3 saat için reklam izleyin.",
         .dnsRuleScope: "Şunlara uygulanır", .dnsRuleScopeExact: "Yalnızca bu alan adı", .dnsRuleScopeSubtree: "Alan adı + alt alan adları",
         .dnsEditRule: "Kuralı düzenle", .dnsEditRuleTitle: "DNS kuralını düzenle", .dnsSaveRule: "Kaydet",
         .chipNoFilter: "FİLTRESİZ", .chipPrivacy: "GİZLİLİK", .chipPhishing: "OLTALAMA+",
@@ -740,6 +755,7 @@ struct AppCopy {
 
     // MARK: - Polish
     private let polish: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Bezpłatny czas się skończył. Obejrzyj reklamę, aby dostać +3 godziny.",
         .dnsRuleScope: "Dotyczy", .dnsRuleScopeExact: "Tylko tej domeny", .dnsRuleScopeSubtree: "Domeny + subdomeny",
         .dnsEditRule: "Edytuj zasadę", .dnsEditRuleTitle: "Edytuj zasadę DNS", .dnsSaveRule: "Zapisz",
         .chipNoFilter: "BEZ FILTRA", .chipPrivacy: "PRYWATNOŚĆ", .chipPhishing: "PHISHING+",
@@ -789,6 +805,7 @@ struct AppCopy {
 
     // MARK: - Dutch
     private let dutch: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "De gratis tijd is voorbij. Bekijk een advertentie voor +3 uur.",
         .dnsRuleScope: "Geldt voor", .dnsRuleScopeExact: "Alleen dit domein", .dnsRuleScopeSubtree: "Domein + subdomeinen",
         .dnsEditRule: "Regel bewerken", .dnsEditRuleTitle: "DNS-regel bewerken", .dnsSaveRule: "Bewaren",
         .chipNoFilter: "ZONDER FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
@@ -837,6 +854,7 @@ struct AppCopy {
 
     // MARK: - Vietnamese
     private let vietnamese: [CopyKey: String] = [
+        .failureFreeTimeExhausted: "Thời gian miễn phí đã hết. Xem quảng cáo để có +3 giờ.",
         .dnsRuleScope: "Áp dụng cho", .dnsRuleScopeExact: "Chỉ tên miền này", .dnsRuleScopeSubtree: "Tên miền + tên miền con",
         .dnsEditRule: "Sửa quy tắc", .dnsEditRuleTitle: "Sửa quy tắc DNS", .dnsSaveRule: "Lưu",
         .chipNoFilter: "KHÔNG LỌC", .chipPrivacy: "RIÊNG TƯ", .chipPhishing: "LỪA ĐẢO+",

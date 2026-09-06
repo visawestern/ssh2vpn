@@ -157,62 +157,69 @@ struct ConnectView: View {
     @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Top Status Card ("Unprotected" / "Protected")
-            statusCard
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-
-            // Upper area with World Map — shrinks in compact height (iPhone
-            // landscape / iPad Split View) so the power button never falls
-            // off-screen; capped on iPad so it doesn't blow up either.
-            ZStack(alignment: .center) {
-                WorldMapView()
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
-            }
-            .frame(maxHeight: vSize == .compact ? 120 : 220)
-            .frame(maxWidth: 640)
-
-            Spacer(minLength: vSize == .compact ? 4 : 16)
-
-            // Central Power Button
-            powerButton
-                .padding(.bottom, 12)
-
-            // Active connection time (shown while connected)
-            if case .connected = model.connection {
-                Text(formatTime(TimeInterval(model.connectionActiveSeconds)))
-                    .font(.system(size: 15, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.octGray60)
-                    .padding(.bottom, 8)
-
-                // Live tunnel telemetry: SSH pool size, live data channels,
-                // transferred bytes, and the minutely ping.
-                statsStrip
+        // Scrollable so landscape (compact height) shows everything — the
+        // compact variants compress, and what still doesn't fit scrolls
+        // instead of vanishing behind the edges with no way to reach it.
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                // Top Status Card ("Unprotected" / "Protected")
+                statusCard
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            } else if case .failed(let msg) = model.connection {
-                Text("connectionError: \(msg)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 8)
+                    .padding(.top, 8)
+
+                // Upper area with World Map — shrinks in compact height
+                // (iPhone landscape / iPad Split View) so the power button
+                // never falls off-screen; capped on iPad so it doesn't blow
+                // up either.
+                ZStack(alignment: .center) {
+                    WorldMapView()
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
+                }
+                .frame(maxHeight: vSize == .compact ? 120 : 220)
+                .frame(maxWidth: 640)
+
+                Spacer(minLength: vSize == .compact ? 4 : 16)
+
+                // Central Power Button
+                powerButton
+                    .padding(.bottom, 12)
+
+                // Active connection time (shown while connected)
+                if case .connected = model.connection {
+                    Text(formatTime(TimeInterval(model.connectionActiveSeconds)))
+                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.bottom, 8)
+
+                    // Live tunnel telemetry: SSH pool size, live data channels,
+                    // transferred bytes, and the minutely ping.
+                    statsStrip
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                } else if case .failed(let msg) = model.connection {
+                    Text(msg == "freeTimeExhausted" ? model.copy.text(.failureFreeTimeExhausted) : "connectionError: \(msg)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+                }
+
+                Spacer(minLength: 8)
+
+                // Free-time quota + rewarded-ad refill (stub ad for now)
+                quotaBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, vSize == .compact ? 6 : 10)
+
+                // Selected Location Card
+                selectedLocationCard
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, vSize == .compact ? 8 : 20)
             }
-
-            Spacer(minLength: 8)
-
-            // Free-time quota + rewarded-ad refill (stub ad for now)
-            quotaBar
-                .padding(.horizontal, 16)
-                .padding(.bottom, vSize == .compact ? 6 : 10)
-
-            // Selected Location Card
-            selectedLocationCard
-                .padding(.horizontal, 16)
-                .padding(.bottom, vSize == .compact ? 8 : 20)
+            .frame(maxWidth: .infinity)
         }
         .background(Color.appBg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
