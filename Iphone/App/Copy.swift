@@ -51,7 +51,9 @@ enum CopyKey {
     case dnsAddRule, dnsAddRuleDomain, dnsAddRuleDomainPlaceholder, dnsAddRuleIP, dnsAddRuleIPPlaceholder
     case dnsAddRuleMode, dnsAddRuleModeBlock, dnsAddRuleModeOverride, dnsAddRuleCancel, dnsAddRuleAdd
     case dnsRuleBlocked, dnsRuleOverride, dnsRulesEmpty, dnsRulesHint, dnsRuleDelete
-    case dnsFilterNone, dnsFilterMalware, dnsFilterAds, dnsFilterFamily
+    case dnsFilterMalware, dnsFilterAds
+    case dnsEditRule, dnsEditRuleTitle, dnsSaveRule
+    case chipNoFilter, chipPrivacy, chipPhishing, chipTrackers, chipAdult, chipSafeSearch
     case dnsInvalidDomain, dnsInvalidIP, dnsDuplicateRule
     case dnsRulesCount, dnsRulesCountPlural
 }
@@ -72,6 +74,9 @@ struct AppCopy {
 
     // MARK: - English
     private let english: [CopyKey: String] = [
+        .dnsEditRule: "Edit rule", .dnsEditRuleTitle: "Edit DNS rule", .dnsSaveRule: "Save",
+        .chipNoFilter: "NO FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRACKERS+", .chipAdult: "ADULT 18+", .chipSafeSearch: "SAFE SEARCH",
         .dnsPresetsTitle: "PUBLIC PRESETS", .dnsUseCustomInfoTitle: "Custom DNS servers",
         .dnsUseCustomInfoBody: "These servers resolve all domain names while the VPN tunnel is active. Pick a public preset or enter your own. Applied on the next connection.",
         .dnsLocalRulesTitle: "LOCAL RULES", .dnsLocalRulesInfoTitle: "Local DNS rules",
@@ -82,8 +87,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Cancel", .dnsAddRuleAdd: "Add", .dnsRuleBlocked: "BLOCKED", .dnsRuleOverride: "OVERRIDE",
         .dnsRulesEmpty: "No local rules yet. Tap + to block a domain or map it to an IP.",
         .dnsRulesHint: "Blocked domains answer 0.0.0.0 instantly, overrides answer your IP — no upstream query ever leaves the device. Applied on the next connection.",
-        .dnsRuleDelete: "Delete", .dnsFilterNone: "NO FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILY",
-        .dnsInvalidDomain: "Invalid domain (e.g. ads.example.com)", .dnsInvalidIP: "Invalid IPv4 address", .dnsDuplicateRule: "A rule for this domain already exists",
+        .dnsRuleDelete: "Delete",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+",        .dnsInvalidDomain: "Invalid domain (e.g. ads.example.com)", .dnsInvalidIP: "Invalid IPv4 address", .dnsDuplicateRule: "A rule for this domain already exists",
         .dnsRulesCount: "rules", .dnsRulesCountPlural: "rules",
         .chooseLanguage: "Choose your language", .selectLanguageHint: "Select the language for SSH2VPN",
         .connected: "Connected", .connecting: "Connecting…", .disconnected: "Disconnected", .connect: "Connect",
@@ -124,6 +128,9 @@ struct AppCopy {
 
     // MARK: - Russian
     private let russian: [CopyKey: String] = [
+        .dnsEditRule: "Изменить правило", .dnsEditRuleTitle: "Изменение DNS-правила", .dnsSaveRule: "Сохранить",
+        .chipNoFilter: "БЕЗ ФИЛЬТРА", .chipPrivacy: "ПРИВАТНОСТЬ", .chipPhishing: "ФИШИНГ+",
+        .chipTrackers: "ТРЕКЕРЫ+", .chipAdult: "18+", .chipSafeSearch: "БЕЗОП. ПОИСК",
         .dnsPresetsTitle: "ПУБЛИЧНЫЕ ПРЕСЕТЫ", .dnsUseCustomInfoTitle: "Пользовательские DNS-серверы",
         .dnsUseCustomInfoBody: "Эти серверы разрешают все доменные имена, пока активен VPN-туннель. Выберите публичный пресет или введите свои. Применится при следующем подключении.",
         .dnsLocalRulesTitle: "ЛОКАЛЬНЫЕ ПРАВИЛА", .dnsLocalRulesInfoTitle: "Локальные DNS-правила",
@@ -134,8 +141,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Отмена", .dnsAddRuleAdd: "Добавить", .dnsRuleBlocked: "БЛОКИРОВКА", .dnsRuleOverride: "ПЕРЕОПРЕДЕЛЕНИЕ",
         .dnsRulesEmpty: "Локальных правил пока нет. Нажмите +, чтобы заблокировать домен или указать для него IP.",
         .dnsRulesHint: "Заблокированные домены мгновенно получают 0.0.0.0, переопределённые — ваш IP: запрос не покидает устройство. Применится при следующем подключении.",
-        .dnsRuleDelete: "Удалить", .dnsFilterNone: "БЕЗ ФИЛЬТРА", .dnsFilterMalware: "ВИРУСЫ+", .dnsFilterAds: "РЕКЛАМА+", .dnsFilterFamily: "СЕМЕЙНЫЙ",
-        .dnsInvalidDomain: "Некорректный домен (напр. ads.example.com)", .dnsInvalidIP: "Некорректный IPv4-адрес", .dnsDuplicateRule: "Правило для этого домена уже существует",
+        .dnsRuleDelete: "Удалить",.dnsFilterMalware: "ВИРУСЫ+", .dnsFilterAds: "РЕКЛАМА+",        .dnsInvalidDomain: "Некорректный домен (напр. ads.example.com)", .dnsInvalidIP: "Некорректный IPv4-адрес", .dnsDuplicateRule: "Правило для этого домена уже существует",
         .dnsRulesCount: "правил", .dnsRulesCountPlural: "правил",
         .freeTimeLeft: "ОСТАЛОСЬ ВРЕМЕНИ", .watchAdPlus3h: "+3ч бесплатно",
         .chooseLanguage: "Выберите язык", .selectLanguageHint: "Выберите язык SSH2VPN", .connected: "Подключено",
@@ -177,6 +183,9 @@ struct AppCopy {
 
     // MARK: - Spanish
     private let spanish: [CopyKey: String] = [
+        .dnsEditRule: "Editar regla", .dnsEditRuleTitle: "Editar regla DNS", .dnsSaveRule: "Guardar",
+        .chipNoFilter: "SIN FILTRO", .chipPrivacy: "PRIVACIDAD", .chipPhishing: "PHISHING+",
+        .chipTrackers: "RASTREADORES+", .chipAdult: "ADULTOS +18", .chipSafeSearch: "BÚSQUEDA SEGURA",
         .dnsPresetsTitle: "PRESETS PÚBLICOS", .dnsUseCustomInfoTitle: "Servidores DNS personalizados",
         .dnsUseCustomInfoBody: "Estos servidores resuelven todos los nombres de dominio mientras el túnel VPN está activo. Elige un preset público o introduce los tuyos. Se aplica en la próxima conexión.",
         .dnsLocalRulesTitle: "REGLAS LOCALES", .dnsLocalRulesInfoTitle: "Reglas DNS locales",
@@ -187,8 +196,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Cancelar", .dnsAddRuleAdd: "Añadir", .dnsRuleBlocked: "BLOQUEADO", .dnsRuleOverride: "REDIRECCIÓN",
         .dnsRulesEmpty: "Aún no hay reglas locales. Pulsa + para bloquear un dominio o asignarle una IP.",
         .dnsRulesHint: "Los dominios bloqueados responden 0.0.0.0 al instante; las redirecciones devuelven tu IP: la consulta nunca sale del dispositivo. Se aplica en la próxima conexión.",
-        .dnsRuleDelete: "Eliminar", .dnsFilterNone: "SIN FILTRO", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANUNCIOS+", .dnsFilterFamily: "FAMILIAR",
-        .dnsInvalidDomain: "Dominio no válido (p. ej. ads.example.com)", .dnsInvalidIP: "Dirección IPv4 no válida", .dnsDuplicateRule: "Ya existe una regla para este dominio",
+        .dnsRuleDelete: "Eliminar",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANUNCIOS+",        .dnsInvalidDomain: "Dominio no válido (p. ej. ads.example.com)", .dnsInvalidIP: "Dirección IPv4 no válida", .dnsDuplicateRule: "Ya existe una regla para este dominio",
         .dnsRulesCount: "reglas", .dnsRulesCountPlural: "reglas",
         .chooseLanguage: "Elige tu idioma", .selectLanguageHint: "Selecciona el idioma de SSH2VPN",
         .connected: "Conectado", .connecting: "Conectando…", .disconnected: "Desconectado", .connect: "Conectar",
@@ -223,6 +231,9 @@ struct AppCopy {
 
     // MARK: - German
     private let german: [CopyKey: String] = [
+        .dnsEditRule: "Regel bearbeiten", .dnsEditRuleTitle: "DNS-Regel bearbeiten", .dnsSaveRule: "Speichern",
+        .chipNoFilter: "OHNE FILTER", .chipPrivacy: "PRIVATSPHÄRE", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRACKER+", .chipAdult: "ERWACHSEN 18+", .chipSafeSearch: "SICHERE SUCHE",
         .dnsPresetsTitle: "ÖFFENTLICHE VOREINSTELLUNGEN", .dnsUseCustomInfoTitle: "Eigene DNS-Server",
         .dnsUseCustomInfoBody: "Diese Server lösen alle Domainnamen auf, solange der VPN-Tunnel aktiv ist. Wähle eine öffentliche Voreinstellung oder gib eigene ein. Wirkt bei der nächsten Verbindung.",
         .dnsLocalRulesTitle: "LOKALE REGELN", .dnsLocalRulesInfoTitle: "Lokale DNS-Regeln",
@@ -233,8 +244,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Abbrechen", .dnsAddRuleAdd: "Hinzufügen", .dnsRuleBlocked: "GESPERRT", .dnsRuleOverride: "UMLEITUNG",
         .dnsRulesEmpty: "Noch keine lokalen Regeln. Tippe +, um eine Domain zu sperren oder auf eine IP zu mappen.",
         .dnsRulesHint: "Gesperrte Domains antworten sofort mit 0.0.0.0, Umleitungen mit deiner IP — die Abfrage verlässt nie das Gerät. Wirkt bei der nächsten Verbindung.",
-        .dnsRuleDelete: "Löschen", .dnsFilterNone: "OHNE FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILIE",
-        .dnsInvalidDomain: "Ungültige Domain (z. B. ads.example.com)", .dnsInvalidIP: "Ungültige IPv4-Adresse", .dnsDuplicateRule: "Für diese Domain existiert bereits eine Regel",
+        .dnsRuleDelete: "Löschen",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+",        .dnsInvalidDomain: "Ungültige Domain (z. B. ads.example.com)", .dnsInvalidIP: "Ungültige IPv4-Adresse", .dnsDuplicateRule: "Für diese Domain existiert bereits eine Regel",
         .dnsRulesCount: "Regeln", .dnsRulesCountPlural: "Regeln",
         .chooseLanguage: "Sprache wählen", .selectLanguageHint: "Sprache für SSH2VPN auswählen", .connected: "Verbunden",
         .connecting: "Verbinde…", .disconnected: "Getrennt", .connect: "Verbinden", .disconnect: "Trennen",
@@ -269,6 +279,9 @@ struct AppCopy {
 
     // MARK: - Japanese
     private let japanese: [CopyKey: String] = [
+        .dnsEditRule: "ルールを編集", .dnsEditRuleTitle: "DNSルールの編集", .dnsSaveRule: "保存",
+        .chipNoFilter: "フィルタなし", .chipPrivacy: "プライバシー", .chipPhishing: "フィッシング+",
+        .chipTrackers: "トラッカー+", .chipAdult: "18禁", .chipSafeSearch: "セーフサーチ",
         .dnsPresetsTitle: "パブリック プリセット", .dnsUseCustomInfoTitle: "カスタム DNS サーバー",
         .dnsUseCustomInfoBody: "VPNトンネルが有効な間、これらのサーバーがすべてのドメイン名を解決します。公開プリセットを選ぶか、独自のものを入力してください。次回接続時に適用されます。",
         .dnsLocalRulesTitle: "ローカルルール", .dnsLocalRulesInfoTitle: "ローカル DNS ルール",
@@ -279,8 +292,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "キャンセル", .dnsAddRuleAdd: "追加", .dnsRuleBlocked: "ブロック中", .dnsRuleOverride: "上書き",
         .dnsRulesEmpty: "ローカルルールはまだありません。+ をタップしてドメインをブロックまたは IP に割り当ててください。",
         .dnsRulesHint: "ブロックされたドメインは即座に 0.0.0.0 で、上書きはあなたの IP で応答します。問い合わせがデバイス外に出ることはありません。次回接続時に適用。",
-        .dnsRuleDelete: "削除", .dnsFilterNone: "フィルタなし", .dnsFilterMalware: "マルウェア+", .dnsFilterAds: "広告+", .dnsFilterFamily: "ファミリー",
-        .dnsInvalidDomain: "無効なドメイン（例: ads.example.com）", .dnsInvalidIP: "無効な IPv4 アドレス", .dnsDuplicateRule: "このドメインのルールは既に存在します",
+        .dnsRuleDelete: "削除",.dnsFilterMalware: "マルウェア+", .dnsFilterAds: "広告+",        .dnsInvalidDomain: "無効なドメイン（例: ads.example.com）", .dnsInvalidIP: "無効な IPv4 アドレス", .dnsDuplicateRule: "このドメインのルールは既に存在します",
         .dnsRulesCount: "件", .dnsRulesCountPlural: "件",
         .chooseLanguage: "言語を選択", .selectLanguageHint: "SSH2VPNの言語を選択してください", .connected: "接続済み", .connecting: "接続中…",
         .disconnected: "未接続", .connect: "接続", .disconnect: "切断", .ready: "準備完了", .yourVPS: "あなたのVPS",
@@ -307,6 +319,9 @@ struct AppCopy {
 
     // MARK: - Chinese (Simplified)
     private let chinese: [CopyKey: String] = [
+        .dnsEditRule: "编辑规则", .dnsEditRuleTitle: "编辑 DNS 规则", .dnsSaveRule: "保存",
+        .chipNoFilter: "无过滤", .chipPrivacy: "隐私", .chipPhishing: "钓鱼+",
+        .chipTrackers: "追踪器+", .chipAdult: "成人18+", .chipSafeSearch: "安全搜索",
         .dnsPresetsTitle: "公共预设", .dnsUseCustomInfoTitle: "自定义 DNS 服务器",
         .dnsUseCustomInfoBody: "VPN 隧道活跃期间，这些服务器解析所有域名。选择公共预设或输入自己的。下次连接时生效。",
         .dnsLocalRulesTitle: "本地规则", .dnsLocalRulesInfoTitle: "本地 DNS 规则",
@@ -317,8 +332,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "取消", .dnsAddRuleAdd: "添加", .dnsRuleBlocked: "已拦截", .dnsRuleOverride: "重定向",
         .dnsRulesEmpty: "暂无本地规则。点按 + 拦截域名或将其映射到 IP。",
         .dnsRulesHint: "被拦截的域名立即以 0.0.0.0 应答，重定向以您的 IP 应答 — 查询永不离开设备。下次连接时生效。",
-        .dnsRuleDelete: "删除", .dnsFilterNone: "无过滤", .dnsFilterMalware: "恶意+", .dnsFilterAds: "广告+", .dnsFilterFamily: "家庭",
-        .dnsInvalidDomain: "无效域名（如 ads.example.com）", .dnsInvalidIP: "无效的 IPv4 地址", .dnsDuplicateRule: "此域名已有规则",
+        .dnsRuleDelete: "删除",.dnsFilterMalware: "恶意+", .dnsFilterAds: "广告+",        .dnsInvalidDomain: "无效域名（如 ads.example.com）", .dnsInvalidIP: "无效的 IPv4 地址", .dnsDuplicateRule: "此域名已有规则",
         .dnsRulesCount: "条规则", .dnsRulesCountPlural: "条规则",
         .chooseLanguage: "选择语言", .selectLanguageHint: "选择 SSH2VPN 的语言", .connected: "已连接", .connecting: "连接中…",
         .disconnected: "未连接", .connect: "连接", .disconnect: "断开", .ready: "就绪", .yourVPS: "你的 VPS",
@@ -343,6 +357,9 @@ struct AppCopy {
 
     // MARK: - French
     private let french: [CopyKey: String] = [
+        .dnsEditRule: "Modifier la règle", .dnsEditRuleTitle: "Modifier la règle DNS", .dnsSaveRule: "Enregistrer",
+        .chipNoFilter: "SANS FILTRE", .chipPrivacy: "CONFIDENTIALITÉ", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRAQUEURS+", .chipAdult: "ADULTES 18+", .chipSafeSearch: "RECHERCHE SÛRE",
         .dnsPresetsTitle: "PRESETS PUBLICS", .dnsUseCustomInfoTitle: "Serveurs DNS personnalisés",
         .dnsUseCustomInfoBody: "Ces serveurs résolvent tous les noms de domaine tant que le tunnel VPN est actif. Choisissez un preset public ou saisissez les vôtres. Appliqué à la prochaine connexion.",
         .dnsLocalRulesTitle: "RÈGLES LOCALES", .dnsLocalRulesInfoTitle: "Règles DNS locales",
@@ -353,8 +370,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Annuler", .dnsAddRuleAdd: "Ajouter", .dnsRuleBlocked: "BLOQUÉ", .dnsRuleOverride: "REDIRECTION",
         .dnsRulesEmpty: "Aucune règle locale. Touchez + pour bloquer un domaine ou l'associer à une IP.",
         .dnsRulesHint: "Les domaines bloqués répondent instantanément 0.0.0.0, les redirections répondent votre IP — la requête ne quitte jamais l'appareil. Appliqué à la prochaine connexion.",
-        .dnsRuleDelete: "Supprimer", .dnsFilterNone: "SANS FILTRE", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUBS+", .dnsFilterFamily: "FAMILLE",
-        .dnsInvalidDomain: "Domaine invalide (ex. ads.example.com)", .dnsInvalidIP: "Adresse IPv4 invalide", .dnsDuplicateRule: "Une règle existe déjà pour ce domaine",
+        .dnsRuleDelete: "Supprimer",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUBS+",        .dnsInvalidDomain: "Domaine invalide (ex. ads.example.com)", .dnsInvalidIP: "Adresse IPv4 invalide", .dnsDuplicateRule: "Une règle existe déjà pour ce domaine",
         .dnsRulesCount: "règles", .dnsRulesCountPlural: "règles",
         .chooseLanguage: "Choisissez votre langue", .selectLanguageHint: "Sélectionnez la langue de SSH2VPN",
         .connected: "Connecté", .connecting: "Connexion…", .disconnected: "Déconnecté", .connect: "Connecter",
@@ -389,6 +405,9 @@ struct AppCopy {
 
     // MARK: - Italian
     private let italian: [CopyKey: String] = [
+        .dnsEditRule: "Modifica regola", .dnsEditRuleTitle: "Modifica regola DNS", .dnsSaveRule: "Salva",
+        .chipNoFilter: "SENFILTRI", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRACKER+", .chipAdult: "ADULTI 18+", .chipSafeSearch: "RICERCA SICURA",
         .dnsPresetsTitle: "PRESET PUBBLICI", .dnsUseCustomInfoTitle: "Server DNS personalizzati",
         .dnsUseCustomInfoBody: "Questi server risolvono tutti i nomi di dominio mentre il tunnel VPN è attivo. Scegli un preset pubblico o inserisci i tuoi. Applicato alla prossima connessione.",
         .dnsLocalRulesTitle: "REGOLE LOCALI", .dnsLocalRulesInfoTitle: "Regole DNS locali",
@@ -399,8 +418,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Annulla", .dnsAddRuleAdd: "Aggiungi", .dnsRuleBlocked: "BLOCCATO", .dnsRuleOverride: "REINDIRIZZO",
         .dnsRulesEmpty: "Nessuna regola locale. Tocca + per bloccare un dominio o associarlo a un IP.",
         .dnsRulesHint: "I domini bloccati rispondono subito 0.0.0.0, i reindirizzi rispondono col tuo IP — la query non lascia mai il dispositivo. Applicato alla prossima connessione.",
-        .dnsRuleDelete: "Elimina", .dnsFilterNone: "SENFILTRI", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUB+", .dnsFilterFamily: "FAMIGLIA",
-        .dnsInvalidDomain: "Dominio non valido (es. ads.example.com)", .dnsInvalidIP: "Indirizzo IPv4 non valido", .dnsDuplicateRule: "Esiste già una regola per questo dominio",
+        .dnsRuleDelete: "Elimina",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUB+",        .dnsInvalidDomain: "Dominio non valido (es. ads.example.com)", .dnsInvalidIP: "Indirizzo IPv4 non valido", .dnsDuplicateRule: "Esiste già una regola per questo dominio",
         .dnsRulesCount: "regole", .dnsRulesCountPlural: "regole",
         .chooseLanguage: "Scegli la tua lingua", .selectLanguageHint: "Seleziona la lingua di SSH2VPN",
         .connected: "Connesso", .connecting: "Connessione…", .disconnected: "Disconnesso", .connect: "Connetti",
@@ -435,6 +453,9 @@ struct AppCopy {
 
     // MARK: - Portuguese (Brazil)
     private let portuguese: [CopyKey: String] = [
+        .dnsEditRule: "Editar regra", .dnsEditRuleTitle: "Editar regra DNS", .dnsSaveRule: "Salvar",
+        .chipNoFilter: "SEM FILTRO", .chipPrivacy: "PRIVACIDADE", .chipPhishing: "PHISHING+",
+        .chipTrackers: "RASTREADORES+", .chipAdult: "ADULTOS +18", .chipSafeSearch: "BUSCA SEGURA",
         .dnsPresetsTitle: "PRESETS PÚBLICOS", .dnsUseCustomInfoTitle: "Servidores DNS personalizados",
         .dnsUseCustomInfoBody: "Estes servidores resolvem todos os nomes de domínio enquanto o túnel VPN está ativo. Escolha um preset público ou insira os seus. Aplicado na próxima conexão.",
         .dnsLocalRulesTitle: "REGRAS LOCAIS", .dnsLocalRulesInfoTitle: "Regras DNS locais",
@@ -445,8 +466,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Cancelar", .dnsAddRuleAdd: "Adicionar", .dnsRuleBlocked: "BLOQUEADO", .dnsRuleOverride: "REDIRECIONAMENTO",
         .dnsRulesEmpty: "Nenhuma regra local ainda. Toque em + para bloquear um domínio ou associá-lo a um IP.",
         .dnsRulesHint: "Domínios bloqueados respondem 0.0.0.0 instantaneamente, redirecionamentos respondem seu IP — a consulta nunca sai do dispositivo. Aplicado na próxima conexão.",
-        .dnsRuleDelete: "Excluir", .dnsFilterNone: "SEM FILTRO", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANÚNCIOS+", .dnsFilterFamily: "FAMÍLIA",
-        .dnsInvalidDomain: "Domínio inválido (ex. ads.example.com)", .dnsInvalidIP: "Endereço IPv4 inválido", .dnsDuplicateRule: "Já existe uma regra para este domínio",
+        .dnsRuleDelete: "Excluir",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANÚNCIOS+",        .dnsInvalidDomain: "Domínio inválido (ex. ads.example.com)", .dnsInvalidIP: "Endereço IPv4 inválido", .dnsDuplicateRule: "Já existe uma regra para este domínio",
         .dnsRulesCount: "regras", .dnsRulesCountPlural: "regras",
         .chooseLanguage: "Escolha seu idioma", .selectLanguageHint: "Selecione o idioma do SSH2VPN",
         .connected: "Conectado", .connecting: "Conectando…", .disconnected: "Desconectado", .connect: "Conectar",
@@ -481,6 +501,9 @@ struct AppCopy {
 
     // MARK: - Korean
     private let korean: [CopyKey: String] = [
+        .dnsEditRule: "규칙 편집", .dnsEditRuleTitle: "DNS 규칙 편집", .dnsSaveRule: "저장",
+        .chipNoFilter: "필터 없음", .chipPrivacy: "개인정보", .chipPhishing: "피싱+",
+        .chipTrackers: "트래커+", .chipAdult: "성인 19+", .chipSafeSearch: "세이프서치",
         .dnsPresetsTitle: "공개 프리셋", .dnsUseCustomInfoTitle: "사용자 지정 DNS 서버",
         .dnsUseCustomInfoBody: "VPN 터널이 활성화된 동안 이 서버들이 모든 도메인 이름을 확인합니다. 공개 프리셋을 선택하거나 직접 입력하세요. 다음 연결 때 적용됩니다.",
         .dnsLocalRulesTitle: "로컬 규칙", .dnsLocalRulesInfoTitle: "로컬 DNS 규칙",
@@ -491,8 +514,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "취소", .dnsAddRuleAdd: "추가", .dnsRuleBlocked: "차단됨", .dnsRuleOverride: "재정의",
         .dnsRulesEmpty: "로컬 규칙이 없습니다. +를 눌러 도메인을 차단하거나 IP에 연결하세요.",
         .dnsRulesHint: "차단된 도메인은 즉시 0.0.0.0으로, 재정의는 지정 IP로 응답합니다 — 조회가 기기를 벗어나지 않습니다. 다음 연결 때 적용.",
-        .dnsRuleDelete: "삭제", .dnsFilterNone: "필터 없음", .dnsFilterMalware: "악성+", .dnsFilterAds: "광고+", .dnsFilterFamily: "패밀리",
-        .dnsInvalidDomain: "잘못된 도메인 (예: ads.example.com)", .dnsInvalidIP: "잘못된 IPv4 주소", .dnsDuplicateRule: "이 도메인에는 이미 규칙이 있습니다",
+        .dnsRuleDelete: "삭제",.dnsFilterMalware: "악성+", .dnsFilterAds: "광고+",        .dnsInvalidDomain: "잘못된 도메인 (예: ads.example.com)", .dnsInvalidIP: "잘못된 IPv4 주소", .dnsDuplicateRule: "이 도메인에는 이미 규칙이 있습니다",
         .dnsRulesCount: "개 규칙", .dnsRulesCountPlural: "개 규칙",
         .chooseLanguage: "언어 선택", .selectLanguageHint: "SSH2VPN 언어를 선택하세요", .connected: "연결됨", .connecting: "연결 중…",
         .disconnected: "연결 끊김", .connect: "연결", .disconnect: "연결 해제", .ready: "준비", .yourVPS: "내 VPS",
@@ -518,6 +540,9 @@ struct AppCopy {
 
     // MARK: - Arabic
     private let arabic: [CopyKey: String] = [
+        .dnsEditRule: "تعديل القاعدة", .dnsEditRuleTitle: "تعديل قاعدة DNS", .dnsSaveRule: "حفظ",
+        .chipNoFilter: "بدون فلتر", .chipPrivacy: "خصوصية", .chipPhishing: "تصيّد+",
+        .chipTrackers: "متتبعات+", .chipAdult: "للبالغين +18", .chipSafeSearch: "بحث آمن",
         .dnsPresetsTitle: "إعدادات عامة", .dnsUseCustomInfoTitle: "خوادم DNS مخصصة",
         .dnsUseCustomInfoBody: "تحل هذه الخوادم جميع أسماء النطاقات أثناء نشاط نفق VPN. اختر إعدادًا عامًا أو أدخل خوادمك. يُطبق عند الاتصال القادم.",
         .dnsLocalRulesTitle: "قواعد محلية", .dnsLocalRulesInfoTitle: "قواعد DNS المحلية",
@@ -528,8 +553,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "إلغاء", .dnsAddRuleAdd: "إضافة", .dnsRuleBlocked: "محجوب", .dnsRuleOverride: "إعادة توجيه",
         .dnsRulesEmpty: "لا توجد قواعد محلية بعد. انقر + لحجب نطاق أو ربطه بعنوان IP.",
         .dnsRulesHint: "النطاقات المحجوبة تستجيب فورًا بـ 0.0.0.0، وإعادات التوجيه تستجيب بـ IP الخاص بك — الاستعلام لا يغادر الجهاز أبدًا. يُطبق عند الاتصال القادم.",
-        .dnsRuleDelete: "حذف", .dnsFilterNone: "بدون فلتر", .dnsFilterMalware: "برمجيات خبيثة+", .dnsFilterAds: "إعلانات+", .dnsFilterFamily: "عائلي",
-        .dnsInvalidDomain: "نطاق غير صالح (مثال: ads.example.com)", .dnsInvalidIP: "عنوان IPv4 غير صالح", .dnsDuplicateRule: "توجد قاعدة لهذا النطاق بالفعل",
+        .dnsRuleDelete: "حذف",.dnsFilterMalware: "برمجيات خبيثة+", .dnsFilterAds: "إعلانات+",        .dnsInvalidDomain: "نطاق غير صالح (مثال: ads.example.com)", .dnsInvalidIP: "عنوان IPv4 غير صالح", .dnsDuplicateRule: "توجد قاعدة لهذا النطاق بالفعل",
         .dnsRulesCount: "قواعد", .dnsRulesCountPlural: "قواعد",
         .chooseLanguage: "اختر لغتك", .selectLanguageHint: "اختر لغة SSH2VPN", .connected: "متصل",
         .connecting: "جاري الاتصال…", .disconnected: "غير متصل", .connect: "اتصل", .disconnect: "قطع الاتصال",
@@ -561,6 +585,9 @@ struct AppCopy {
 
     // MARK: - Hindi
     private let hindi: [CopyKey: String] = [
+        .dnsEditRule: "नियम संपादित करें", .dnsEditRuleTitle: "DNS नियम संपादित करें", .dnsSaveRule: "सहेजें",
+        .chipNoFilter: "बिना फ़िल्टर", .chipPrivacy: "गोपनीयता", .chipPhishing: "फ़िशिंग+",
+        .chipTrackers: "ट्रैकर+", .chipAdult: "वयस्क 18+", .chipSafeSearch: "सुरक्षित खोज",
         .dnsPresetsTitle: "सार्वजनिक प्रीसेट", .dnsUseCustomInfoTitle: "कस्टम DNS सर्वर",
         .dnsUseCustomInfoBody: "VPN टनल सक्रिय रहने तक ये सर्वर सभी डोमेन नाम हल करते हैं। सार्वजनिक प्रीसेट चुनें या अपने दर्ज करें। अगले कनेक्शन पर लागू।",
         .dnsLocalRulesTitle: "स्थानीय नियम", .dnsLocalRulesInfoTitle: "स्थानीय DNS नियम",
@@ -571,8 +598,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "रद्द करें", .dnsAddRuleAdd: "जोड़ें", .dnsRuleBlocked: "ब्लॉक", .dnsRuleOverride: "ओवरराइड",
         .dnsRulesEmpty: "अभी कोई स्थानीय नियम नहीं। डोमेन ब्लॉक करने या IP से जोड़ने के लिए + दबाएँ।",
         .dnsRulesHint: "ब्लॉक डोमेन तुरंत 0.0.0.0 से उत्तर देते हैं, ओवरराइड आपके IP से — क्वेरी कभी डिवाइस से बाहर नहीं जाती। अगले कनेक्शन पर लागू।",
-        .dnsRuleDelete: "हटाएँ", .dnsFilterNone: "बिना फ़िल्टर", .dnsFilterMalware: "मैलवेयर+", .dnsFilterAds: "विज्ञापन+", .dnsFilterFamily: "फ़ैमिली",
-        .dnsInvalidDomain: "अमान्य डोमेन (उदा. ads.example.com)", .dnsInvalidIP: "अमान्य IPv4 पता", .dnsDuplicateRule: "इस डोमेन के लिए नियम पहले से मौजूद है",
+        .dnsRuleDelete: "हटाएँ",.dnsFilterMalware: "मैलवेयर+", .dnsFilterAds: "विज्ञापन+",        .dnsInvalidDomain: "अमान्य डोमेन (उदा. ads.example.com)", .dnsInvalidIP: "अमान्य IPv4 पता", .dnsDuplicateRule: "इस डोमेन के लिए नियम पहले से मौजूद है",
         .dnsRulesCount: "नियम", .dnsRulesCountPlural: "नियम",
         .chooseLanguage: "अपनी भाषा चुनें", .selectLanguageHint: "SSH2VPN की भाषा चुनें", .connected: "कनेक्टेड",
         .connecting: "कनेक्ट हो रहा है…", .disconnected: "डिस्कनेक्टेड", .connect: "कनेक्ट करें",
@@ -605,6 +631,9 @@ struct AppCopy {
 
     // MARK: - Thai
     private let thai: [CopyKey: String] = [
+        .dnsEditRule: "แก้ไขกฎ", .dnsEditRuleTitle: "แก้ไขกฎ DNS", .dnsSaveRule: "บันทึก",
+        .chipNoFilter: "ไม่กรอง", .chipPrivacy: "ความเป็นส่วนตัว", .chipPhishing: "ฟิชชิง+",
+        .chipTrackers: "แทรกเกอร์+", .chipAdult: "18+", .chipSafeSearch: "เซฟเซิร์ช",
         .dnsPresetsTitle: "พรีเซ็ตสาธารณะ", .dnsUseCustomInfoTitle: "เซิร์ฟเวอร์ DNS แบบกำหนดเอง",
         .dnsUseCustomInfoBody: "เซิร์ฟเวอร์เหล่านี้แก้ไขชื่อโดเมนทั้งหมดขณะที่อุโฆน VPN ทำงาน เลือกพรีเซ็ตสาธารณะหรือป้อนของคุณเอง มีผลตั้งแต่การเชื่อมต่อครั้งถัดไป",
         .dnsLocalRulesTitle: "กฎภายในเครื่อง", .dnsLocalRulesInfoTitle: "กฎ DNS ภายในเครื่อง",
@@ -615,8 +644,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "ยกเลิก", .dnsAddRuleAdd: "เพิ่ม", .dnsRuleBlocked: "ถูกบล็อก", .dnsRuleOverride: "OVERRIDE",
         .dnsRulesEmpty: "ยังไม่มีกฎภายในเครื่อง แตะ + เพื่อบล็อกโดเมนหรือผูกกับ IP",
         .dnsRulesHint: "โดเมนที่ถูกบล็อกตอบ 0.0.0.0 ทันที การ override ตอบด้วย IP ของคุณ — คิวรีไม่ออกนอกอุปกรณ์ มีผลตั้งแต่การเชื่อมต่อครั้งถัดไป",
-        .dnsRuleDelete: "ลบ", .dnsFilterNone: "ไม่กรอง", .dnsFilterMalware: "มัลแวร์+", .dnsFilterAds: "โฆษณา+", .dnsFilterFamily: "ครอบครัว",
-        .dnsInvalidDomain: "โดเมนไม่ถูกต้อง (เช่น ads.example.com)", .dnsInvalidIP: "ที่อยู่ IPv4 ไม่ถูกต้อง", .dnsDuplicateRule: "มีกฎสำหรับโดเมนนี้อยู่แล้ว",
+        .dnsRuleDelete: "ลบ",.dnsFilterMalware: "มัลแวร์+", .dnsFilterAds: "โฆษณา+",        .dnsInvalidDomain: "โดเมนไม่ถูกต้อง (เช่น ads.example.com)", .dnsInvalidIP: "ที่อยู่ IPv4 ไม่ถูกต้อง", .dnsDuplicateRule: "มีกฎสำหรับโดเมนนี้อยู่แล้ว",
         .dnsRulesCount: "กฎ", .dnsRulesCountPlural: "กฎ",
         .chooseLanguage: "เลือกภาษาของคุณ", .selectLanguageHint: "เลือกภาษาของ SSH2VPN", .connected: "เชื่อมต่อแล้ว",
         .connecting: "กำลังเชื่อมต่อ…", .disconnected: "ไม่ได้เชื่อมต่อ", .connect: "เชื่อมต่อ",
@@ -650,6 +678,9 @@ struct AppCopy {
 
     // MARK: - Turkish
     private let turkish: [CopyKey: String] = [
+        .dnsEditRule: "Kuralı düzenle", .dnsEditRuleTitle: "DNS kuralını düzenle", .dnsSaveRule: "Kaydet",
+        .chipNoFilter: "FİLTRESİZ", .chipPrivacy: "GİZLİLİK", .chipPhishing: "OLTALAMA+",
+        .chipTrackers: "TAKİPÇİ+", .chipAdult: "YETİŞKİN 18+", .chipSafeSearch: "GÜVENLİ ARAMA",
         .dnsPresetsTitle: "GENEL ÖN AYARLAR", .dnsUseCustomInfoTitle: "Özel DNS sunucuları",
         .dnsUseCustomInfoBody: "VPN tüneli etkinken bu sunucular tüm alan adlarını çözer. Genel bir ön ayar seçin veya kendinizinkini girin. Bir sonraki bağlantıda uygulanır.",
         .dnsLocalRulesTitle: "YEREL KURALLAR", .dnsLocalRulesInfoTitle: "Yerel DNS kuralları",
@@ -660,8 +691,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "İptal", .dnsAddRuleAdd: "Ekle", .dnsRuleBlocked: "ENGELLİ", .dnsRuleOverride: "YÖNLENDİRME",
         .dnsRulesEmpty: "Henüz yerel kural yok. Bir alan adını engellemek veya IP'ye bağlamak için +'ya dokunun.",
         .dnsRulesHint: "Engellenen alan adları anında 0.0.0.0 ile, yönlendirmeler sizin IP'nizle yanıt verir — sorgu asla cihazdan çıkmaz. Bir sonraki bağlantıda uygulanır.",
-        .dnsRuleDelete: "Sil", .dnsFilterNone: "FİLTRESİZ", .dnsFilterMalware: "ZARARLI+", .dnsFilterAds: "REKLAM+", .dnsFilterFamily: "AİLE",
-        .dnsInvalidDomain: "Geçersiz alan adı (örn. ads.example.com)", .dnsInvalidIP: "Geçersiz IPv4 adresi", .dnsDuplicateRule: "Bu alan adı için zaten bir kural var",
+        .dnsRuleDelete: "Sil",.dnsFilterMalware: "ZARARLI+", .dnsFilterAds: "REKLAM+",        .dnsInvalidDomain: "Geçersiz alan adı (örn. ads.example.com)", .dnsInvalidIP: "Geçersiz IPv4 adresi", .dnsDuplicateRule: "Bu alan adı için zaten bir kural var",
         .dnsRulesCount: "kural", .dnsRulesCountPlural: "kural",
         .chooseLanguage: "Dilinizi seçin", .selectLanguageHint: "SSH2VPN dilini seçin", .connected: "Bağlandı",
         .connecting: "Bağlanıyor…", .disconnected: "Bağlantı kesildi", .connect: "Bağlan", .disconnect: "Bağlantıyı kes",
@@ -695,6 +725,9 @@ struct AppCopy {
 
     // MARK: - Polish
     private let polish: [CopyKey: String] = [
+        .dnsEditRule: "Edytuj zasadę", .dnsEditRuleTitle: "Edytuj zasadę DNS", .dnsSaveRule: "Zapisz",
+        .chipNoFilter: "BEZ FILTRA", .chipPrivacy: "PRYWATNOŚĆ", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRACKERY+", .chipAdult: "DOROŚLI 18+", .chipSafeSearch: "BEZPIECZNE WYSZUKIWANIE",
         .dnsPresetsTitle: "USTAWIENIA PUBLICZNE", .dnsUseCustomInfoTitle: "Własne serwery DNS",
         .dnsUseCustomInfoBody: "Serwery te rozwiązują wszystkie nazwy domen, gdy tunel VPN jest aktywny. Wybierz publiczny preset lub wpisz własny. Zastosowane przy następnym połączeniu.",
         .dnsLocalRulesTitle: "ZASADY LOKALNE", .dnsLocalRulesInfoTitle: "Lokalne zasady DNS",
@@ -705,8 +738,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Anuluj", .dnsAddRuleAdd: "Dodaj", .dnsRuleBlocked: "ZABLOKOWANA", .dnsRuleOverride: "PRZEKIEROWANIE",
         .dnsRulesEmpty: "Brak zasad lokalnych. Dotknij +, aby zablokować domenę lub przypisać ją do IP.",
         .dnsRulesHint: "Zablokowane domeny odpowiadają natychmiast 0.0.0.0, przekierowania Twoim IP — zapytanie nigdy nie opuszcza urządzenia. Zastosowane przy następnym połączeniu.",
-        .dnsRuleDelete: "Usuń", .dnsFilterNone: "BEZ FILTRA", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "REKLAMY+", .dnsFilterFamily: "RODZINA",
-        .dnsInvalidDomain: "Nieprawidłowa domena (np. ads.example.com)", .dnsInvalidIP: "Nieprawidłowy adres IPv4", .dnsDuplicateRule: "Zasada dla tej domeny już istnieje",
+        .dnsRuleDelete: "Usuń",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "REKLAMY+",        .dnsInvalidDomain: "Nieprawidłowa domena (np. ads.example.com)", .dnsInvalidIP: "Nieprawidłowy adres IPv4", .dnsDuplicateRule: "Zasada dla tej domeny już istnieje",
         .dnsRulesCount: "zasad", .dnsRulesCountPlural: "zasad",
         .chooseLanguage: "Wybierz język", .selectLanguageHint: "Wybierz język SSH2VPN", .connected: "Połączono",
         .connecting: "Łączenie…", .disconnected: "Rozłączono", .connect: "Połącz", .disconnect: "Rozłącz",
@@ -741,6 +773,9 @@ struct AppCopy {
 
     // MARK: - Dutch
     private let dutch: [CopyKey: String] = [
+        .dnsEditRule: "Regel bewerken", .dnsEditRuleTitle: "DNS-regel bewerken", .dnsSaveRule: "Bewaren",
+        .chipNoFilter: "ZONDER FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
+        .chipTrackers: "TRACKERS+", .chipAdult: "VOLWASSEN 18+", .chipSafeSearch: "VEILIG ZOEKEN",
         .dnsPresetsTitle: "PUBLIEKE PRESETS", .dnsUseCustomInfoTitle: "Eigen DNS-servers",
         .dnsUseCustomInfoBody: "Deze servers lossen alle domeinnamen op zolang de VPN-tunnel actief is. Kies een publieke preset of voer eigen servers in. Toegepast bij de volgende verbinding.",
         .dnsLocalRulesTitle: "LOKALE REGELS", .dnsLocalRulesInfoTitle: "Lokale DNS-regels",
@@ -751,8 +786,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Annuleren", .dnsAddRuleAdd: "Toevoegen", .dnsRuleBlocked: "GEBLOKKEERD", .dnsRuleOverride: "OMLEIDING",
         .dnsRulesEmpty: "Nog geen lokale regels. Tik op + om een domein te blokkeren of aan een IP te koppelen.",
         .dnsRulesHint: "Geblokkeerde domeinen antwoorden direct 0.0.0.0, omleidingen antwoorden met jouw IP — de query verlaat het apparaat nooit. Toegepast bij de volgende verbinding.",
-        .dnsRuleDelete: "Verwijderen", .dnsFilterNone: "ZONDER FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILIE",
-        .dnsInvalidDomain: "Ongeldig domein (bijv. ads.example.com)", .dnsInvalidIP: "Ongeldig IPv4-adres", .dnsDuplicateRule: "Er bestaat al een regel voor dit domein",
+        .dnsRuleDelete: "Verwijderen",.dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+",        .dnsInvalidDomain: "Ongeldig domein (bijv. ads.example.com)", .dnsInvalidIP: "Ongeldig IPv4-adres", .dnsDuplicateRule: "Er bestaat al een regel voor dit domein",
         .dnsRulesCount: "regels", .dnsRulesCountPlural: "regels",
         .chooseLanguage: "Kies je taal", .selectLanguageHint: "Selecteer de taal van SSH2VPN", .connected: "Verbonden",
         .connecting: "Verbinden…", .disconnected: "Verbinding verbroken", .connect: "Verbinden",
@@ -786,6 +820,9 @@ struct AppCopy {
 
     // MARK: - Vietnamese
     private let vietnamese: [CopyKey: String] = [
+        .dnsEditRule: "Sửa quy tắc", .dnsEditRuleTitle: "Sửa quy tắc DNS", .dnsSaveRule: "Lưu",
+        .chipNoFilter: "KHÔNG LỌC", .chipPrivacy: "RIÊNG TƯ", .chipPhishing: "LỪA ĐẢO+",
+        .chipTrackers: "TRÌNH THEO DÕI+", .chipAdult: "NGƯỜI LỚN 18+", .chipSafeSearch: "TÌM KIẾM AN TOÀN",
         .dnsPresetsTitle: "CÀI ĐẶT CÔNG KHAI", .dnsUseCustomInfoTitle: "Máy chủ DNS tùy chỉnh",
         .dnsUseCustomInfoBody: "Các máy chủ này phân giải mọi tên miền khi đường hầm VPN hoạt động. Chọn cài đặt công khai hoặc nhập của riêng bạn. Áp dụng từ lần kết nối sau.",
         .dnsLocalRulesTitle: "QUY TẮC CỤC BỘ", .dnsLocalRulesInfoTitle: "Quy tắc DNS cục bộ",
@@ -796,8 +833,7 @@ struct AppCopy {
         .dnsAddRuleCancel: "Hủy", .dnsAddRuleAdd: "Thêm", .dnsRuleBlocked: "ĐÃ CHẶN", .dnsRuleOverride: "GHI ĐÈ",
         .dnsRulesEmpty: "Chưa có quy tắc cục bộ. Nhấn + để chặn tên miền hoặc gán nó vào IP.",
         .dnsRulesHint: "Tên miền bị chặn trả lời ngay 0.0.0.0, ghi đè trả lời bằng IP của bạn — truy vấn không bao giờ rời thiết bị. Áp dụng từ lần kết nối sau.",
-        .dnsRuleDelete: "Xóa", .dnsFilterNone: "KHÔNG LỌC", .dnsFilterMalware: "MÃ ĐỘC+", .dnsFilterAds: "QC+", .dnsFilterFamily: "GIA ĐÌNH",
-        .dnsInvalidDomain: "Tên miền không hợp lệ (vd. ads.example.com)", .dnsInvalidIP: "Địa chỉ IPv4 không hợp lệ", .dnsDuplicateRule: "Đã có quy tắc cho tên miền này",
+        .dnsRuleDelete: "Xóa",.dnsFilterMalware: "MÃ ĐỘC+", .dnsFilterAds: "QC+",        .dnsInvalidDomain: "Tên miền không hợp lệ (vd. ads.example.com)", .dnsInvalidIP: "Địa chỉ IPv4 không hợp lệ", .dnsDuplicateRule: "Đã có quy tắc cho tên miền này",
         .dnsRulesCount: "quy tắc", .dnsRulesCountPlural: "quy tắc",
         .chooseLanguage: "Chọn ngôn ngữ", .selectLanguageHint: "Chọn ngôn ngữ cho SSH2VPN", .connected: "Đã kết nối",
         .connecting: "Đang kết nối…", .disconnected: "Đã ngắt kết nối", .connect: "Kết nối", .disconnect: "Ngắt kết nối",

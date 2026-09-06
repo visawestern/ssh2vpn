@@ -1071,21 +1071,31 @@ final class AppModel: ObservableObject {
 
     // MARK: - Local DNS rules management (settings screen)
 
-    /// Adds a local DNS rule after validating it. Returns a localized
-    /// error key's message on failure (nil = added).
+    /// Adds a local DNS rule after validating it, or replaces an existing
+    /// rule when `replacing` is given (edit mode). Returns a localized
+    /// error message on failure (nil = saved).
     @discardableResult
-    func addDNSRule(domain: String, kind: DNSBlocklistEntry.Kind, ip: String) -> String? {
+    func addDNSRule(domain: String, kind: DNSBlocklistEntry.Kind, ip: String,
+                    replacing: DNSBlocklistEntry? = nil) -> String? {
         guard LocalDNSFilter.isValidDomain(domain) else { return copy.text(.dnsInvalidDomain) }
         let normalized = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if settings.dnsRules.contains(where: { $0.domain == normalized }) {
+        // Duplicate check ignores the rule being replaced (editing itself).
+        if settings.dnsRules.contains(where: { $0.domain == normalized && $0.id != replacing?.id }) {
             return copy.text(.dnsDuplicateRule)
         }
         if kind == .override {
             guard DNSWire.ipv4Bytes(ip) != nil else { return copy.text(.dnsInvalidIP) }
         }
-        settings.dnsRules.append(DNSBlocklistEntry(domain: normalized, kind: kind, ip: kind == .override ? ip : ""))
-        ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
-            message: "local rule added: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+        let newRule = DNSBlocklistEntry(domain: normalized, kind: kind, ip: kind == .override ? ip : "")
+        if let replacing, let idx = settings.dnsRules.firstIndex(where: { $0.id == replacing.id }) {
+            settings.dnsRules[idx] = newRule
+            ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
+                message: "local rule updated: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+        } else {
+            settings.dnsRules.append(newRule)
+            ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
+                message: "local rule added: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+        }
         return nil
     }
 

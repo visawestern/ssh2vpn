@@ -10,12 +10,17 @@ extension AppCopy {
         return table[preset.id] ?? Self.presetDescriptions[.english]![preset.id]!
     }
 
-    func presetFilterBadge(_ preset: DNSPreset) -> String {
-        switch preset.filter {
-        case .none: return text(.dnsFilterNone)
+    /// Localized short label for one capability chip.
+    func chipText(_ chip: DNSPreset.Chip) -> String {
+        switch chip {
+        case .noFilter: return text(.chipNoFilter)
+        case .privacy: return text(.chipPrivacy)
         case .malware: return text(.dnsFilterMalware)
+        case .phishing: return text(.chipPhishing)
         case .ads: return text(.dnsFilterAds)
-        case .family: return text(.dnsFilterFamily)
+        case .trackers: return text(.chipTrackers)
+        case .adult: return text(.chipAdult)
+        case .safeSearch: return text(.chipSafeSearch)
         }
     }
 

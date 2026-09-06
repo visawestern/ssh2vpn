@@ -34,35 +34,26 @@ final class DNSPresetsTests: XCTestCase {
         XCTAssertFalse(preset.matches(primary: preset.primary, secondary: "9.9.9.9"))
     }
 
-    func testFilterCoverageForTheCatalog() {
-        // The point of the list: a real choice at every strictness level.
-        let filters = Set(DNSPresets.all.map(\.filter))
-        XCTAssertTrue(filters.contains(.none))
-        XCTAssertTrue(filters.contains(.malware))
-        XCTAssertTrue(filters.contains(.ads))
-        XCTAssertTrue(filters.contains(.family))
-    }
-
-    func testEveryPresetHasBothDescriptions() {
-        // The UI shows exactly one of these — empty text would render a
-        // broken row.
-        for preset in DNSPresets.all {
-            XCTAssertFalse(preset.descriptionEN.isEmpty, "\(preset.name) has no EN description")
-            XCTAssertFalse(preset.descriptionRU.isEmpty, "\(preset.name) has no RU description")
+    func testChipCoverageForTheCatalog() {
+        // The point of the chips: every blocking dimension is represented,
+        // and family presets genuinely carry more than just "adult".
+        let allChips = Set(DNSPresets.all.flatMap(\.chips))
+        for chip in DNSPreset.Chip.allCases {
+            XCTAssertTrue(allChips.contains(chip), "chip \(chip.rawValue) never used")
         }
+        // AdGuard Family blocks adult + ads + trackers + malware + safe search.
+        let adGuardFamily = DNSPresets.all.first { $0.id == "adguard-family" }!
+        XCTAssertEqual(Set(adGuardFamily.chips),
+                       Set([.adult, .ads, .trackers, .malware, .safeSearch]))
+        // Plain AdGuard blocks ads + trackers + malware (not adult).
+        let adGuard = DNSPresets.all.first { $0.id == "adguard" }!
+        XCTAssertEqual(Set(adGuard.chips), Set([.ads, .trackers, .malware]))
     }
 
-    func testPresetsGroupedByFilterStayQueryable() {
-        for filter in DNSPreset.Filter.allCases {
-            let group = DNSPresets.presets(matching: filter)
-            XCTAssertFalse(group.isEmpty, "group \(filter.rawValue) must not be empty")
-            XCTAssertTrue(group.allSatisfy { $0.filter == filter })
+    func testNoFilterPresetsCarryNoBlockingChips() {
+        for preset in DNSPresets.all where preset.chips.contains(.noFilter) {
+            let blocking = preset.chips.filter { $0 != .noFilter && $0 != .privacy }
+            XCTAssertTrue(blocking.isEmpty, "\(preset.name) claims NO FILTER but blocks \(blocking)")
         }
-    }
-
-    func testDescriptionLocalizationSwitch() {
-        let preset = DNSPresets.all[0]
-        XCTAssertEqual(preset.description(forRussian: true), preset.descriptionRU)
-        XCTAssertEqual(preset.description(forRussian: false), preset.descriptionEN)
     }
 }

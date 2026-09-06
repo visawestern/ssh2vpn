@@ -1814,64 +1814,81 @@ struct DNSView: View {
             AddDNSRuleView()
                 .presentationDetents([.medium])
         }
+        .sheet(item: $editingRule) { rule in
+            AddDNSRuleView(editing: rule)
+                .presentationDetents([.medium])
+        }
     }
+
+    /// Which preset's info bubble is open (one at a time).
+    @State private var openPresetInfoID: String?
 
     private func presetRow(_ preset: DNSPreset) -> some View {
         let selected = preset.matches(primary: model.settings.primaryDNS, secondary: model.settings.secondaryDNS)
-        return Button {
-            model.settings.useCustomDNS = true
-            model.settings.primaryDNS = preset.primary
-            model.settings.secondaryDNS = preset.secondary
-            ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-                message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
-        } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(preset.name)
-                            .font(.openSans(15, weight: .medium))
-                            .foregroundStyle(Color.octGray100)
-                        presetBadge(preset)
+        let infoOpen = openPresetInfoID == preset.id
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button {
+                    model.settings.useCustomDNS = true
+                    model.settings.primaryDNS = preset.primary
+                    model.settings.secondaryDNS = preset.secondary
+                    ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                        message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(preset.name)
+                                    .font(.openSans(15, weight: .medium))
+                                    .foregroundStyle(Color.octGray100)
+                            }
+                            // Separate capability chips: what this resolver
+                            // really blocks (family services also block
+                            // malware; AdGuard also blocks trackers; ...).
+                            FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
+                            Text("\(preset.primary) • \(preset.secondary)")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Color.octGray40)
+                        }
+                        Spacer()
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
                     }
-                    Text(model.copy.presetDescription(preset))
-                        .font(.openSans(11))
-                        .foregroundStyle(Color.octGray60)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("\(preset.primary) • \(preset.secondary)")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.octGray40)
+                    .padding(14)
                 }
-                Spacer()
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
-                    .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+                .buttonStyle(.plain)
+                InfoDotButtonCompact(isVisible: infoOpen) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        openPresetInfoID = infoOpen ? nil : preset.id
+                    }
+                }
+                .padding(.trailing, 14)
             }
-            .padding(14)
+            if infoOpen {
+                InfoBubble(title: preset.name,
+                           message: model.copy.presetDescription(preset))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
         }
-        .buttonStyle(.plain)
     }
 
-    /// Localized filter badge naming what the resolver blocks.
-    @ViewBuilder
-    private func presetBadge(_ preset: DNSPreset) -> some View {
-        let text = model.copy.presetFilterBadge(preset)
-        let color: Color = {
-            switch preset.filter {
-            case .none: return Color.octGray40
-            case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
-            case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
-            case .family: return Color(red: 0.16, green: 0.62, blue: 0.35)
-            }
-        }()
-        Text(text)
-            .font(.system(size: 8, weight: .bold, design: .monospaced))
-            .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.12), in: Capsule())
+    private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
+        switch chip {
+        case .noFilter: return Color.octGray40
+        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
+        case .phishing: return Color(red: 0.45, green: 0.25, blue: 0.85)
+        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+        case .trackers: return Color(red: 0.75, green: 0.55, blue: 0.1)
+        case .adult: return Color(red: 0.16, green: 0.62, blue: 0.35)
+        case .safeSearch: return Color(red: 0.1, green: 0.55, blue: 0.55)
+        }
     }
+
+    /// Rule currently being edited (sheet reuse of AddDNSRuleView).
+    @State private var editingRule: DNSBlocklistEntry?
 
     private func dnsRuleRow(_ rule: DNSBlocklistEntry) -> some View {
         HStack(spacing: 12) {
@@ -1898,6 +1915,18 @@ struct DNSView: View {
                     .foregroundStyle(Color.octGray40)
             }
             Spacer()
+            // Edit sits BEFORE delete (natural order: change, then remove).
+            Button {
+                editingRule = rule
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.sec50)
+                    .frame(width: 30, height: 30)
+                    .background(Color.sec50.opacity(0.10), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.copy.text(.dnsEditRule))
             Button {
                 model.removeDNSRule(id: rule.id)
             } label: {
@@ -1930,6 +1959,83 @@ struct DNSView: View {
 }
 
 // MARK: - Info tooltip components (reused across settings screens)
+
+/// Compact round "?" (per-row): same persistent tooltip mechanics, smaller
+/// footprint so it fits inside a preset row without fighting the tap target.
+struct InfoDotButtonCompact: View {
+    let isVisible: Bool
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "questionmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .frame(width: 18, height: 18)
+                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("info")
+    }
+}
+
+/// Wrapping row of small colored chips (capability labels). Keeps preset
+/// rows compact for any chip count and any language width.
+struct FlowChips: View {
+    let chips: [(String, Color)]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Chips may wrap onto a second line for long translations.
+            LayoutChips(chips: chips)
+        }
+    }
+    private struct LayoutChips: View {
+        let chips: [(String, Color)]
+        @State private var totalWidth: CGFloat = 0
+        var body: some View {
+            var width: CGFloat = 0
+            var height: CGFloat = 0
+            return GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    Color.clear.frame(width: geo.size.width, height: height).onAppear { totalWidth = geo.size.width }
+                    ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                        chipView(chip.0, chip.1)
+                            .padding(.trailing, 4)
+                            .padding(.bottom, 4)
+                            .alignmentGuide(.leading) { d in
+                                if abs(width - d.width) > totalWidth {
+                                    width = 0
+                                    height -= d.height
+                                }
+                                let result = width
+                                if chip == chips.last! {
+                                    width = 0
+                                } else {
+                                    width -= d.width
+                                }
+                                return result
+                            }
+                            .alignmentGuide(.top) { _ in
+                                let result = height
+                                if chip == chips.last! {
+                                    height = 0
+                                }
+                                return result
+                            }
+                    }
+                }
+            }
+            .frame(height: 40)
+        }
+        private func chipView(_ text: String, _ color: Color) -> some View {
+            Text(text)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(color.opacity(0.12), in: Capsule())
+        }
+    }
+}
 
 /// Round "?" button toggling a tooltip bubble. The bubble below is part of the
 /// layout (persistent — it doesn't vanish when you scroll or tap elsewhere on
@@ -1981,10 +2087,16 @@ struct InfoBubble: View {
 struct AddDNSRuleView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    /// Nil = creating a new rule; non-nil = editing that rule in place.
+    let editing: DNSBlocklistEntry?
     @State private var domain = ""
     @State private var ip = ""
     @State private var mode: DNSBlocklistEntry.Kind = .block
     @State private var errorText: String?
+
+    init(editing: DNSBlocklistEntry? = nil) {
+        self.editing = editing
+    }
 
     var body: some View {
         NavigationStack {
@@ -2037,13 +2149,13 @@ struct AddDNSRuleView: View {
                 Spacer()
 
                 Button {
-                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip) {
+                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip, replacing: editing) {
                         errorText = failure
                     } else {
                         dismiss()
                     }
                 } label: {
-                    Text(model.copy.text(.dnsAddRuleAdd))
+                    Text(editing == nil ? model.copy.text(.dnsAddRuleAdd) : model.copy.text(.dnsSaveRule))
                         .font(.openSans(15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -2055,8 +2167,15 @@ struct AddDNSRuleView: View {
             }
             .padding(16)
             .background(Color.appBg)
-            .navigationTitle(model.copy.text(.dnsAddRule))
+            .navigationTitle(editing == nil ? model.copy.text(.dnsAddRule) : model.copy.text(.dnsEditRuleTitle))
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if let editing {
+                    domain = editing.domain
+                    mode = editing.kind
+                    ip = editing.kind == .override ? editing.ip : ""
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(model.copy.text(.dnsAddRuleCancel)) { dismiss() }
