@@ -17,6 +17,16 @@ extension Color {
     static let sec20 = Color(red: 0.271, green: 0.459, blue: 0.627)              // #4575A0
 }
 
+extension View {
+    /// iPhone keeps the current edge-to-edge layout; iPad gets a centered,
+    /// readable column (~720pt) instead of a stretched 1024pt soup.
+    @ViewBuilder
+    func adaptiveCenterColumn(maxWidth: CGFloat = 720) -> some View {
+        self.frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
+    }
+}
+
 extension Font {
     static func openSans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         Font.custom("OpenSans-\(weightName(weight))", size: size)
@@ -58,6 +68,7 @@ struct RootView: View {
                     case .settings: SettingsViewNew()
                     }
                 }
+                .adaptiveCenterColumn()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
@@ -104,6 +115,9 @@ struct OctohideTabBar: View {
         }
         .padding(.top, 10)
         .padding(.bottom, 8)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: 500)
+        .frame(maxWidth: .infinity)   // centered on iPad instead of a stretched bar
         .background(
             RoundedRectangle(cornerRadius: 32)
                 .fill(Color.white)
@@ -140,6 +154,8 @@ struct ConnectView: View {
     /// after every press (connect or disconnect), then re-enables itself.
     @State private var powerCooldown = false
 
+    @Environment(\.verticalSizeClass) private var vSize
+
     var body: some View {
         VStack(spacing: 0) {
             // Top Status Card ("Unprotected" / "Protected")
@@ -147,15 +163,18 @@ struct ConnectView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
-            // Upper area with World Map
+            // Upper area with World Map — shrinks in compact height (iPhone
+            // landscape / iPad Split View) so the power button never falls
+            // off-screen; capped on iPad so it doesn't blow up either.
             ZStack(alignment: .center) {
                 WorldMapView()
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
             }
-            .frame(maxHeight: 220)
+            .frame(maxHeight: vSize == .compact ? 120 : 220)
+            .frame(maxWidth: 640)
 
-            Spacer(minLength: 16)
+            Spacer(minLength: vSize == .compact ? 4 : 16)
 
             // Central Power Button
             powerButton
@@ -188,12 +207,12 @@ struct ConnectView: View {
             // Free-time quota + rewarded-ad refill (stub ad for now)
             quotaBar
                 .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.bottom, vSize == .compact ? 6 : 10)
 
             // Selected Location Card
             selectedLocationCard
                 .padding(.horizontal, 16)
-                .padding(.bottom, 20)
+                .padding(.bottom, vSize == .compact ? 8 : 20)
         }
         .background(Color.appBg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -252,7 +271,8 @@ struct ConnectView: View {
 
     // MARK: - Central Power Button (with arc progress ring)
     private var powerButton: some View {
-        ZStack {
+        let scale: CGFloat = vSize == .compact ? 0.72 : 1.0
+        return ZStack {
             // Animated thin arc ring during connecting
             if case .connecting = model.connection {
                 SpinningArcView()
@@ -317,6 +337,7 @@ struct ConnectView: View {
             // checkpoint instead of wedging).
             .disabled(powerCooldown)
             .opacity(powerCooldown ? 0.75 : 1.0)
+            .scaleEffect(vSize == .compact ? 0.72 : 1.0)
         }
     }
 
@@ -1357,6 +1378,7 @@ struct AddServerView: View {
                 }
                 .padding(16)
             }
+            .adaptiveCenterColumn()
             .background(Color.appBg)
             .navigationTitle(model.copy.text(editing ? .editServerTitle : .addServerTitle))
             .navigationBarTitleDisplayMode(.inline)
@@ -1546,6 +1568,7 @@ struct DiagnosticsView: View {
             }
             .padding(16)
         }
+        .adaptiveCenterColumn()
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.diagnosticsTitle))
         .task {
@@ -1692,6 +1715,7 @@ struct ProtocolView: View {
             }
             .padding(16)
         }
+        .adaptiveCenterColumn()
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.protocolTitle))
         .navigationBarTitleDisplayMode(.inline)
@@ -1801,6 +1825,7 @@ struct DNSView: View {
             }
             .padding(16)
         }
+        .adaptiveCenterColumn()
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.dnsSettings))
         .navigationBarTitleDisplayMode(.inline)
@@ -1998,6 +2023,7 @@ struct LocalDNSRulesView: View {
             }
             .padding(16)
         }
+        .adaptiveCenterColumn()
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.dnsLocalRulesTitle))
         .navigationBarTitleDisplayMode(.inline)
@@ -2295,6 +2321,7 @@ struct AddDNSRuleView: View {
                 .disabled(domain.isEmpty || (mode == .override && ip.isEmpty))
             }
             .padding(16)
+            .adaptiveCenterColumn()
             .background(Color.appBg)
             .navigationTitle(editing == nil ? model.copy.text(.dnsAddRule) : model.copy.text(.dnsEditRuleTitle))
             .navigationBarTitleDisplayMode(.inline)
@@ -2392,6 +2419,7 @@ struct AdvancedView: View {
             }
             .padding(16)
         }
+        .adaptiveCenterColumn()
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.advanced))
         .navigationBarTitleDisplayMode(.inline)
