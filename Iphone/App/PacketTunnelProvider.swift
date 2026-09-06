@@ -957,6 +957,11 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var dnsCache = DNSCache()
     private var dnsCacheHits = 0
     private var dnsBlockedCount = 0
+    /// SSH/NAT keepalive: one throwaway direct-tcpip open every 15s. Idle
+    /// NAT mappings on flaky Wi-Fi kill the SSH TCP stream after ~45s
+    /// otherwise; a tiny SSH round trip keeps every pooled connection
+    /// visibly active without any private NIOSSH API.
+    private var keepaliveTimer: DispatchSourceTimer?
 
     /// pending packets received before SSH connected (bounded)
     private var pendingPackets: [Data] = []
@@ -1104,6 +1109,17 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         }
         timer.resume()
         sweepTimer = timer
+
+        // SSH/NAT keepalive (see keepaliveTimer). Runs on the relay queue so
+        // it can never race pool state.
+        let ka = DispatchSource.makeTimerSource(queue: relayQueue)
+        ka.schedule(deadline: .now() + 15, repeating: 15)
+        ka.setEventHandler { [weak self] in
+            guard let self, self.isStarted else { return }
+            self.pool.keepalivePing()
+        }
+        ka.resume()
+        keepaliveTimer = ka
     }
 
     func send(packet: Data, completion: @escaping (Error?) -> Void) {
@@ -1128,6 +1144,8 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         isStarted = false
         sweepTimer?.cancel()
         sweepTimer = nil
+        keepaliveTimer?.cancel()
+        keepaliveTimer = nil
         for tracked in dnsInFlight {
             (tracked as? RelayChannel)?.close()
         }

@@ -938,6 +938,39 @@ struct SettingsViewNew: View {
                             settingsRow(icon: "gearshape.2", title: model.copy.text(.advanced), desc: model.copy.text(.advancedDesc))
                         }
                         .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        // Local DNS rules live at the VPN-settings level (not
+                        // inside the DNS screen): they apply BEFORE any DNS
+                        // server — custom or public — and deserve first-class
+                        // placement.
+                        NavigationLink(destination: LocalDNSRulesView()) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color(red: 0.85, green: 0.45, blue: 0.1))
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.copy.text(.dnsLocalRulesTitle))
+                                        .font(.openSans(15, weight: .medium))
+                                        .foregroundStyle(Color.octGray100)
+                                    Text(model.copy.text(.dnsRulesCount))
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
+                                }
+                                Spacer()
+                                Text("\(model.settings.dnsRules.count)")
+                                    .font(.openSans(11, weight: .semibold))
+                                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background((model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)).opacity(0.12), in: Capsule())
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -1670,19 +1703,18 @@ struct ProtocolView: View {
     }
 }
 
-// MARK: - DNS View
+// MARK: - DNS View (custom servers OR public preset — mutually exclusive)
 
 struct DNSView: View {
     @EnvironmentObject private var model: AppModel
-    /// Persistent (per-DNSView-lifetime) tooltip states — tapping "?" toggles;
-    /// tapping anywhere outside or "?" again closes. Survives scrolling.
     @State private var showCustomInfo = false
-    @State private var showRulesInfo = false
-    @State private var showAddRule = false
+    /// Which preset's info bubble is open (one at a time).
+    @State private var openPresetInfoID: String?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // ---- Custom DNS servers (own values) ----
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.dnsSettings))
                         .font(.openSans(13, weight: .semibold))
@@ -1697,7 +1729,7 @@ struct DNSView: View {
                             .foregroundStyle(Color.octGray100)
                         InfoDotButton(isVisible: $showCustomInfo)
                         Spacer()
-                        Toggle("", isOn: $model.settings.useCustomDNS)
+                        Toggle("", isOn: customToggle)
                             .tint(Color.prim50)
                             .labelsHidden()
                     }
@@ -1721,8 +1753,7 @@ struct DNSView: View {
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                // Curated public presets: fixed-height scrollable list, ~3.5
-                // rows visible — the section never dominates the screen.
+                // ---- Public presets (choosing one switches OFF custom) ----
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.dnsPresetsTitle))
                         .font(.openSans(13, weight: .semibold))
@@ -1741,12 +1772,121 @@ struct DNSView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 354)   // ~3.5 rows of a 100pt row + divider
+                    .frame(maxHeight: 354)   // ~3.5 rows visible
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                // Local rules: block (0.0.0.0) / override (custom IP), added
-                // via the + button — managed as a list, not raw text.
+                Text(model.copy.text(.dnsRulesHint))
+                    .font(.openSans(11))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+            }
+            .padding(16)
+        }
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.dnsSettings))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Custom mode and preset mode are mutually exclusive: turning custom ON
+    /// clears the preset choice; the fields then carry the user's own values.
+    private var customToggle: Binding<Bool> {
+        Binding(
+            get: { model.settings.useCustomDNS },
+            set: { on in
+                model.settings.useCustomDNS = on
+                if on { model.settings.presetDNS = [] }
+            }
+        )
+    }
+
+    private func presetRow(_ preset: DNSPreset) -> some View {
+        let selected = model.settings.presetDNS == [preset.primary, preset.secondary]
+        let infoOpen = openPresetInfoID == preset.id
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button {
+                    // Preset mode: fills presetDNS and switches custom OFF —
+                    // the two modes never fight over which resolver is used.
+                    model.settings.presetDNS = [preset.primary, preset.secondary]
+                    model.settings.useCustomDNS = false
+                    ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                        message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(preset.name)
+                                .font(.openSans(15, weight: .medium))
+                                .foregroundStyle(Color.octGray100)
+                            FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
+                            Text("\(preset.primary) • \(preset.secondary)")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Color.octGray40)
+                        }
+                        Spacer()
+                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+                    }
+                    .padding(14)
+                }
+                .buttonStyle(.plain)
+                InfoDotButtonCompact(isVisible: infoOpen) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        openPresetInfoID = infoOpen ? nil : preset.id
+                    }
+                }
+                .padding(.trailing, 14)
+            }
+            if infoOpen {
+                InfoBubble(title: preset.name,
+                           message: model.copy.presetDescription(preset))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
+        }
+    }
+
+    private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
+        switch chip {
+        case .noFilter: return Color.octGray40
+        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
+        case .phishing: return Color(red: 0.45, green: 0.25, blue: 0.85)
+        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+        case .trackers: return Color(red: 0.75, green: 0.55, blue: 0.1)
+        case .adult: return Color(red: 0.16, green: 0.62, blue: 0.35)
+        case .safeSearch: return Color(red: 0.1, green: 0.55, blue: 0.55)
+        }
+    }
+
+    private func dnsField(label: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+                .font(.openSans(15))
+                .foregroundStyle(Color.octGray60)
+            Spacer()
+            TextField("0.0.0.0", text: text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .multilineTextAlignment(.trailing)
+                .font(.openSans(15))
+        }
+        .padding(14)
+    }
+}
+
+// MARK: - Local DNS rules (VPN-settings level screen)
+
+struct LocalDNSRulesView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showRulesInfo = false
+    @State private var showAddRule = false
+    @State private var editingRule: DNSBlocklistEntry?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Text(model.copy.text(.dnsLocalRulesTitle))
@@ -1808,7 +1948,7 @@ struct DNSView: View {
             .padding(16)
         }
         .background(Color.appBg)
-        .navigationTitle(model.copy.text(.dnsSettings))
+        .navigationTitle(model.copy.text(.dnsLocalRulesTitle))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAddRule) {
             AddDNSRuleView()
@@ -1819,76 +1959,6 @@ struct DNSView: View {
                 .presentationDetents([.medium])
         }
     }
-
-    /// Which preset's info bubble is open (one at a time).
-    @State private var openPresetInfoID: String?
-
-    private func presetRow(_ preset: DNSPreset) -> some View {
-        let selected = preset.matches(primary: model.settings.primaryDNS, secondary: model.settings.secondaryDNS)
-        let infoOpen = openPresetInfoID == preset.id
-        return VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button {
-                    model.settings.useCustomDNS = true
-                    model.settings.primaryDNS = preset.primary
-                    model.settings.secondaryDNS = preset.secondary
-                    ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-                        message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
-                } label: {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(preset.name)
-                                    .font(.openSans(15, weight: .medium))
-                                    .foregroundStyle(Color.octGray100)
-                            }
-                            // Separate capability chips: what this resolver
-                            // really blocks (family services also block
-                            // malware; AdGuard also blocks trackers; ...).
-                            FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
-                            Text("\(preset.primary) • \(preset.secondary)")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(Color.octGray40)
-                        }
-                        Spacer()
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 18))
-                            .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
-                    }
-                    .padding(14)
-                }
-                .buttonStyle(.plain)
-                InfoDotButtonCompact(isVisible: infoOpen) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        openPresetInfoID = infoOpen ? nil : preset.id
-                    }
-                }
-                .padding(.trailing, 14)
-            }
-            if infoOpen {
-                InfoBubble(title: preset.name,
-                           message: model.copy.presetDescription(preset))
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
-            }
-        }
-    }
-
-    private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
-        switch chip {
-        case .noFilter: return Color.octGray40
-        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
-        case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
-        case .phishing: return Color(red: 0.45, green: 0.25, blue: 0.85)
-        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
-        case .trackers: return Color(red: 0.75, green: 0.55, blue: 0.1)
-        case .adult: return Color(red: 0.16, green: 0.62, blue: 0.35)
-        case .safeSearch: return Color(red: 0.1, green: 0.55, blue: 0.55)
-        }
-    }
-
-    /// Rule currently being edited (sheet reuse of AddDNSRuleView).
-    @State private var editingRule: DNSBlocklistEntry?
 
     private func dnsRuleRow(_ rule: DNSBlocklistEntry) -> some View {
         HStack(spacing: 12) {
@@ -1915,7 +1985,6 @@ struct DNSView: View {
                     .foregroundStyle(Color.octGray40)
             }
             Spacer()
-            // Edit sits BEFORE delete (natural order: change, then remove).
             Button {
                 editingRule = rule
             } label: {
@@ -1938,21 +2007,6 @@ struct DNSView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(model.copy.text(.dnsRuleDelete))
-        }
-        .padding(14)
-    }
-
-    private func dnsField(label: String, text: Binding<String>) -> some View {
-        HStack {
-            Text(label)
-                .font(.openSans(15))
-                .foregroundStyle(Color.octGray60)
-            Spacer()
-            TextField("0.0.0.0", text: text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .multilineTextAlignment(.trailing)
-                .font(.openSans(15))
         }
         .padding(14)
     }

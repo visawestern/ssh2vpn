@@ -131,4 +131,21 @@ final class AppSettingsStateTests: XCTestCase {
         XCTAssertEqual(decoded.primaryDNS, "1.1.1.1")
         XCTAssertEqual(decoded.killSwitch, true)
     }
+    // MARK: - Custom vs preset mode are mutually exclusive
+
+    func testPresetModeWinsWhileActive() {
+        var s = AppSettingsState(useCustomDNS: true, primaryDNS: "9.9.9.9", secondaryDNS: "1.1.1.1")
+        s.presetDNS = ["1.1.1.3", "1.0.0.3"]
+        XCTAssertEqual(s.resolvedDNSServers, ["1.1.1.3", "1.0.0.3"],
+                       "preset mode is active — custom fields are ignored")
+        XCTAssertEqual(s.validatedDNSServers, ["1.1.1.3", "1.0.0.3"])
+        // User re-enables custom mode -> preset cleared by the UI; simulate:
+        s.presetDNS = []
+        XCTAssertEqual(s.resolvedDNSServers, ["9.9.9.9", "1.1.1.1"])
+    }
+
+    func testDefaultModeResolvesEmpty() {
+        let s = AppSettingsState()
+        XCTAssertEqual(s.resolvedDNSServers, [], "neither custom nor preset -> tunnel default")
+    }
 }

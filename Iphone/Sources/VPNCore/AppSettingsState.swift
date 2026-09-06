@@ -11,8 +11,11 @@ public struct AppSettingsState: Equatable {
     public var connectOnDemand: Bool
     public var enableLogging: Bool
     /// Local DNS rules (block -> A 0.0.0.0, override -> custom IPv4), applied
-    /// by the tunnel BEFORE any upstream query.
+    /// by the tunnel BEFORE any upstream query. Independent of the DNS mode.
     public var dnsRules: [DNSBlocklistEntry]
+    /// Public-preset mode: when a preset is selected its IPs live here and
+    /// `useCustomDNS` is forced off (the two are mutually exclusive modes).
+    public var presetDNS: [String]
 
     public init(
         protocolName: String = "SSH2",
@@ -22,7 +25,8 @@ public struct AppSettingsState: Equatable {
         killSwitch: Bool = true,
         connectOnDemand: Bool = false,
         enableLogging: Bool = false,
-        dnsRules: [DNSBlocklistEntry] = []
+        dnsRules: [DNSBlocklistEntry] = [],
+        presetDNS: [String] = []
     ) {
         // SSH-2 (NIOSSH) is the only real transport; anything stored from the
         // old two-option UI (e.g. "SSH") is normalized back so no dead choice
@@ -35,6 +39,7 @@ public struct AppSettingsState: Equatable {
         self.connectOnDemand = connectOnDemand
         self.enableLogging = enableLogging
         self.dnsRules = dnsRules
+        self.presetDNS = presetDNS
     }
 
     /// Parsed local filter (block + override rules).
@@ -42,8 +47,10 @@ public struct AppSettingsState: Equatable {
         LocalDNSFilter(entries: dnsRules)
     }
 
-    /// Resolved DNS servers: custom values when enabled, otherwise empty.
+    /// Resolved DNS servers: preset values in preset mode, custom values in
+    /// custom mode, empty when neither is chosen (tunnel default 8.8.8.8).
     public var resolvedDNSServers: [String] {
+        if !presetDNS.isEmpty { return presetDNS }
         guard useCustomDNS else { return [] }
         return [primaryDNS, secondaryDNS].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
@@ -84,7 +91,8 @@ public struct AppSettingsCodec {
             "killSwitch": s.killSwitch,
             "connectOnDemand": s.connectOnDemand,
             "enableLogging": s.enableLogging,
-            "dnsRules": s.dnsRules.map { ["domain": $0.domain, "kind": $0.kind.rawValue, "ip": $0.ip] }
+            "dnsRules": s.dnsRules.map { ["domain": $0.domain, "kind": $0.kind.rawValue, "ip": $0.ip] },
+            "presetDNS": s.presetDNS
         ]
         guard JSONSerialization.isValidJSONObject(dict) else { throw AppSettingsError.encodingFailed }
         return try JSONSerialization.data(withJSONObject: dict)
@@ -107,7 +115,8 @@ public struct AppSettingsCodec {
                       let kindRaw = row["kind"],
                       let kind = DNSBlocklistEntry.Kind(rawValue: kindRaw) else { return nil }
                 return DNSBlocklistEntry(domain: domain, kind: kind, ip: row["ip"] ?? "")
-            }
+            },
+            presetDNS: dict["presetDNS"] as? [String] ?? []
         )
     }
 }

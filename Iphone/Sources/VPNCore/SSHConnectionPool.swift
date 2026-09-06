@@ -95,6 +95,84 @@ public final class SSHConnectionPool: @unchecked Sendable {
         self.policy = policy
         self.connector = connector
         self.log = log
+        watch(link: initial)
+    }
+
+    /// Auto-heal: a dropped parent SSH connection (server/NAT timeout) must
+    /// not take the tunnel down. The entry is evicted; when the pool runs
+    /// empty, a replacement connection is dialed immediately — flows reopen
+    /// on it while NetworkExtension keeps the tunnel itself CONNECTED.
+    /// This is what keeps the VPN alive in the background for real: no app
+    /// process needed for recovery.
+    private func watch(link: Link) {
+        link.channel.closeFuture.whenComplete { [weak self] _ in
+            guard let self else { return }
+            self.lock.lock()
+            if self.closed {
+                self.lock.unlock()
+                return
+            }
+            self.entries.removeAll { $0.link.channel === link.channel }
+            let remaining = self.entries.count
+            let isClosed = self.closed
+            self.lock.unlock()
+            let dead: String = (try? link.channel.remoteAddress?.description) ?? "?"
+            self.log(.warning, "POOL", "ssh connection dropped (\(dead)) — \(remaining) still alive")
+            if remaining == 0, !isClosed {
+                self.log(.error, "POOL", "last ssh connection lost — auto-healing: dialing a replacement now (tunnel stays up)")
+                self.heal()
+            }
+        }
+    }
+
+    /// Re-establishes one connection outside the lock (connector is async).
+    private func heal() {
+        lock.lock()
+        if closed {
+            lock.unlock()
+            return
+        }
+        if pendingGrows > 0 {
+            // A grow/heal is already dialing — it will refill the pool.
+            lock.unlock()
+            return
+        }
+        pendingGrows += 1
+        lock.unlock()
+        connector { [weak self] result in
+            guard let self else { return }
+            self.lock.lock()
+            self.pendingGrows -= 1
+            let isClosed = self.closed
+            self.lock.unlock()
+            switch result {
+            case .success(let link):
+                if isClosed {
+                    link.channel.close(promise: nil)
+                    return
+                }
+                self.lock.lock()
+                if !self.closed {
+                    self.entries.append(Entry(link: link, inFlight: 0))
+                    let n = self.entries.count
+                    self.lock.unlock()
+                    self.watch(link: link)
+                    self.log(.success, "POOL", "ssh connection restored — pool back to \(n) connection(s); flows will reconnect on it")
+                } else {
+                    self.lock.unlock()
+                    link.channel.close(promise: nil)
+                }
+            case .failure(let error):
+                self.log(.error, "POOL", "replacement ssh connection failed: \(error.localizedDescription) — retrying in 3s")
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
+                    guard let self else { return }
+                    self.lock.lock()
+                    let shouldRetry = self.entries.isEmpty && !self.closed
+                    self.lock.unlock()
+                    if shouldRetry { self.heal() }
+                }
+            }
+        }
     }
 
     /// Number of pooled SSH connections right now.
@@ -109,6 +187,23 @@ public final class SSHConnectionPool: @unchecked Sendable {
         return entries.map(\.inFlight)
     }
 
+    /// Keeps every pooled connection visibly active for NAT/sshd idle
+    /// timers: opens one throwaway direct-tcpip channel per connection and
+    /// closes it immediately. Cheap (one SSH round trip), uses only public
+    /// NIOSSH APIs, and runs on each link's own event loop.
+    public func keepalivePing() {
+        lock.lock()
+        let links = entries.map { $0.link }
+        lock.unlock()
+        for link in links {
+            let opener = NIOSSHChannelOpener(handler: link.handler, eventLoop: link.channel.eventLoop)
+            opener.open(targetHost: "127.0.0.1", targetPort: 22,
+                        originatorAddress: (try? SocketAddress(ipAddress: "127.0.0.1", port: 0)) ?? (try! SocketAddress(ipAddress: "0.0.0.0", port: 0)),
+                        onData: { _ in },
+                        onClosed: { })
+        }
+    }
+
     /// Opens a direct-tcpip channel for `flow` on the least-loaded pooled
     /// connection, growing the pool first if every connection is saturated.
     /// Never blocks: growth completes asynchronously and serves FUTURE opens.
@@ -117,8 +212,14 @@ public final class SSHConnectionPool: @unchecked Sendable {
                      onData: @escaping (Data) -> Void,
                      onClosed: @escaping () -> Void) -> RelayChannel {
         lock.lock()
-        if closed {
+        if closed || entries.isEmpty {
+            // Empty while healing: the flow gets a dead channel now and the
+            // phone will retransmit its SYN onto the healed pool in ~1s.
+            let healing = !closed
             lock.unlock()
+            if healing {
+                heal()
+            }
             return FailedClosedChannel()
         }
         let index = policy.plan(inFlight: entries.map(\.inFlight))
@@ -208,6 +309,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
                 self.entries.append(Entry(link: link, inFlight: 0))
                 let n = self.entries.count
                 self.lock.unlock()
+                self.watch(link: link)
                 self.log(.success, "POOL", "parallel SSH connection #\(n) ready — \(n)x parallelism to server")
             case .failure(let error):
                 self.log(.warning, "POOL", "parallel SSH connection #\(upcoming) failed: \(error.localizedDescription) — staying at current size")
