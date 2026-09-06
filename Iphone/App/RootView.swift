@@ -167,17 +167,14 @@ struct ConnectView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
-                // Upper area with World Map — shrinks in compact height
-                // (iPhone landscape / iPad Split View) so the power button
-                // never falls off-screen; capped on iPad so it doesn't blow
-                // up either.
+                // World Map: NEVER shrunk — 80% of the screen width (streaming
+                // down a phone's width when rotated, capping on iPad so the
+                // map doesn't dominate the whole screen).
                 ZStack(alignment: .center) {
                     WorldMapView()
                         .padding(.horizontal, 4)
                         .padding(.top, 4)
                 }
-                .frame(maxHeight: vSize == .compact ? 120 : 220)
-                .frame(maxWidth: 640)
 
                 Spacer(minLength: vSize == .compact ? 4 : 16)
 
@@ -598,7 +595,9 @@ struct WorldMapView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let mapWidth = geo.size.width
+            // 80% of the available width keeps the map dominant but leaves a
+            // breathing margin; aspect ratio comes from the asset itself.
+            let mapWidth = geo.size.width * 0.8
             let mapHeight = mapWidth * (954.0 / 1920.0)
             let hasServer = !model.profile.host.isEmpty
 
@@ -608,7 +607,9 @@ struct WorldMapView: View {
             let dotX = min(max(lonNorm * mapWidth, 24), mapWidth - 24)
             let dotY = min(max(latNorm * mapHeight, 22), mapHeight - 22)
 
-            ZStack(alignment: .topLeading) {
+            HStack {
+                Spacer()
+                ZStack(alignment: .topLeading) {
                 Image("world_map")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -699,12 +700,14 @@ struct WorldMapView: View {
                         removal: .scale(scale: 0.8).combined(with: .opacity)
                     ))
                 }
-            }
-            .frame(width: mapWidth, height: mapHeight)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
-                    isPulsing = true
                 }
+                .frame(width: mapWidth, height: mapHeight)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                        isPulsing = true
+                    }
+                }
+            Spacer()
             }
         }
         .aspectRatio(1920.0 / 954.0, contentMode: .fit)
