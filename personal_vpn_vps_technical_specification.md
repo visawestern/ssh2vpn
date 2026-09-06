@@ -1,9 +1,16 @@
 # Техническое задание
 ## Персональный VPN-клиент через собственный VPS
 
-**Версия:** 1.0  
-**Дата:** 28 августа 2026  
-**Статус:** концепция для разработки и дальнейшего технического аудита
+**Версия:** 1.2 (обновлена под фактическое состояние реализации)  
+**Дата:** 6 сентября 2026  
+**Статус:** iOS-клиент реализован и проверен на устройстве (relay-архитектура); backend/provisioning/покупки — не начаты. Разделы, описывающие выбранную архитектуру, обновлены; отметки «Состояние:» фиксируют фактический уровень.  
+
+> **Ключевое архитектурное изменение (сент. 2026):** от IP-туннеля поверх
+> SSH с серверным TUN/gateway-процессом (требует root на VPS) реализация
+> перешла на **непривилегированный relay-режим**: приложение само парсит
+> TCP-флоу из utun и переносит их через стандартные SSH `direct-tcpip`
+> каналы. Серверу нужен только штатный `sshd` с `AllowTcpForwarding`.
+> Детали — §12.1, §13, §14.
 
 ---
 
@@ -35,13 +42,25 @@
 
 ### Бесплатный период
 
-Предусмотреть конфигурируемый trial-период для проверки работоспособности приложения.
+**Текущее решение (реализовано):** вместо серверного trial действует
+локальная квота бесплатного времени:
 
-Рекомендуемое значение на старте:
+```text
+3 часа бесплатно каждому аккаунту устройства
++3 часа за просмотр rewarded-рекламы
+(не чаще 1 раза в час, максимум 3 просмотра в запасе)
+```
 
-- 30 дней.
+Сам rewarded-ad сейчас — заглушка на клиенте; учёт и лимиты
+(`AdQuota`) реализованы и протестированы. Подключение блокируется, а
+активный туннель отключается при исчерпании квоты.
 
-Trial должен позволять полноценно протестировать основную функцию подключения.
+> Примечание: «реклама в VPN-приложении» требует отдельного
+> compliance-провера перед публикацией (см. §51, §13 плана реализации —
+> п. 254).
+
+Исходная концепция trial-периода (30 дней, серверная проверка) сохраняется
+как опция для платной версии приложения.
 
 ---
 
@@ -457,38 +476,42 @@ Internet
 
 Использовать системный механизм:
 
-**Network Extension / NEPacketTunnelProvider.**
+**Network Extension / NEPacketTunnelProvider.** — реализовано и подтверждено на устройстве.
 
-Архитектура:
+Архитектура (актуальная реализация):
 
 ```text
-iOS App
+iOS App (SwiftUI)
    │
-   ├── UI
-   ├── Server management
-   └── Configuration
-          │
+   ├── UI: Connect / Locations / Settings / Console
+   ├── AppModel — connect-машина, квота, диагностика
+   └── VPNController — NETunnelProviderManager, on-demand
+          │  (handleAppMessage: серверы, статус, логи)
           ▼
-NEPacketTunnelProvider
-          │
-          ▼
-SSH-based transport
-          │
-          ▼
-User VPS
+NEPacketTunnelProvider (com.ssh2vpn.app.packet-tunnel)
+   │  парсит IPv4 TCP из packetFlow,
+   │  DNS (UDP:53) обслуживает DNS-relay внутри расширения
+   ▼
+SSH direct-tcpip channels (пул SSH-соединений, max 4)
+   ▼
+User VPS — штатный sshd (без root, без нашего ПО)
+   ▼
+Internet
 ```
 
-Трафик должен быть представлен системе как полноценный VPN-интерфейс.
+Трафик представлен системе как полноценный VPN-интерфейс (utun,
+includeAllNetworks + enforceRoutes, kill switch, on-demand).
 
-Нельзя ограничиваться SOCKS5 proxy, если продукт позиционируется как system-wide VPN.
+**Состояние:** iOS-клиент `SSH2VPN` собран, установлен на устройство,
+end-to-end трафик и self-healing подтверждены (сент. 2026); 525
+unit-тестов зелёные. Ограничения текущего среза: IPv4-only (v6 классифицируется
+и отбрасывается), UDP только DNS; остальной UDP считается и дропается.
 
 ## 12.2. Android
 
 Использовать:
 
-**VpnService**
-
-для создания системного VPN-интерфейса.
+**VpnService** — не начато (Этап 7).
 
 Архитектура должна соответствовать iOS по пользовательскому поведению:
 
@@ -512,54 +535,56 @@ Internet
 
 > SSH.
 
-Цель:
+Реализованный вариант (после прототипа и нагрузочного тестирования,
+предусмотренных этим же параграфом исходной версии):
 
-- пользовательский VPS не требует установки полноценного VPN-сервера;
-- приложение само устанавливает SSH-соединение;
-- приложение самостоятельно создаёт VPN tunnel поверх SSH;
-- пользователь не должен запускать `ssh -D`;
-- SOCKS5 не должен быть основной архитектурой.
+- выбран вариант «SSH channel + userspace packet forwarding» —
+  **`direct-tcpip`-каналы NIOSSH** на пуле параллельных SSH-соединений;
+- никакой серверной настройки: root, TUN-устройство, NAT и gateway-процесс
+  не требуются;
+- перед установкой туннеля выполняется pre-flight probe — один throwaway
+  `direct-tcpip` к 8.8.8.8:53/1.1.1.1:53, доказывающий, что auth завершён и
+  сервер форвардит (защита от half-installed «чёрной дыры» без диагностики);
+- SSH/NAT-keepalive каждые 15 с держит пул живым на нестабильных Wi-Fi.
 
-Необходимо исследовать и выбрать реализацию полноценного IP-туннеля поверх SSH.
+Не реализуется и не требуется: `ssh -D`, SOCKS5 как архитектура,
+публичные слушающие порты на VPS.
 
-Варианты реализации должны быть проверены отдельно:
+Серверные требования сводятся к:
 
-1. собственный transport;
-2. SSH channel + userspace packet forwarding;
-3. tun/tap abstraction;
-4. потоковый multiplexing;
-5. TCP/UDP forwarding;
-6. существующая библиотека SSH с необходимыми лицензиями.
-
-Выбор конкретного механизма производится после прототипа и нагрузочного тестирования.
+```text
+sshd с AllowTcpForwarding (по умолчанию yes)
+password или Ed25519 key auth
+исходящий TCP
+```
 
 ---
 
 # 14. Требования к туннелю
 
-Базовая версия должна поддерживать:
+Реализовано в текущем срезе (iOS):
 
-- TCP;
-- UDP;
-- IPv4;
-- IPv6;
-- DNS;
-- full-device routing;
-- reconnect;
-- connection timeout;
-- graceful disconnect;
-- tunnel health check.
+- TCP — да (sequence-aware relay, window scaling, backpressure, half-close);
+- DNS — да (локальный DNS-relay: правила block/override, пресеты, TTL-кэш);
+- IPv4 — да;
+- full-device routing — да (includeAllNetworks + enforceRoutes + kill switch);
+- reconnect — да (bounded backoff, path monitor, zombie/stall self-healing);
+- connection timeout — да;
+- graceful disconnect — да (cancellable mid-connect с чекпоинтами);
+- tunnel health check — да (heartbeat, probe, self-test egress IP);
+- UDP — только DNS; произвольный UDP не реализован (считается и дропается);
+- IPv6 — не реализован (v4-only, см. §12.1).
 
-Цель:
+Целевая схема (какая и есть):
 
 ```text
 iPhone
    ↓
 all traffic
    ↓
-VPN tunnel
+VPN tunnel (utun)
    ↓
-SSH
+SSH direct-tcpip
    ↓
 VPS
    ↓
@@ -570,31 +595,40 @@ Internet
 
 # 15. DNS
 
-Предусмотреть два режима:
+**Состояние: реализовано** (расширено относительно исходной схемы).
+
+Режимы в настройках DNS (взаимоисключающие):
 
 ## 15.1. DNS через VPS
 
 ```text
 Phone
  ↓
-VPN
+VPN (DNS relay в расширении)
  ↓
-VPS DNS resolver
+VPS (upstream-канал direct-tcpip к резолверу)
 ```
 
 ## 15.2. Пользовательский DNS
 
-В настройках можно позволить выбрать DNS resolver.
+- **Custom:** любые IPv4-литералы (валидируются, хостнеймы/опечатки отбрасываются).
+- **Preset-режим:** каталог из 19 публичных пресетов (Cloudflare, Google,
+  Quad9, OpenDNS, AdGuard DNS, AdGuard Family, MullerLight, NextDNS,
+  CleanBrowsing, dns0.eu, Yandex, Comodo, dnscrypt.ca и др.) с чипами
+  возможностей (no-filter, privacy, phishing, trackers, adult, safe-search)
+  и всплывающими подсказками.
 
-Базовый режим должен быть максимально простым.
+Поверх любого режима — **локальные правила** (block → A 0.0.0.0,
+override → кастомный IP; точное совпадение или поддерево), применяемые
+до любого upstream-запроса, плюс TTL-кэш ответов (hard cap 300 с).
 
 ---
 
 # 16. Kill Switch
 
-Предусмотреть защиту от утечки трафика при разрыве туннеля.
+**Состояние: реализовано в коде; физический leak-тест остаётся лабораторным пунктом.**
 
-Желаемое поведение:
+Поведение:
 
 ```text
 VPN connected
@@ -606,11 +640,16 @@ VPN disconnected
 Traffic blocked
 ```
 
-На каждой платформе необходимо использовать доступные системные механизмы.
+Реализация: `includeAllNetworks` + `enforceRoutes` в профиле NEPacketTunnelProvider,
+on-demand rules, квота-aware авто-переподключение, zombie-tunnel watchdog
+(мёртвый utun после disconnect → удаление профиля, интернет восстанавливается),
+stall watchdog (минутный ping отличает «юзер неактивен» от «flow умер»).
 
 ---
 
 # 17. Автоматическое переподключение
+
+**Состояние: реализовано.**
 
 При:
 
@@ -620,29 +659,34 @@ Traffic blocked
 - кратковременном разрыве SSH;
 - изменении сети;
 
-приложение должно автоматически восстанавливать соединение.
+приложение восстанавливает соединение автоматически: NWPathMonitor +
+heartbeat + bounded exponential backoff с jitter; SSH/NAT-keepalive (15 с)
+профилактирует тихую смерть NAT-маппингов; ранние смерти подключения
+диагностируются с bounded авто-ретраем.
 
 Алгоритм:
 
 ```text
 connection lost
       ↓
-detect
+detect (path monitor / heartbeat)
       ↓
-reconnect
+reconnect (backoff, jitter)
       ↓
-verify tunnel
+verify tunnel (probe)
       ↓
 restore routing
 ```
 
-Должна существовать защита от бесконечного цикла быстрых reconnect.
-
-Использовать backoff.
+Защита от бесконечного цикла быстрых reconnect — bounded backoff,
+квота-aware (при исчерпании бесплатного времени авто-реконнект не
+запускается).
 
 ---
 
 # 18. SSH-аутентификация
+
+**Состояние: password + Ed25519 key реализованы (host-key pinning обязателен).**
 
 Поддержать:
 
@@ -657,7 +701,10 @@ Password
 
 ### SSH private key
 
-Поддержать импорт ключа из системных источников.
+Поддержать импорт ключа из системных источников. — реализовано для
+Ed25519 (unencrypted): ключ парсится in-process, в Keychain хранится
+только нормализованный seed; encrypted-ключи и неподдерживаемые алгоритмы
+отвергаются явно.
 
 ### В будущем
 
@@ -670,7 +717,10 @@ Password
 
 # 19. Добавление существующего сервера
 
-Форма должна быть максимально простой:
+**Состояние: реализовано** (Add/Edit Server, тест подключения, host-key pinning,
+дедуп серверов, GeoIP-метаданные: страна/флаг; серверы хранит расширение).
+
+Форма максимально простая:
 
 ```text
 Add Server
@@ -686,20 +736,17 @@ Password
 
 SSH Port
 [ 22 ]
-
-[ TEST CONNECTION ]
 ```
 
-Расширенные параметры должны быть спрятаны в Advanced.
-
-Не показывать пользователю сложную SSH-конфигурацию без необходимости.
+Расширенные параметры (pinned host key, Ed25519 private key) спрятаны в
+расширенной части и не обязательны: host key пиннится при первом тесте.
 
 После успешного теста:
 
 ```text
 ✓ SSH connection successful
 
-✓ Tunnel supported
+✓ Tunnel supported (forwarding probe OK)
 
 [ SAVE SERVER ]
 ```
@@ -708,15 +755,13 @@ SSH Port
 
 # 20. Диагностика
 
-Ошибки должны быть человеческими.
+**Состояние: реализовано.** Человеческие ошибки с раскрываемыми
+техническими деталями; живые фазы туннеля (SSH connect → probe → transport
+→ ready) и счётчики (SSH-пул, каналы, флоу, MB up/down, протокольный сплит);
+санитизированный консольный лог с экспортом; last error передаётся из
+расширения; диагностика ранних смертей подключения.
 
-Вместо:
-
-```text
-ECONNREFUSED
-```
-
-показывать:
+Ошибки человечны. Например, вместо `ECONNREFUSED`:
 
 ```text
 Unable to connect to the server.
@@ -731,7 +776,9 @@ Possible causes:
 [ DETAILS ]
 ```
 
-В Details можно показать техническую информацию для продвинутого пользователя.
+Специализированные формулировки реализованы и для forwarding-disabled
+(`AllowTcpForwarding` на сервере), застрявшего auth (probe timeout),
+host key mismatch и исчерпания бесплатного времени.
 
 ---
 
@@ -1284,6 +1331,30 @@ Advanced-раздел допускается для технических по�
 
 # 37. Структура приложения
 
+**Состояние (реализованная структура iOS-приложения):**
+
+```text
+SSH2VPN (App)
+├── Connect (главный экран: power button, карта мира, карточка сервера, stats strip)
+├── Locations (My Servers: список, выбор, add/edit server, GeoIP, ping)
+├── Settings
+│   ├── Protocol (SSH2-only, с пояснением)
+│   ├── DNS (custom ИЛИ 19 публичных пресетов + локальные правила)
+│   ├── Advanced (Kill Switch, Connect On Demand, Logging)
+│   └── Language (17 языков)
+├── Diagnostics (живые фазы/счётчики, технические детали, лог)
+├── Hacker Console (боковой сайдбар консольного лога, export)
+└── Free-time quota (3 ч бесплатно, +3 ч за rewarded-рекламу)
+
+PacketTunnel (Network Extension)
+├── Relay-транспорт (TCP over direct-tcpip, SSH pool ≤ 4)
+├── DNS relay (правила/пресеты/кэш)
+├── Extension-owned server list (handleAppMessage API)
+└── Self-healing (keepalive, zombie/stall watchdog)
+```
+
+Целевая продуктовая структура (для следующих этапов — покупка сервера и т.д.):
+
 ```text
 App
 ├── Home
@@ -1312,36 +1383,46 @@ App
 
 # 38. Требования к серверной части VPS
 
-При создании VPS приложение должно обеспечить готовность сервера к SSH-туннелю.
+**Состояние: решено кардинально проще исходного плана.**
 
-Минимально:
+В текущей relay-архитектуре **постоянное серверное ПО не требуется
+вообще**: приложение работает со штатным `sshd` (нужен только
+`AllowTcpForwarding`, включённый по умолчанию). Установка агента,
+версионирование, авто-обновление и деинсталляция — выпадают как класс
+задач.
 
 ```text
-OS
-SSH
-network
-required forwarding components
-required tunnel agent/components
+Требования к VPS: OS с sshd + password/Ed25519 auth + исходящий TCP
 ```
 
-Если архитектура позволяет работать без дополнительного агента, предпочтительно не устанавливать постоянное ПО.
-
-Если агент необходим:
-
-- установка должна выполняться автоматически;
-- версия агента должна контролироваться;
-- обновление должно быть автоматизировано;
-- агент должен быть минимальным;
-- агент не должен собирать пользовательский трафик;
-- удаление сервера должно удалять весь наш компонент.
+Если в будущем вернётся TUN-режим (полноценный IP-туннель для UDP/IPv6),
+исходные требования сохраняются: автоматическая установка минимального
+агента, контроль версий, авто-обновление, отсутствие сбора трафика,
+полное удаление вместе с сервером. Соответствующие VPNCore-модули
+(GatewayArtifactVerifier/DeployCoordinator и др.) реализованы и покрыты
+тестами.
 
 ---
 
 # 39. Проверка готовности сервера
 
-Provisioning не считается завершённым после получения статуса `running`.
+**Состояние: реализовано для существующих серверов (короткая цепочка).**
 
-Необходимы проверки:
+Для существующего VPS (Add Existing Server) готовность проверяется так:
+
+```text
+Add Server
+   ↓
+SSH reachable + auth OK (TEST CONNECTION)
+   ↓
+forwarding probe (throwaway direct-tcpip к 8.8.8.8:53)
+   ↓
+туннель ставится; post-connect self-test проверяет egress IP
+   ↓
+READY
+```
+
+Расширенная цепочка (для provisioned-серверов — Этап 3) остаётся в силе:
 
 ```text
 VPS running
@@ -1360,8 +1441,6 @@ external connectivity successful
    ↓
 READY
 ```
-
-Только после этого сервер показывается как готовый.
 
 ---
 
@@ -1491,47 +1570,35 @@ Wi-Fi → 5G
 
 # 46. Версия 1
 
-Обязательные функции:
+Обязательные функции и их состояние (сент. 2026):
 
 ### Клиент
 
-- системный VPN;
-- SSH transport;
-- TCP;
-- UDP;
-- IPv4;
-- DNS;
-- reconnect;
-- kill switch;
-- password authentication;
-- SSH key;
-- existing VPS;
-- server list;
-- connection diagnostics.
+- системный VPN — ✅ реализовано (NEPacketTunnelProvider, on-device verified);
+- SSH transport — ✅ (direct-tcpip, пул соединений, пиннинг, probe);
+- TCP — ✅; UDP — ⚠️ только DNS:53 (остальной UDP дропается);
+- IPv4 — ✅; IPv6 — ❌ (не реализовано);
+- DNS — ✅ (relay: custom/19 пресетов + локальные правила + кэш);
+- reconnect — ✅ (backoff, keepalive, watchdog-самолечение);
+- kill switch — ✅ (код), физический leak-тест — лабораторный пункт;
+- password authentication — ✅; SSH key — ✅ Ed25519;
+- existing VPS — ✅; server list — ✅ (extension-owned, GeoIP, ping);
+- connection diagnostics — ✅;
+- free-time quota — ✅ реализовано как 3 ч + rewarded-ad (+3 ч) вместо backend-trial (см. §2.1).
 
 ### VPS
 
-- выбор страны;
-- выбор срока;
-- покупка;
-- provisioning;
-- автоматическое получение credentials;
-- автоматическое добавление сервера;
-- expiration;
-- replacement;
-- extend.
+- выбор страны — ❌ (Этап 3); выбор срока — ❌; покупка — ❌;
+- provisioning — ❌; автоматическое получение credentials — ❌;
+- автоматическое добавление сервера — ❌;
+- expiration — ❌; replacement — ❌; extend — ❌.
 
 ### Backend
 
-- licensing;
-- trial;
-- provider API;
-- provisioning;
-- order management;
-- webhook;
-- server state;
-- encrypted secrets;
-- provider abstraction.
+- licensing — ❌; trial (server-side) — ❌ (замещён локальной квотой);
+- provider API — ❌; provisioning — ❌; order management — ❌;
+- webhook — ❌; server state — ❌; encrypted secrets — ❌;
+- provider abstraction — ❌.
 
 ---
 
@@ -1944,23 +2011,25 @@ MVP считается готовым, если новый пользовате�
 
 # 63. Основные технические риски
 
+Оценка актуальности (сент. 2026):
+
 ## Высокий приоритет
 
-1. Реализация полноценного IP-туннеля поверх SSH на iOS.
-2. UDP.
-3. Network Extension ограничения.
-4. App Store review.
-5. VPS provisioning API.
-6. Безопасное получение credentials.
-7. Автоматическая установка серверного компонента.
-8. Производительность и battery usage.
-9. VPN kill switch.
-10. Корректная обработка network transitions.
+1. ~~Реализация полноценного IP-туннеля поверх SSH на iOS.~~ — ✅ решена иначе: relay поверх direct-tcpip без root; полноценный TUN-путь сохранён в коде.
+2. UDP — ⚠️ актуально: сейчас только DNS:53; произвольный UDP требует возврата TUN-режима.
+3. Network Extension ограничения — ✅ в основном сняты практикой (background, reconnect, sleep/wake реализованы); остаются формальные device-прогоны.
+4. App Store review — ⚠️ актуально (включая формулировки free/ads-модели).
+5. VPS provisioning API — ❌ не начат, актуально для Этапа 3.
+6. Безопасное получение credentials — ❌ не начат.
+7. ~~Автоматическая установка серверного компонента.~~ — ✅ снята: серверный компонент не нужен.
+8. Производительность и battery usage — ⚠️ частично (MSS/пул сделаны; Instruments-профилирование — lab).
+9. VPN kill switch — ⚠️ код готов, физический leak-тест — lab.
+10. Корректная обработка network transitions — ⚠️ код готов (path monitor, keepalive, watchdog), формальные carrier-прогоны — lab.
 
 ## Средний приоритет
 
 1. Multi-hop.
-2. IPv6.
+2. IPv6 — актуально (сейчас v4-only).
 3. Split tunneling.
 4. Несколько провайдеров.
 5. Автоматическая замена сервера.
@@ -1975,11 +2044,11 @@ MVP считается готовым, если новый пользовате�
 
 # 64. Техническая стратегия разработки
 
-Рекомендуемый порядок:
+Рекомендуемый порядок и текущий прогресс (сент. 2026):
 
-### Этап 1
+### Этап 1 — ✅ ПРОЙДЕН
 
-Сделать proof-of-concept:
+Proof-of-concept:
 
 ```text
 iPhone
@@ -1993,54 +2062,36 @@ Linux VPS
 Internet
 ```
 
-Без покупок, backend и красивого UI.
+Доказан system-wide туннель. Изделие прошло дальше POC: end-to-end
+трафик, throughput, самолечение подтверждены на устройстве.
 
-Цель:
+### Этап 2 — ✅ ПРОЙДЕН (с оговорками)
 
-> доказать полноценный system-wide IP tunnel.
+- reconnect — ✅; DNS — ✅; IPv4 — ✅;
+- kill switch — ✅ (код; физический leak-тест — lab);
+- UDP — ⚠️ только DNS; performance testing — частично (MSS-сегментация,
+  пул-масштабирование; формальные Link Conditioner прогоны — lab).
 
-### Этап 2
+### Этап 3 — VPS provisioning adapter — ❌ НЕ НАЧАТ.
 
-Добавить:
+### Этап 4 — backend — ❌ НЕ НАЧАТ.
 
-- reconnect;
-- DNS;
-- IPv4/IPv6;
-- UDP;
-- kill switch;
-- performance testing.
+### Этап 5 — пользовательский UI — ✅ РЕАЛИЗОВАН (Connect/Locations/Settings/Diagnostics/Console, 17 языков, адаптивный layout; кроме flow покупки сервера).
 
-### Этап 3
+### Этап 6 — App Store purchase — ❌ НЕ НАЧАТ (заменён временно локальной квотой + rewarded-ad заглушкой).
 
-Сделать VPS provisioning adapter.
+### Этап 7 — Google Play — ❌ НЕ НАЧАТ.
 
-### Этап 4
+### Этап 8 — store/compliance review — ❌ НЕ НАЧАТ (готовить privacy manifest, purpose strings; проверить формулировки free-модели).
 
-Сделать backend.
+### Этап 9 — multi-hop — ❌ НЕ НАЧАТ.
 
-### Этап 5
+### Этап 10 — TLS transport — ❌ НЕ НАЧАТ.
 
-Сделать пользовательский UI.
-
-### Этап 6
-
-Интегрировать App Store purchase.
-
-### Этап 7
-
-Google Play.
-
-### Этап 8
-
-Провести store/compliance review.
-
-### Этап 9
-
-Добавить multi-hop.
-
-### Этап 10
-
-Исследовать TLS transport.
+**Примечание к архитектурной вехе:** между Этапами 1 и 2 data plane
+переключён с «TUN + серверный gateway (root)» на «relay поверх
+direct-tcpip (без root)». Gateway-модули сохранены в кодовой базе
+(покрыты тестами) на случай возврата к полноценному IP-туннелю.
 
 ---
 
@@ -2115,6 +2166,12 @@ Internet
 ---
 
 # 67. Итог
+
+> **Срез на 6 сентября 2026:** ядро продукта — «подключи свой сервер» —
+> реализовано и работает на устройстве (relay поверх SSH, сервер без
+> ПО и root). Не реализованы: покупка/provisioning серверов, backend,
+> IAP, multi-hop, TLS-транспорт, IPv6 и произвольный UDP. Актуальные
+> статусы — в §46 и §64.
 
 Продукт строится вокруг трёх простых действий:
 
