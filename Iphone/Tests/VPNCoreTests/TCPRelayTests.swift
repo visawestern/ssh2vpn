@@ -801,6 +801,36 @@ final class TCPRelayTests: XCTestCase {
         XCTAssertEqual(opts.windowScale, 7, "SYN-ACK advertises window scale=7")
     }
 
+    /// Regression: large server bursts must be chopped into MSS-sized
+    /// segments. A single 32KB+ datagram starves iOS's ACK clock and, past
+    /// 65535 bytes, overflows the IP total-length field entirely.
+    func testChannelDataIsSegmentedIntoMSSChunks() throws {
+        let factory = FakeFactory()
+        var machine = TCPRelayStateMachine(factory: factory, isnGenerator: FixedISN())
+        let flow = IPv4Flow(sourceAddress: 0x0A000002, sourcePort: 1234,
+                            destinationAddress: 0x01010101, destinationPort: 443, transport: .tcp)
+        let rflow = RelayFlow(srcAddr: v4(10, 0, 0, 2), srcPort: 1234,
+                              dstAddr: v4(1, 1, 1, 1), dstPort: 443, transport: .tcp)
+        _ = try machine.handle(packet: IPv4Packet(synPacket(src: v4(10, 0, 0, 2), srcPort: 1234, dst: v4(1, 1, 1, 1), dstPort: 443)))
+        _ = try machine.handle(packet: IPv4Packet(ackPacket(flow: flow, seq: 1001, ack: 5001)))
+
+        // 5000 bytes arrive from the server on one channel read.
+        let replies = machine.channelData(Data(repeating: 0xAA, count: 5000), for: rflow)
+        XCTAssertEqual(replies.count, 4, "5000B burst -> ceil(5000/1400)=4 segments")
+        var expectedSeq: UInt32 = 5001 // isn + 1
+        for (i, pkt) in replies.enumerated() {
+            let total = Int(UInt16(pkt[2]) << 8 | UInt16(pkt[3]))
+            XCTAssertLessThanOrEqual(total, 20 + 20 + 1400, "every segment fits a 1500 MTU path")
+            XCTAssertLessThanOrEqual(total, 65_535, "IP total length field never overflows")
+            let seg = try TCPParser.parse(Data(pkt[20..<total]))
+            XCTAssertEqual(seg.seq, expectedSeq, "segment \(i) carries consecutive sequence numbers")
+            expectedSeq &+= UInt32(seg.payload.count)
+            XCTAssertTrue(Checksum.isValidTCPSegment(packet: pkt))
+        }
+        // Tail is exactly the remainder.
+        XCTAssertEqual(replies.count > 0 ? (5000 - (replies.count - 1) * 1400) : 0, 800)
+    }
+
     /// Regression: replies must travel SERVER -> PHONE. `TCPReplyBuilder`
     /// reverses the flow internally, so the state machine must pass the
     /// forward (phone->server) flow. A double reversal produced packets

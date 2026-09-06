@@ -11,20 +11,29 @@ public struct SSHPoolPolicy: Sendable {
     /// or above it, the pool grows (up to maxConnections).
     public var channelsPerConnection: Int
 
-    public init(maxConnections: Int = 4, channelsPerConnection: Int = 8) {
+    public init(maxConnections: Int = 4, channelsPerConnection: Int = 4) {
         self.maxConnections = max(1, maxConnections)
         self.channelsPerConnection = max(1, channelsPerConnection)
     }
 
     /// `inFlight[i]` = live channel count on connection i (never empty).
-    /// Returns the connection index to use (least loaded) and whether the
-    /// pool should grow: growth fires only when every connection is at cap.
-    public func plan(inFlight: [Int]) -> (index: Int, grow: Bool) {
+    /// Returns the index of the least-loaded connection.
+    public func plan(inFlight: [Int]) -> Int {
         precondition(!inFlight.isEmpty, "pool must hold at least one connection")
         var best = 0
         for i in inFlight.indices where inFlight[i] < inFlight[best] { best = i }
-        let saturated = inFlight.allSatisfy { $0 >= channelsPerConnection }
-        return (best, saturated && inFlight.count < maxConnections)
+        return best
+    }
+
+    /// How many connections the pool SHOULD have for `totalInFlight` live
+    /// channels. Each connection is good for `channelsPerConnection` streams;
+    /// a burst browser page (20-40 concurrent streams) immediately warrants
+    /// 2-4 parallel connections, and growth can lag creation — so callers ask
+    /// for the desired count and open the difference right away (several
+    /// grows may fly in parallel).
+    public func desiredConnections(totalInFlight: Int) -> Int {
+        let needed = (max(1, totalInFlight) + channelsPerConnection - 1) / channelsPerConnection
+        return min(maxConnections, needed)
     }
 }
 
@@ -67,7 +76,10 @@ public final class SSHConnectionPool: @unchecked Sendable {
 
     private let lock = NSLock()
     private var entries: [Entry]
-    private var growInFlight = false
+    /// SSH connects currently opening (a burst may warrant several at once —
+    /// unlike a single grow-in-flight flag, a burst isn't serialized behind
+    /// the first connect's latency).
+    private var pendingGrows = 0
     private var nextIndex: Int
     private var closed = false
     private let policy: SSHPoolPolicy
@@ -109,17 +121,26 @@ public final class SSHConnectionPool: @unchecked Sendable {
             lock.unlock()
             return FailedClosedChannel()
         }
-        let plan = policy.plan(inFlight: entries.map(\.inFlight))
-        entries[plan.index].inFlight += 1
-        let entry = entries[plan.index]
-        let total = entries[plan.index].inFlight
+        let index = policy.plan(inFlight: entries.map(\.inFlight))
+        entries[index].inFlight += 1
+        let entry = entries[index]
+        let total = entries[index].inFlight
+        // Growth: how many connections SHOULD exist for this load, minus
+        // those we already have or are already opening. A burst opens the
+        // whole deficit at once instead of one connection per RTT. Only the
+        // counter is reserved under the lock — the async connects are
+        // launched AFTER unlocking (a synchronous test connector must never
+        // run into a held lock).
+        let totalInFlight = entries.reduce(0) { $0 + $1.inFlight }
+        let deficit = policy.desiredConnections(totalInFlight: totalInFlight) - entries.count - pendingGrows
+        let toLaunch = max(0, deficit)
+        pendingGrows += toLaunch
         lock.unlock()
+        for _ in 0..<toLaunch { launchGrow() }
 
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let d = flow.dstAddr.map(String.init).joined(separator: ".")
-        log(.info, "POOL", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) via ssh#\(plan.index + 1) (\(total) ch on it)")
-
-        if plan.grow { grow() }
+        log(.info, "POOL", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) via ssh#\(index + 1) (\(total) ch on it)")
 
         let opener = NIOSSHChannelOpener(handler: entry.link.handler, eventLoop: entry.link.channel.eventLoop)
         let targetHost = flow.dstAddr.map(String.init).joined(separator: ".")
@@ -131,7 +152,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
                            originatorAddress: originator,
                            onData: onData,
                            onClosed: { [weak self] in
-                               self?.release(index: plan.index)
+                               self?.release(index: index)
                                onClosed()
                            }) ?? FailedClosedChannel()
     }
@@ -162,21 +183,19 @@ public final class SSHConnectionPool: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func grow() {
+    /// Establishes one more SSH connection. The slot (pendingGrows) was
+    /// already reserved by open(); on failure the reservation is released.
+    private func launchGrow() {
         lock.lock()
-        guard !growInFlight, !closed, entries.count < policy.maxConnections else {
-            lock.unlock()
-            return
-        }
-        growInFlight = true
-        let upcoming = entries.count + 1
+        let upcoming = entries.count + pendingGrows
+        let isClosed = closed
         lock.unlock()
-
-        log(.info, "POOL", "opening parallel SSH connection #\(upcoming) — all existing at channel cap (\(policy.channelsPerConnection)), scaling out for throughput")
+        if isClosed { return }
+        log(.info, "POOL", "opening parallel SSH connection #\(upcoming) — \(policy.channelsPerConnection)+ channels each, scaling out for throughput")
         connector { [weak self] result in
             guard let self else { return }
             self.lock.lock()
-            self.growInFlight = false
+            self.pendingGrows -= 1
             self.lock.unlock()
             switch result {
             case .success(let link):

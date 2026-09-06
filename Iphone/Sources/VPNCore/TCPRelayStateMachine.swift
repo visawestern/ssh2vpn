@@ -36,6 +36,9 @@ public struct TCPRelayStateMachine {
     public var factory: RelayChannelFactory
     public var isnGenerator: ISNGenerator
     public var idleTimeout: TimeInterval
+    /// Max TCP payload per packet toward the phone. 1400 leaves headroom for
+    /// IP+TCP headers under the 1500 utun MTU and comfortably under 65535.
+    static let maxSegmentPayload = 1400
     /// Transport-level sinks, set once by the owner. Invoked from channel
     /// callbacks (arbitrary threads); the owner hops onto its serial queue.
     public var onChannelData: ((RelayFlow, Data) -> Void)?
@@ -477,16 +480,32 @@ public struct TCPRelayStateMachine {
 
         guard !toSend.isEmpty else { return [] }
 
-        guard let pkt = try? TCPReplyBuilder.data(flow: flow, seq: state.localSeq, ack: state.peerSeq, payload: Array(toSend)) else {
-            return []
-        }
-        state.localSeq += UInt32(toSend.count)
-        state.outstandingToPhone += UInt32(toSend.count)
-        state.downBytes += toSend.count
-        totalDownBytes += toSend.count
-        if !state.loggedFirstDown {
-            state.loggedFirstDown = true
-            ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(flow)) down: first \(toSend.count)B")
+        // Segment into MSS-sized TCP packets. Sending one giant datagram (a
+        // channelRead can deliver ~32KB, a pending-buffer flush even more)
+        // forced iOS to reassemble/split internally, produced invalid IP
+        // packets past 65535 bytes (0xFFFF total-length overflow → silent
+        // drop → stall/retransmit), and starved the phone's ACK clock — the
+        // exact "everything crawls like one stream" symptom. N proper
+        // segments per burst keep delayed-ACK (every 2nd segment) firing and
+        // losses cheap to retransmit.
+        var out = [[UInt8]]()
+        var cursor = 0
+        while cursor < toSend.count {
+            let end = min(cursor + Self.maxSegmentPayload, toSend.count)
+            let chunk = toSend[cursor..<end]
+            guard let pkt = try? TCPReplyBuilder.data(flow: flow, seq: state.localSeq, ack: state.peerSeq, payload: Array(chunk)) else {
+                break
+            }
+            out.append(pkt)
+            state.localSeq += UInt32(chunk.count)
+            state.outstandingToPhone += UInt32(chunk.count)
+            state.downBytes += chunk.count
+            totalDownBytes += chunk.count
+            if !state.loggedFirstDown {
+                state.loggedFirstDown = true
+                ConsoleLogStore.shared.log(level: .info, tag: "RELAY", message: "flow \(Self.describe(flow)) down: first \(chunk.count)B")
+            }
+            cursor = end
         }
 
         // Buffer anything that didn't fit in the current window.
@@ -494,7 +513,7 @@ public struct TCPRelayStateMachine {
             state.pendingToPhone.append(remainder)
         }
 
-        return [pkt]
+        return out
     }
 
     /// Flushes pending server→phone data when the phone ACKs some of our
