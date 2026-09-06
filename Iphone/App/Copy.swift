@@ -45,7 +45,15 @@ enum CopyKey {
     // Free-time quota / rewarded ads
     case freeTimeLeft, watchAdPlus3h
     // DNS presets
-    case dnsPresetsHint
+    // DNS screen: section titles, tooltips, blocklist UI
+    case dnsPresetsTitle, dnsUseCustomInfoTitle, dnsUseCustomInfoBody
+    case dnsLocalRulesTitle, dnsLocalRulesInfoTitle, dnsLocalRulesInfoBody
+    case dnsAddRule, dnsAddRuleDomain, dnsAddRuleDomainPlaceholder, dnsAddRuleIP, dnsAddRuleIPPlaceholder
+    case dnsAddRuleMode, dnsAddRuleModeBlock, dnsAddRuleModeOverride, dnsAddRuleCancel, dnsAddRuleAdd
+    case dnsRuleBlocked, dnsRuleOverride, dnsRulesEmpty, dnsRulesHint, dnsRuleDelete
+    case dnsFilterNone, dnsFilterMalware, dnsFilterAds, dnsFilterFamily
+    case dnsInvalidDomain, dnsInvalidIP, dnsDuplicateRule
+    case dnsRulesCount, dnsRulesCountPlural
 }
 
 struct AppCopy {
@@ -64,6 +72,19 @@ struct AppCopy {
 
     // MARK: - English
     private let english: [CopyKey: String] = [
+        .dnsPresetsTitle: "PUBLIC PRESETS", .dnsUseCustomInfoTitle: "Custom DNS servers",
+        .dnsUseCustomInfoBody: "These servers resolve all domain names while the VPN tunnel is active. Pick a public preset or enter your own. Applied on the next connection.",
+        .dnsLocalRulesTitle: "LOCAL RULES", .dnsLocalRulesInfoTitle: "Local DNS rules",
+        .dnsLocalRulesInfoBody: "Rules apply on the device BEFORE any upstream query. Block answers with 0.0.0.0; Override resolves the domain to your chosen IP. Subdomains follow the block rule.",
+        .dnsAddRule: "Add rule", .dnsAddRuleDomain: "Domain", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP address (for override)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Action", .dnsAddRuleModeBlock: "Block (0.0.0.0)", .dnsAddRuleModeOverride: "Override to IP",
+        .dnsAddRuleCancel: "Cancel", .dnsAddRuleAdd: "Add", .dnsRuleBlocked: "BLOCKED", .dnsRuleOverride: "OVERRIDE",
+        .dnsRulesEmpty: "No local rules yet. Tap + to block a domain or map it to an IP.",
+        .dnsRulesHint: "Blocked domains answer 0.0.0.0 instantly, overrides answer your IP — no upstream query ever leaves the device. Applied on the next connection.",
+        .dnsRuleDelete: "Delete", .dnsFilterNone: "NO FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILY",
+        .dnsInvalidDomain: "Invalid domain (e.g. ads.example.com)", .dnsInvalidIP: "Invalid IPv4 address", .dnsDuplicateRule: "A rule for this domain already exists",
+        .dnsRulesCount: "rules", .dnsRulesCountPlural: "rules",
         .chooseLanguage: "Choose your language", .selectLanguageHint: "Select the language for SSH2VPN",
         .connected: "Connected", .connecting: "Connecting…", .disconnected: "Disconnected", .connect: "Connect",
         .disconnect: "Disconnect", .ready: "Ready", .yourVPS: "Your VPS", .addExistingServer: "Add Existing Server",
@@ -93,7 +114,6 @@ struct AppCopy {
         .sshTimeout: "Connection timed out", .unknownError: "Unknown error",
         .vpnProtocol: "VPN Protocol", .ssh2Recommended: "SSH2 is recommended. It provides the best security for your VPN tunnel.",
         .freeTimeLeft: "TIME LEFT", .watchAdPlus3h: "+3h free",
-        .dnsPresetsHint: "Applied on the next connection. Invalid entries are ignored with a log warning.",
         .ssh2Desc: "Secure Shell v2 with tunnel", .sshLegacy: "Legacy Secure Shell",
         .useCustomDNS: "Use Custom DNS", .primaryDNS: "Primary DNS", .secondaryDNS: "Secondary DNS",
         .customDNSHint: "Custom DNS servers are used when the VPN tunnel is active.",
@@ -104,8 +124,20 @@ struct AppCopy {
 
     // MARK: - Russian
     private let russian: [CopyKey: String] = [
+        .dnsPresetsTitle: "ПУБЛИЧНЫЕ ПРЕСЕТЫ", .dnsUseCustomInfoTitle: "Пользовательские DNS-серверы",
+        .dnsUseCustomInfoBody: "Эти серверы разрешают все доменные имена, пока активен VPN-туннель. Выберите публичный пресет или введите свои. Применится при следующем подключении.",
+        .dnsLocalRulesTitle: "ЛОКАЛЬНЫЕ ПРАВИЛА", .dnsLocalRulesInfoTitle: "Локальные DNS-правила",
+        .dnsLocalRulesInfoBody: "Правила применяются на устройстве ДО любого запроса к вышестоящему DNS. Блокировка отвечает 0.0.0.0; переопределение — вашим IP. Поддомены следуют правилу блокировки.",
+        .dnsAddRule: "Добавить правило", .dnsAddRuleDomain: "Домен", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP-адрес (для переопределения)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Действие", .dnsAddRuleModeBlock: "Блокировать (0.0.0.0)", .dnsAddRuleModeOverride: "Переопределить на IP",
+        .dnsAddRuleCancel: "Отмена", .dnsAddRuleAdd: "Добавить", .dnsRuleBlocked: "БЛОКИРОВКА", .dnsRuleOverride: "ПЕРЕОПРЕДЕЛЕНИЕ",
+        .dnsRulesEmpty: "Локальных правил пока нет. Нажмите +, чтобы заблокировать домен или указать для него IP.",
+        .dnsRulesHint: "Заблокированные домены мгновенно получают 0.0.0.0, переопределённые — ваш IP: запрос не покидает устройство. Применится при следующем подключении.",
+        .dnsRuleDelete: "Удалить", .dnsFilterNone: "БЕЗ ФИЛЬТРА", .dnsFilterMalware: "ВИРУСЫ+", .dnsFilterAds: "РЕКЛАМА+", .dnsFilterFamily: "СЕМЕЙНЫЙ",
+        .dnsInvalidDomain: "Некорректный домен (напр. ads.example.com)", .dnsInvalidIP: "Некорректный IPv4-адрес", .dnsDuplicateRule: "Правило для этого домена уже существует",
+        .dnsRulesCount: "правил", .dnsRulesCountPlural: "правил",
         .freeTimeLeft: "ОСТАЛОСЬ ВРЕМЕНИ", .watchAdPlus3h: "+3ч бесплатно",
-        .dnsPresetsHint: "Применится при следующем подключении. Неверные адреса игнорируются с записью в лог.",
         .chooseLanguage: "Выберите язык", .selectLanguageHint: "Выберите язык SSH2VPN", .connected: "Подключено",
         .connecting: "Подключение…", .disconnected: "Отключено", .connect: "Подключить", .disconnect: "Отключить",
         .ready: "Готов", .yourVPS: "Ваш VPS", .addExistingServer: "Добавить свой сервер", .addServer: "Добавить сервер",
@@ -145,6 +177,19 @@ struct AppCopy {
 
     // MARK: - Spanish
     private let spanish: [CopyKey: String] = [
+        .dnsPresetsTitle: "PRESETS PÚBLICOS", .dnsUseCustomInfoTitle: "Servidores DNS personalizados",
+        .dnsUseCustomInfoBody: "Estos servidores resuelven todos los nombres de dominio mientras el túnel VPN está activo. Elige un preset público o introduce los tuyos. Se aplica en la próxima conexión.",
+        .dnsLocalRulesTitle: "REGLAS LOCALES", .dnsLocalRulesInfoTitle: "Reglas DNS locales",
+        .dnsLocalRulesInfoBody: "Las reglas se aplican en el dispositivo ANTES de cualquier consulta externa. Bloquear responde 0.0.0.0; Redirigir resuelve el dominio a la IP que elijas. Los subdominios siguen la regla de bloqueo.",
+        .dnsAddRule: "Añadir regla", .dnsAddRuleDomain: "Dominio", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Dirección IP (para redirigir)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Acción", .dnsAddRuleModeBlock: "Bloquear (0.0.0.0)", .dnsAddRuleModeOverride: "Redirigir a IP",
+        .dnsAddRuleCancel: "Cancelar", .dnsAddRuleAdd: "Añadir", .dnsRuleBlocked: "BLOQUEADO", .dnsRuleOverride: "REDIRECCIÓN",
+        .dnsRulesEmpty: "Aún no hay reglas locales. Pulsa + para bloquear un dominio o asignarle una IP.",
+        .dnsRulesHint: "Los dominios bloqueados responden 0.0.0.0 al instante; las redirecciones devuelven tu IP: la consulta nunca sale del dispositivo. Se aplica en la próxima conexión.",
+        .dnsRuleDelete: "Eliminar", .dnsFilterNone: "SIN FILTRO", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANUNCIOS+", .dnsFilterFamily: "FAMILIAR",
+        .dnsInvalidDomain: "Dominio no válido (p. ej. ads.example.com)", .dnsInvalidIP: "Dirección IPv4 no válida", .dnsDuplicateRule: "Ya existe una regla para este dominio",
+        .dnsRulesCount: "reglas", .dnsRulesCountPlural: "reglas",
         .chooseLanguage: "Elige tu idioma", .selectLanguageHint: "Selecciona el idioma de SSH2VPN",
         .connected: "Conectado", .connecting: "Conectando…", .disconnected: "Desconectado", .connect: "Conectar",
         .disconnect: "Desconectar", .ready: "Listo", .yourVPS: "Tu VPS", .addExistingServer: "Añadir servidor existente",
@@ -178,6 +223,19 @@ struct AppCopy {
 
     // MARK: - German
     private let german: [CopyKey: String] = [
+        .dnsPresetsTitle: "ÖFFENTLICHE VOREINSTELLUNGEN", .dnsUseCustomInfoTitle: "Eigene DNS-Server",
+        .dnsUseCustomInfoBody: "Diese Server lösen alle Domainnamen auf, solange der VPN-Tunnel aktiv ist. Wähle eine öffentliche Voreinstellung oder gib eigene ein. Wirkt bei der nächsten Verbindung.",
+        .dnsLocalRulesTitle: "LOKALE REGELN", .dnsLocalRulesInfoTitle: "Lokale DNS-Regeln",
+        .dnsLocalRulesInfoBody: "Regeln gelten auf dem Gerät, VOR jeder Upstream-Abfrage. Sperren antwortet mit 0.0.0.0; Umleitung löst die Domain zur gewählten IP auf. Subdomains folgen der Sperre.",
+        .dnsAddRule: "Regel hinzufügen", .dnsAddRuleDomain: "Domain", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP-Adresse (für Umleitung)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Aktion", .dnsAddRuleModeBlock: "Sperren (0.0.0.0)", .dnsAddRuleModeOverride: "Auf IP umleiten",
+        .dnsAddRuleCancel: "Abbrechen", .dnsAddRuleAdd: "Hinzufügen", .dnsRuleBlocked: "GESPERRT", .dnsRuleOverride: "UMLEITUNG",
+        .dnsRulesEmpty: "Noch keine lokalen Regeln. Tippe +, um eine Domain zu sperren oder auf eine IP zu mappen.",
+        .dnsRulesHint: "Gesperrte Domains antworten sofort mit 0.0.0.0, Umleitungen mit deiner IP — die Abfrage verlässt nie das Gerät. Wirkt bei der nächsten Verbindung.",
+        .dnsRuleDelete: "Löschen", .dnsFilterNone: "OHNE FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILIE",
+        .dnsInvalidDomain: "Ungültige Domain (z. B. ads.example.com)", .dnsInvalidIP: "Ungültige IPv4-Adresse", .dnsDuplicateRule: "Für diese Domain existiert bereits eine Regel",
+        .dnsRulesCount: "Regeln", .dnsRulesCountPlural: "Regeln",
         .chooseLanguage: "Sprache wählen", .selectLanguageHint: "Sprache für SSH2VPN auswählen", .connected: "Verbunden",
         .connecting: "Verbinde…", .disconnected: "Getrennt", .connect: "Verbinden", .disconnect: "Trennen",
         .ready: "Bereit", .yourVPS: "Dein VPS", .addExistingServer: "Vorhandenen Server hinzufügen",
@@ -211,6 +269,19 @@ struct AppCopy {
 
     // MARK: - Japanese
     private let japanese: [CopyKey: String] = [
+        .dnsPresetsTitle: "パブリック プリセット", .dnsUseCustomInfoTitle: "カスタム DNS サーバー",
+        .dnsUseCustomInfoBody: "VPNトンネルが有効な間、これらのサーバーがすべてのドメイン名を解決します。公開プリセットを選ぶか、独自のものを入力してください。次回接続時に適用されます。",
+        .dnsLocalRulesTitle: "ローカルルール", .dnsLocalRulesInfoTitle: "ローカル DNS ルール",
+        .dnsLocalRulesInfoBody: "ルールは上位への問い合わせより先にデバイス上で適用されます。ブロックは 0.0.0.0 で応答し、上書きは選択した IP にドメインを解決します。サブドメインもブロックルールに従います。",
+        .dnsAddRule: "ルールを追加", .dnsAddRuleDomain: "ドメイン", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IPアドレス（上書き用）", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "アクション", .dnsAddRuleModeBlock: "ブロック (0.0.0.0)", .dnsAddRuleModeOverride: "IPに上書き",
+        .dnsAddRuleCancel: "キャンセル", .dnsAddRuleAdd: "追加", .dnsRuleBlocked: "ブロック中", .dnsRuleOverride: "上書き",
+        .dnsRulesEmpty: "ローカルルールはまだありません。+ をタップしてドメインをブロックまたは IP に割り当ててください。",
+        .dnsRulesHint: "ブロックされたドメインは即座に 0.0.0.0 で、上書きはあなたの IP で応答します。問い合わせがデバイス外に出ることはありません。次回接続時に適用。",
+        .dnsRuleDelete: "削除", .dnsFilterNone: "フィルタなし", .dnsFilterMalware: "マルウェア+", .dnsFilterAds: "広告+", .dnsFilterFamily: "ファミリー",
+        .dnsInvalidDomain: "無効なドメイン（例: ads.example.com）", .dnsInvalidIP: "無効な IPv4 アドレス", .dnsDuplicateRule: "このドメインのルールは既に存在します",
+        .dnsRulesCount: "件", .dnsRulesCountPlural: "件",
         .chooseLanguage: "言語を選択", .selectLanguageHint: "SSH2VPNの言語を選択してください", .connected: "接続済み", .connecting: "接続中…",
         .disconnected: "未接続", .connect: "接続", .disconnect: "切断", .ready: "準備完了", .yourVPS: "あなたのVPS",
         .addExistingServer: "既存のサーバーを追加", .addServer: "サーバーを追加", .server: "サーバー", .protected_: "保護されています",
@@ -236,6 +307,19 @@ struct AppCopy {
 
     // MARK: - Chinese (Simplified)
     private let chinese: [CopyKey: String] = [
+        .dnsPresetsTitle: "公共预设", .dnsUseCustomInfoTitle: "自定义 DNS 服务器",
+        .dnsUseCustomInfoBody: "VPN 隧道活跃期间，这些服务器解析所有域名。选择公共预设或输入自己的。下次连接时生效。",
+        .dnsLocalRulesTitle: "本地规则", .dnsLocalRulesInfoTitle: "本地 DNS 规则",
+        .dnsLocalRulesInfoBody: "规则在任何上游查询之前先在设备上生效。拦截以 0.0.0.0 应答；重定向将域名解析到您选择的 IP。子域名遵循拦截规则。",
+        .dnsAddRule: "添加规则", .dnsAddRuleDomain: "域名", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP 地址（用于重定向）", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "操作", .dnsAddRuleModeBlock: "拦截 (0.0.0.0)", .dnsAddRuleModeOverride: "重定向到 IP",
+        .dnsAddRuleCancel: "取消", .dnsAddRuleAdd: "添加", .dnsRuleBlocked: "已拦截", .dnsRuleOverride: "重定向",
+        .dnsRulesEmpty: "暂无本地规则。点按 + 拦截域名或将其映射到 IP。",
+        .dnsRulesHint: "被拦截的域名立即以 0.0.0.0 应答，重定向以您的 IP 应答 — 查询永不离开设备。下次连接时生效。",
+        .dnsRuleDelete: "删除", .dnsFilterNone: "无过滤", .dnsFilterMalware: "恶意+", .dnsFilterAds: "广告+", .dnsFilterFamily: "家庭",
+        .dnsInvalidDomain: "无效域名（如 ads.example.com）", .dnsInvalidIP: "无效的 IPv4 地址", .dnsDuplicateRule: "此域名已有规则",
+        .dnsRulesCount: "条规则", .dnsRulesCountPlural: "条规则",
         .chooseLanguage: "选择语言", .selectLanguageHint: "选择 SSH2VPN 的语言", .connected: "已连接", .connecting: "连接中…",
         .disconnected: "未连接", .connect: "连接", .disconnect: "断开", .ready: "就绪", .yourVPS: "你的 VPS",
         .addExistingServer: "添加现有服务器", .addServer: "添加服务器", .server: "服务器", .protected_: "已受保护", .unprotected: "未受保护",
@@ -259,6 +343,19 @@ struct AppCopy {
 
     // MARK: - French
     private let french: [CopyKey: String] = [
+        .dnsPresetsTitle: "PRESETS PUBLICS", .dnsUseCustomInfoTitle: "Serveurs DNS personnalisés",
+        .dnsUseCustomInfoBody: "Ces serveurs résolvent tous les noms de domaine tant que le tunnel VPN est actif. Choisissez un preset public ou saisissez les vôtres. Appliqué à la prochaine connexion.",
+        .dnsLocalRulesTitle: "RÈGLES LOCALES", .dnsLocalRulesInfoTitle: "Règles DNS locales",
+        .dnsLocalRulesInfoBody: "Les règles s'appliquent sur l'appareil AVANT toute requête externe. Bloquer répond 0.0.0.0 ; Rediriger résout le domaine vers l'IP choisie. Les sous-domaines suivent la règle de blocage.",
+        .dnsAddRule: "Ajouter une règle", .dnsAddRuleDomain: "Domaine", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Adresse IP (pour redirection)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Action", .dnsAddRuleModeBlock: "Bloquer (0.0.0.0)", .dnsAddRuleModeOverride: "Rediriger vers IP",
+        .dnsAddRuleCancel: "Annuler", .dnsAddRuleAdd: "Ajouter", .dnsRuleBlocked: "BLOQUÉ", .dnsRuleOverride: "REDIRECTION",
+        .dnsRulesEmpty: "Aucune règle locale. Touchez + pour bloquer un domaine ou l'associer à une IP.",
+        .dnsRulesHint: "Les domaines bloqués répondent instantanément 0.0.0.0, les redirections répondent votre IP — la requête ne quitte jamais l'appareil. Appliqué à la prochaine connexion.",
+        .dnsRuleDelete: "Supprimer", .dnsFilterNone: "SANS FILTRE", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUBS+", .dnsFilterFamily: "FAMILLE",
+        .dnsInvalidDomain: "Domaine invalide (ex. ads.example.com)", .dnsInvalidIP: "Adresse IPv4 invalide", .dnsDuplicateRule: "Une règle existe déjà pour ce domaine",
+        .dnsRulesCount: "règles", .dnsRulesCountPlural: "règles",
         .chooseLanguage: "Choisissez votre langue", .selectLanguageHint: "Sélectionnez la langue de SSH2VPN",
         .connected: "Connecté", .connecting: "Connexion…", .disconnected: "Déconnecté", .connect: "Connecter",
         .disconnect: "Déconnecter", .ready: "Prêt", .yourVPS: "Votre VPS",
@@ -292,6 +389,19 @@ struct AppCopy {
 
     // MARK: - Italian
     private let italian: [CopyKey: String] = [
+        .dnsPresetsTitle: "PRESET PUBBLICI", .dnsUseCustomInfoTitle: "Server DNS personalizzati",
+        .dnsUseCustomInfoBody: "Questi server risolvono tutti i nomi di dominio mentre il tunnel VPN è attivo. Scegli un preset pubblico o inserisci i tuoi. Applicato alla prossima connessione.",
+        .dnsLocalRulesTitle: "REGOLE LOCALI", .dnsLocalRulesInfoTitle: "Regole DNS locali",
+        .dnsLocalRulesInfoBody: "Le regole si applicano sul dispositivo PRIMA di ogni query esterna. Blocca risponde 0.0.0.0; Reindirizza risolve il dominio all'IP scelto. I sottodomini seguono la regola di blocco.",
+        .dnsAddRule: "Aggiungi regola", .dnsAddRuleDomain: "Dominio", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Indirizzo IP (per reindirizzamento)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Azione", .dnsAddRuleModeBlock: "Blocca (0.0.0.0)", .dnsAddRuleModeOverride: "Reindirizza a IP",
+        .dnsAddRuleCancel: "Annulla", .dnsAddRuleAdd: "Aggiungi", .dnsRuleBlocked: "BLOCCATO", .dnsRuleOverride: "REINDIRIZZO",
+        .dnsRulesEmpty: "Nessuna regola locale. Tocca + per bloccare un dominio o associarlo a un IP.",
+        .dnsRulesHint: "I domini bloccati rispondono subito 0.0.0.0, i reindirizzi rispondono col tuo IP — la query non lascia mai il dispositivo. Applicato alla prossima connessione.",
+        .dnsRuleDelete: "Elimina", .dnsFilterNone: "SENFILTRI", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "PUB+", .dnsFilterFamily: "FAMIGLIA",
+        .dnsInvalidDomain: "Dominio non valido (es. ads.example.com)", .dnsInvalidIP: "Indirizzo IPv4 non valido", .dnsDuplicateRule: "Esiste già una regola per questo dominio",
+        .dnsRulesCount: "regole", .dnsRulesCountPlural: "regole",
         .chooseLanguage: "Scegli la tua lingua", .selectLanguageHint: "Seleziona la lingua di SSH2VPN",
         .connected: "Connesso", .connecting: "Connessione…", .disconnected: "Disconnesso", .connect: "Connetti",
         .disconnect: "Disconnetti", .ready: "Pronto", .yourVPS: "Il tuo VPS",
@@ -325,6 +435,19 @@ struct AppCopy {
 
     // MARK: - Portuguese (Brazil)
     private let portuguese: [CopyKey: String] = [
+        .dnsPresetsTitle: "PRESETS PÚBLICOS", .dnsUseCustomInfoTitle: "Servidores DNS personalizados",
+        .dnsUseCustomInfoBody: "Estes servidores resolvem todos os nomes de domínio enquanto o túnel VPN está ativo. Escolha um preset público ou insira os seus. Aplicado na próxima conexão.",
+        .dnsLocalRulesTitle: "REGRAS LOCAIS", .dnsLocalRulesInfoTitle: "Regras DNS locais",
+        .dnsLocalRulesInfoBody: "As regras se aplicam no dispositivo ANTES de qualquer consulta externa. Bloquear responde 0.0.0.0; Redirecionar resolve o domínio para o IP escolhido. Subdomínios seguem a regra de bloqueio.",
+        .dnsAddRule: "Adicionar regra", .dnsAddRuleDomain: "Domínio", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Endereço IP (para redirecionamento)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Ação", .dnsAddRuleModeBlock: "Bloquear (0.0.0.0)", .dnsAddRuleModeOverride: "Redirecionar para IP",
+        .dnsAddRuleCancel: "Cancelar", .dnsAddRuleAdd: "Adicionar", .dnsRuleBlocked: "BLOQUEADO", .dnsRuleOverride: "REDIRECIONAMENTO",
+        .dnsRulesEmpty: "Nenhuma regra local ainda. Toque em + para bloquear um domínio ou associá-lo a um IP.",
+        .dnsRulesHint: "Domínios bloqueados respondem 0.0.0.0 instantaneamente, redirecionamentos respondem seu IP — a consulta nunca sai do dispositivo. Aplicado na próxima conexão.",
+        .dnsRuleDelete: "Excluir", .dnsFilterNone: "SEM FILTRO", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ANÚNCIOS+", .dnsFilterFamily: "FAMÍLIA",
+        .dnsInvalidDomain: "Domínio inválido (ex. ads.example.com)", .dnsInvalidIP: "Endereço IPv4 inválido", .dnsDuplicateRule: "Já existe uma regra para este domínio",
+        .dnsRulesCount: "regras", .dnsRulesCountPlural: "regras",
         .chooseLanguage: "Escolha seu idioma", .selectLanguageHint: "Selecione o idioma do SSH2VPN",
         .connected: "Conectado", .connecting: "Conectando…", .disconnected: "Desconectado", .connect: "Conectar",
         .disconnect: "Desconectar", .ready: "Pronto", .yourVPS: "Seu VPS",
@@ -358,6 +481,19 @@ struct AppCopy {
 
     // MARK: - Korean
     private let korean: [CopyKey: String] = [
+        .dnsPresetsTitle: "공개 프리셋", .dnsUseCustomInfoTitle: "사용자 지정 DNS 서버",
+        .dnsUseCustomInfoBody: "VPN 터널이 활성화된 동안 이 서버들이 모든 도메인 이름을 확인합니다. 공개 프리셋을 선택하거나 직접 입력하세요. 다음 연결 때 적용됩니다.",
+        .dnsLocalRulesTitle: "로컬 규칙", .dnsLocalRulesInfoTitle: "로컬 DNS 규칙",
+        .dnsLocalRulesInfoBody: "규칙은 상위 조회 전에 기기에서 적용됩니다. 차단은 0.0.0.0으로 응답하고, 재정의는 선택한 IP로 도메인을 확인합니다. 하위 도메인도 차단 규칙을 따릅니다.",
+        .dnsAddRule: "규칙 추가", .dnsAddRuleDomain: "도메인", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP 주소 (재정의용)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "동작", .dnsAddRuleModeBlock: "차단 (0.0.0.0)", .dnsAddRuleModeOverride: "IP로 재정의",
+        .dnsAddRuleCancel: "취소", .dnsAddRuleAdd: "추가", .dnsRuleBlocked: "차단됨", .dnsRuleOverride: "재정의",
+        .dnsRulesEmpty: "로컬 규칙이 없습니다. +를 눌러 도메인을 차단하거나 IP에 연결하세요.",
+        .dnsRulesHint: "차단된 도메인은 즉시 0.0.0.0으로, 재정의는 지정 IP로 응답합니다 — 조회가 기기를 벗어나지 않습니다. 다음 연결 때 적용.",
+        .dnsRuleDelete: "삭제", .dnsFilterNone: "필터 없음", .dnsFilterMalware: "악성+", .dnsFilterAds: "광고+", .dnsFilterFamily: "패밀리",
+        .dnsInvalidDomain: "잘못된 도메인 (예: ads.example.com)", .dnsInvalidIP: "잘못된 IPv4 주소", .dnsDuplicateRule: "이 도메인에는 이미 규칙이 있습니다",
+        .dnsRulesCount: "개 규칙", .dnsRulesCountPlural: "개 규칙",
         .chooseLanguage: "언어 선택", .selectLanguageHint: "SSH2VPN 언어를 선택하세요", .connected: "연결됨", .connecting: "연결 중…",
         .disconnected: "연결 끊김", .connect: "연결", .disconnect: "연결 해제", .ready: "준비", .yourVPS: "내 VPS",
         .addExistingServer: "기존 서버 추가", .addServer: "서버 추가", .server: "서버", .protected_: "보호됨", .unprotected: "보호되지 않음",
@@ -382,6 +518,19 @@ struct AppCopy {
 
     // MARK: - Arabic
     private let arabic: [CopyKey: String] = [
+        .dnsPresetsTitle: "إعدادات عامة", .dnsUseCustomInfoTitle: "خوادم DNS مخصصة",
+        .dnsUseCustomInfoBody: "تحل هذه الخوادم جميع أسماء النطاقات أثناء نشاط نفق VPN. اختر إعدادًا عامًا أو أدخل خوادمك. يُطبق عند الاتصال القادم.",
+        .dnsLocalRulesTitle: "قواعد محلية", .dnsLocalRulesInfoTitle: "قواعد DNS المحلية",
+        .dnsLocalRulesInfoBody: "تُطبق القواعد على الجهاز قبل أي استعلام خارجي. الحجب يستجيب بـ 0.0.0.0؛ إعادة التوجيه تحل النطاق إلى IP الذي تختاره. النطاقات الفرعية تتبع قاعدة الحجب.",
+        .dnsAddRule: "إضافة قاعدة", .dnsAddRuleDomain: "النطاق", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "عنوان IP (لإعادة التوجيه)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "الإجراء", .dnsAddRuleModeBlock: "حجب (0.0.0.0)", .dnsAddRuleModeOverride: "إعادة توجيه إلى IP",
+        .dnsAddRuleCancel: "إلغاء", .dnsAddRuleAdd: "إضافة", .dnsRuleBlocked: "محجوب", .dnsRuleOverride: "إعادة توجيه",
+        .dnsRulesEmpty: "لا توجد قواعد محلية بعد. انقر + لحجب نطاق أو ربطه بعنوان IP.",
+        .dnsRulesHint: "النطاقات المحجوبة تستجيب فورًا بـ 0.0.0.0، وإعادات التوجيه تستجيب بـ IP الخاص بك — الاستعلام لا يغادر الجهاز أبدًا. يُطبق عند الاتصال القادم.",
+        .dnsRuleDelete: "حذف", .dnsFilterNone: "بدون فلتر", .dnsFilterMalware: "برمجيات خبيثة+", .dnsFilterAds: "إعلانات+", .dnsFilterFamily: "عائلي",
+        .dnsInvalidDomain: "نطاق غير صالح (مثال: ads.example.com)", .dnsInvalidIP: "عنوان IPv4 غير صالح", .dnsDuplicateRule: "توجد قاعدة لهذا النطاق بالفعل",
+        .dnsRulesCount: "قواعد", .dnsRulesCountPlural: "قواعد",
         .chooseLanguage: "اختر لغتك", .selectLanguageHint: "اختر لغة SSH2VPN", .connected: "متصل",
         .connecting: "جاري الاتصال…", .disconnected: "غير متصل", .connect: "اتصل", .disconnect: "قطع الاتصال",
         .ready: "جاهز", .yourVPS: "خادمك VPS", .addExistingServer: "إضافة خادم موجود", .addServer: "إضافة خادم",
@@ -412,6 +561,19 @@ struct AppCopy {
 
     // MARK: - Hindi
     private let hindi: [CopyKey: String] = [
+        .dnsPresetsTitle: "सार्वजनिक प्रीसेट", .dnsUseCustomInfoTitle: "कस्टम DNS सर्वर",
+        .dnsUseCustomInfoBody: "VPN टनल सक्रिय रहने तक ये सर्वर सभी डोमेन नाम हल करते हैं। सार्वजनिक प्रीसेट चुनें या अपने दर्ज करें। अगले कनेक्शन पर लागू।",
+        .dnsLocalRulesTitle: "स्थानीय नियम", .dnsLocalRulesInfoTitle: "स्थानीय DNS नियम",
+        .dnsLocalRulesInfoBody: "नियम किसी बाहरी क्वेरी से पहले डिवाइस पर लागू होते हैं। ब्लॉक 0.0.0.0 से उत्तर देता है; ओवरराइड डोमेन को आपके चुने IP पर हल करता है। सबडोमेन ब्लॉक नियम का पालन करते हैं।",
+        .dnsAddRule: "नियम जोड़ें", .dnsAddRuleDomain: "डोमेन", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP पता (ओवरराइड के लिए)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "क्रिया", .dnsAddRuleModeBlock: "ब्लॉक (0.0.0.0)", .dnsAddRuleModeOverride: "IP पर ओवरराइड",
+        .dnsAddRuleCancel: "रद्द करें", .dnsAddRuleAdd: "जोड़ें", .dnsRuleBlocked: "ब्लॉक", .dnsRuleOverride: "ओवरराइड",
+        .dnsRulesEmpty: "अभी कोई स्थानीय नियम नहीं। डोमेन ब्लॉक करने या IP से जोड़ने के लिए + दबाएँ।",
+        .dnsRulesHint: "ब्लॉक डोमेन तुरंत 0.0.0.0 से उत्तर देते हैं, ओवरराइड आपके IP से — क्वेरी कभी डिवाइस से बाहर नहीं जाती। अगले कनेक्शन पर लागू।",
+        .dnsRuleDelete: "हटाएँ", .dnsFilterNone: "बिना फ़िल्टर", .dnsFilterMalware: "मैलवेयर+", .dnsFilterAds: "विज्ञापन+", .dnsFilterFamily: "फ़ैमिली",
+        .dnsInvalidDomain: "अमान्य डोमेन (उदा. ads.example.com)", .dnsInvalidIP: "अमान्य IPv4 पता", .dnsDuplicateRule: "इस डोमेन के लिए नियम पहले से मौजूद है",
+        .dnsRulesCount: "नियम", .dnsRulesCountPlural: "नियम",
         .chooseLanguage: "अपनी भाषा चुनें", .selectLanguageHint: "SSH2VPN की भाषा चुनें", .connected: "कनेक्टेड",
         .connecting: "कनेक्ट हो रहा है…", .disconnected: "डिस्कनेक्टेड", .connect: "कनेक्ट करें",
         .disconnect: "डिस्कनेक्ट करें", .ready: "तैयार", .yourVPS: "आपका VPS", .addExistingServer: "मौजूदा सर्वर जोड़ें",
@@ -443,6 +605,19 @@ struct AppCopy {
 
     // MARK: - Thai
     private let thai: [CopyKey: String] = [
+        .dnsPresetsTitle: "พรีเซ็ตสาธารณะ", .dnsUseCustomInfoTitle: "เซิร์ฟเวอร์ DNS แบบกำหนดเอง",
+        .dnsUseCustomInfoBody: "เซิร์ฟเวอร์เหล่านี้แก้ไขชื่อโดเมนทั้งหมดขณะที่อุโฆน VPN ทำงาน เลือกพรีเซ็ตสาธารณะหรือป้อนของคุณเอง มีผลตั้งแต่การเชื่อมต่อครั้งถัดไป",
+        .dnsLocalRulesTitle: "กฎภายในเครื่อง", .dnsLocalRulesInfoTitle: "กฎ DNS ภายในเครื่อง",
+        .dnsLocalRulesInfoBody: "กฎจะทำงานบนอุปกรณ์ก่อนการสอบถามภายนอกทุกครั้ง การบล็อกตอบด้วย 0.0.0.0; การ_override แก้ไขชื่อโดเมนไปยัง IP ที่คุณเลือก โดเมนย่อยตามกฎการบล็อก",
+        .dnsAddRule: "เพิ่มกฎ", .dnsAddRuleDomain: "โดเมน", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "ที่อยู่ IP (สำหรับ override)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "การกระทำ", .dnsAddRuleModeBlock: "บล็อก (0.0.0.0)", .dnsAddRuleModeOverride: "override เป็น IP",
+        .dnsAddRuleCancel: "ยกเลิก", .dnsAddRuleAdd: "เพิ่ม", .dnsRuleBlocked: "ถูกบล็อก", .dnsRuleOverride: "OVERRIDE",
+        .dnsRulesEmpty: "ยังไม่มีกฎภายในเครื่อง แตะ + เพื่อบล็อกโดเมนหรือผูกกับ IP",
+        .dnsRulesHint: "โดเมนที่ถูกบล็อกตอบ 0.0.0.0 ทันที การ override ตอบด้วย IP ของคุณ — คิวรีไม่ออกนอกอุปกรณ์ มีผลตั้งแต่การเชื่อมต่อครั้งถัดไป",
+        .dnsRuleDelete: "ลบ", .dnsFilterNone: "ไม่กรอง", .dnsFilterMalware: "มัลแวร์+", .dnsFilterAds: "โฆษณา+", .dnsFilterFamily: "ครอบครัว",
+        .dnsInvalidDomain: "โดเมนไม่ถูกต้อง (เช่น ads.example.com)", .dnsInvalidIP: "ที่อยู่ IPv4 ไม่ถูกต้อง", .dnsDuplicateRule: "มีกฎสำหรับโดเมนนี้อยู่แล้ว",
+        .dnsRulesCount: "กฎ", .dnsRulesCountPlural: "กฎ",
         .chooseLanguage: "เลือกภาษาของคุณ", .selectLanguageHint: "เลือกภาษาของ SSH2VPN", .connected: "เชื่อมต่อแล้ว",
         .connecting: "กำลังเชื่อมต่อ…", .disconnected: "ไม่ได้เชื่อมต่อ", .connect: "เชื่อมต่อ",
         .disconnect: "ตัดการเชื่อมต่อ", .ready: "พร้อม", .yourVPS: "VPS ของคุณ",
@@ -475,6 +650,19 @@ struct AppCopy {
 
     // MARK: - Turkish
     private let turkish: [CopyKey: String] = [
+        .dnsPresetsTitle: "GENEL ÖN AYARLAR", .dnsUseCustomInfoTitle: "Özel DNS sunucuları",
+        .dnsUseCustomInfoBody: "VPN tüneli etkinken bu sunucular tüm alan adlarını çözer. Genel bir ön ayar seçin veya kendinizinkini girin. Bir sonraki bağlantıda uygulanır.",
+        .dnsLocalRulesTitle: "YEREL KURALLAR", .dnsLocalRulesInfoTitle: "Yerel DNS kuralları",
+        .dnsLocalRulesInfoBody: "Kurallar herhangi bir yukarı akış sorgusundan ÖNCE cihazda uygulanır. Engelleme 0.0.0.0 ile yanıt verir; Yönlendirme alan adını seçtiğiniz IP'ye çözer. Alt alan adları engelleme kuralına uyar.",
+        .dnsAddRule: "Kural ekle", .dnsAddRuleDomain: "Alan adı", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP adresi (yönlendirme için)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Eylem", .dnsAddRuleModeBlock: "Engelle (0.0.0.0)", .dnsAddRuleModeOverride: "IP'ye yönlendir",
+        .dnsAddRuleCancel: "İptal", .dnsAddRuleAdd: "Ekle", .dnsRuleBlocked: "ENGELLİ", .dnsRuleOverride: "YÖNLENDİRME",
+        .dnsRulesEmpty: "Henüz yerel kural yok. Bir alan adını engellemek veya IP'ye bağlamak için +'ya dokunun.",
+        .dnsRulesHint: "Engellenen alan adları anında 0.0.0.0 ile, yönlendirmeler sizin IP'nizle yanıt verir — sorgu asla cihazdan çıkmaz. Bir sonraki bağlantıda uygulanır.",
+        .dnsRuleDelete: "Sil", .dnsFilterNone: "FİLTRESİZ", .dnsFilterMalware: "ZARARLI+", .dnsFilterAds: "REKLAM+", .dnsFilterFamily: "AİLE",
+        .dnsInvalidDomain: "Geçersiz alan adı (örn. ads.example.com)", .dnsInvalidIP: "Geçersiz IPv4 adresi", .dnsDuplicateRule: "Bu alan adı için zaten bir kural var",
+        .dnsRulesCount: "kural", .dnsRulesCountPlural: "kural",
         .chooseLanguage: "Dilinizi seçin", .selectLanguageHint: "SSH2VPN dilini seçin", .connected: "Bağlandı",
         .connecting: "Bağlanıyor…", .disconnected: "Bağlantı kesildi", .connect: "Bağlan", .disconnect: "Bağlantıyı kes",
         .ready: "Hazır", .yourVPS: "VPS'niz", .addExistingServer: "Mevcut sunucu ekle", .addServer: "Sunucu ekle",
@@ -507,6 +695,19 @@ struct AppCopy {
 
     // MARK: - Polish
     private let polish: [CopyKey: String] = [
+        .dnsPresetsTitle: "USTAWIENIA PUBLICZNE", .dnsUseCustomInfoTitle: "Własne serwery DNS",
+        .dnsUseCustomInfoBody: "Serwery te rozwiązują wszystkie nazwy domen, gdy tunel VPN jest aktywny. Wybierz publiczny preset lub wpisz własny. Zastosowane przy następnym połączeniu.",
+        .dnsLocalRulesTitle: "ZASADY LOKALNE", .dnsLocalRulesInfoTitle: "Lokalne zasady DNS",
+        .dnsLocalRulesInfoBody: "Zasady działają na urządzeniu PRZED każdym zapytaniem zewnętrznym. Blokada odpowiada 0.0.0.0; przekierowanie rozwiązuje domenę na wybrany IP. Subdomeny podlegają zasadzie blokady.",
+        .dnsAddRule: "Dodaj zasadę", .dnsAddRuleDomain: "Domena", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Adres IP (do przekierowania)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Działanie", .dnsAddRuleModeBlock: "Blokuj (0.0.0.0)", .dnsAddRuleModeOverride: "Przekieruj na IP",
+        .dnsAddRuleCancel: "Anuluj", .dnsAddRuleAdd: "Dodaj", .dnsRuleBlocked: "ZABLOKOWANA", .dnsRuleOverride: "PRZEKIEROWANIE",
+        .dnsRulesEmpty: "Brak zasad lokalnych. Dotknij +, aby zablokować domenę lub przypisać ją do IP.",
+        .dnsRulesHint: "Zablokowane domeny odpowiadają natychmiast 0.0.0.0, przekierowania Twoim IP — zapytanie nigdy nie opuszcza urządzenia. Zastosowane przy następnym połączeniu.",
+        .dnsRuleDelete: "Usuń", .dnsFilterNone: "BEZ FILTRA", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "REKLAMY+", .dnsFilterFamily: "RODZINA",
+        .dnsInvalidDomain: "Nieprawidłowa domena (np. ads.example.com)", .dnsInvalidIP: "Nieprawidłowy adres IPv4", .dnsDuplicateRule: "Zasada dla tej domeny już istnieje",
+        .dnsRulesCount: "zasad", .dnsRulesCountPlural: "zasad",
         .chooseLanguage: "Wybierz język", .selectLanguageHint: "Wybierz język SSH2VPN", .connected: "Połączono",
         .connecting: "Łączenie…", .disconnected: "Rozłączono", .connect: "Połącz", .disconnect: "Rozłącz",
         .ready: "Gotowy", .yourVPS: "Twój VPS", .addExistingServer: "Dodaj istniejący serwer",
@@ -540,6 +741,19 @@ struct AppCopy {
 
     // MARK: - Dutch
     private let dutch: [CopyKey: String] = [
+        .dnsPresetsTitle: "PUBLIEKE PRESETS", .dnsUseCustomInfoTitle: "Eigen DNS-servers",
+        .dnsUseCustomInfoBody: "Deze servers lossen alle domeinnamen op zolang de VPN-tunnel actief is. Kies een publieke preset of voer eigen servers in. Toegepast bij de volgende verbinding.",
+        .dnsLocalRulesTitle: "LOKALE REGELS", .dnsLocalRulesInfoTitle: "Lokale DNS-regels",
+        .dnsLocalRulesInfoBody: "Regels gelden op het apparaat VÓÓR elke upstream-query. Blokkeren antwoordt 0.0.0.0; omleiden lost het domein op naar jouw gekozen IP. Subdomeinen volgen de blokkeerregel.",
+        .dnsAddRule: "Regel toevoegen", .dnsAddRuleDomain: "Domein", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "IP-adres (voor omleiden)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Actie", .dnsAddRuleModeBlock: "Blokkeren (0.0.0.0)", .dnsAddRuleModeOverride: "Omleiden naar IP",
+        .dnsAddRuleCancel: "Annuleren", .dnsAddRuleAdd: "Toevoegen", .dnsRuleBlocked: "GEBLOKKEERD", .dnsRuleOverride: "OMLEIDING",
+        .dnsRulesEmpty: "Nog geen lokale regels. Tik op + om een domein te blokkeren of aan een IP te koppelen.",
+        .dnsRulesHint: "Geblokkeerde domeinen antwoorden direct 0.0.0.0, omleidingen antwoorden met jouw IP — de query verlaat het apparaat nooit. Toegepast bij de volgende verbinding.",
+        .dnsRuleDelete: "Verwijderen", .dnsFilterNone: "ZONDER FILTER", .dnsFilterMalware: "MALWARE+", .dnsFilterAds: "ADS+", .dnsFilterFamily: "FAMILIE",
+        .dnsInvalidDomain: "Ongeldig domein (bijv. ads.example.com)", .dnsInvalidIP: "Ongeldig IPv4-adres", .dnsDuplicateRule: "Er bestaat al een regel voor dit domein",
+        .dnsRulesCount: "regels", .dnsRulesCountPlural: "regels",
         .chooseLanguage: "Kies je taal", .selectLanguageHint: "Selecteer de taal van SSH2VPN", .connected: "Verbonden",
         .connecting: "Verbinden…", .disconnected: "Verbinding verbroken", .connect: "Verbinden",
         .disconnect: "Verbinding verbreken", .ready: "Gereed", .yourVPS: "Je VPS",
@@ -572,6 +786,19 @@ struct AppCopy {
 
     // MARK: - Vietnamese
     private let vietnamese: [CopyKey: String] = [
+        .dnsPresetsTitle: "CÀI ĐẶT CÔNG KHAI", .dnsUseCustomInfoTitle: "Máy chủ DNS tùy chỉnh",
+        .dnsUseCustomInfoBody: "Các máy chủ này phân giải mọi tên miền khi đường hầm VPN hoạt động. Chọn cài đặt công khai hoặc nhập của riêng bạn. Áp dụng từ lần kết nối sau.",
+        .dnsLocalRulesTitle: "QUY TẮC CỤC BỘ", .dnsLocalRulesInfoTitle: "Quy tắc DNS cục bộ",
+        .dnsLocalRulesInfoBody: "Quy tắc áp dụng trên thiết bị TRƯỚC mọi truy vấn ngoài. Chặn trả lời 0.0.0.0; Ghi đè phân giải tên miền sang IP bạn chọn. Tên miền con tuân theo quy tắc chặn.",
+        .dnsAddRule: "Thêm quy tắc", .dnsAddRuleDomain: "Tên miền", .dnsAddRuleDomainPlaceholder: "example.com",
+        .dnsAddRuleIP: "Địa chỉ IP (cho ghi đè)", .dnsAddRuleIPPlaceholder: "192.168.1.10",
+        .dnsAddRuleMode: "Hành động", .dnsAddRuleModeBlock: "Chặn (0.0.0.0)", .dnsAddRuleModeOverride: "Ghi đè thành IP",
+        .dnsAddRuleCancel: "Hủy", .dnsAddRuleAdd: "Thêm", .dnsRuleBlocked: "ĐÃ CHẶN", .dnsRuleOverride: "GHI ĐÈ",
+        .dnsRulesEmpty: "Chưa có quy tắc cục bộ. Nhấn + để chặn tên miền hoặc gán nó vào IP.",
+        .dnsRulesHint: "Tên miền bị chặn trả lời ngay 0.0.0.0, ghi đè trả lời bằng IP của bạn — truy vấn không bao giờ rời thiết bị. Áp dụng từ lần kết nối sau.",
+        .dnsRuleDelete: "Xóa", .dnsFilterNone: "KHÔNG LỌC", .dnsFilterMalware: "MÃ ĐỘC+", .dnsFilterAds: "QC+", .dnsFilterFamily: "GIA ĐÌNH",
+        .dnsInvalidDomain: "Tên miền không hợp lệ (vd. ads.example.com)", .dnsInvalidIP: "Địa chỉ IPv4 không hợp lệ", .dnsDuplicateRule: "Đã có quy tắc cho tên miền này",
+        .dnsRulesCount: "quy tắc", .dnsRulesCountPlural: "quy tắc",
         .chooseLanguage: "Chọn ngôn ngữ", .selectLanguageHint: "Chọn ngôn ngữ cho SSH2VPN", .connected: "Đã kết nối",
         .connecting: "Đang kết nối…", .disconnected: "Đã ngắt kết nối", .connect: "Kết nối", .disconnect: "Ngắt kết nối",
         .ready: "Sẵn sàng", .yourVPS: "VPS của bạn", .addExistingServer: "Thêm server hiện có",

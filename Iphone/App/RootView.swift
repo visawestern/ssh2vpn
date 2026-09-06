@@ -1674,6 +1674,11 @@ struct ProtocolView: View {
 
 struct DNSView: View {
     @EnvironmentObject private var model: AppModel
+    /// Persistent (per-DNSView-lifetime) tooltip states — tapping "?" toggles;
+    /// tapping anywhere outside or "?" again closes. Survives scrolling.
+    @State private var showCustomInfo = false
+    @State private var showRulesInfo = false
+    @State private var showAddRule = false
 
     var body: some View {
         ScrollView {
@@ -1686,15 +1691,24 @@ struct DNSView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(model.copy.text(.useCustomDNS))
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
+                        InfoDotButton(isVisible: $showCustomInfo)
                         Spacer()
                         Toggle("", isOn: $model.settings.useCustomDNS)
                             .tint(Color.prim50)
+                            .labelsHidden()
                     }
                     .padding(14)
+
+                    if showCustomInfo {
+                        InfoBubble(title: model.copy.text(.dnsUseCustomInfoTitle),
+                                   message: model.copy.text(.dnsUseCustomInfoBody))
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 12)
+                    }
 
                     if model.settings.useCustomDNS {
                         Divider().background(Color.octGray05).padding(.horizontal, 16)
@@ -1707,65 +1721,86 @@ struct DNSView: View {
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                Text(model.copy.text(.customDNSHint))
-                    .font(.openSans(12))
-                    .foregroundStyle(Color.octGray60)
-                    .padding(.horizontal, 16)
-                Text(model.copy.text(.dnsPresetsHint))
-                    .font(.openSans(12))
-                    .foregroundStyle(Color.octGray40)
-                    .padding(.horizontal, 16)
-
-                // Curated public presets: tap to fill the fields with a known
-                // good resolver. Grouped by what they block; the description
-                // spells out the blocking so the user knows what they get.
+                // Curated public presets: fixed-height scrollable list, ~3.5
+                // rows visible — the section never dominates the screen.
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("PUBLIC PRESETS")
+                    Text(model.copy.text(.dnsPresetsTitle))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(DNSPresets.all.enumerated()), id: \.element.id) { index, preset in
-                            if index > 0 {
-                                Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(DNSPresets.all.enumerated()), id: \.element.id) { index, preset in
+                                if index > 0 {
+                                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                                }
+                                presetRow(preset)
                             }
-                            presetRow(preset)
                         }
                     }
+                    .frame(maxHeight: 354)   // ~3.5 rows of a 100pt row + divider
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                // Local blocklist (uBlock/hosts-style): domains listed here
-                // are refused BY THE TUNNEL before any upstream query — no
-                // DNS request for them ever leaves the device.
+                // Local rules: block (0.0.0.0) / override (custom IP), added
+                // via the + button — managed as a list, not raw text.
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("LOCAL BLOCKLIST")
+                    HStack(spacing: 8) {
+                        Text(model.copy.text(.dnsLocalRulesTitle))
                             .font(.openSans(13, weight: .semibold))
                             .foregroundStyle(Color.octGray60)
+                        InfoDotButton(isVisible: $showRulesInfo)
                         Spacer()
-                        Text("\(model.settings.dnsBlocklist.blockedDomains.count) domains")
+                        Text("\(model.settings.dnsRules.count) \(model.copy.text(.dnsRulesCount))")
                             .font(.openSans(11, weight: .semibold))
-                            .foregroundStyle(model.settings.dnsBlocklist.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                            .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                        Button {
+                            showAddRule = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Color.sec50, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(model.copy.text(.dnsAddRule))
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
-                    TextEditor(text: $model.settings.dnsBlocklistText)
-                        .font(.system(size: 12, design: .monospaced))
-                        .frame(minHeight: 120)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
-                        .scrollContentBackground(.hidden)
-                        .background(Color.octGray0)
+                    if showRulesInfo {
+                        InfoBubble(title: model.copy.text(.dnsLocalRulesInfoTitle),
+                                   message: model.copy.text(.dnsLocalRulesInfoBody))
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 12)
+                    }
+
+                    if model.settings.dnsRules.isEmpty {
+                        Text(model.copy.text(.dnsRulesEmpty))
+                            .font(.openSans(12))
+                            .foregroundStyle(Color.octGray40)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 14)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(model.settings.dnsRules.enumerated()), id: \.element.id) { index, rule in
+                                if index > 0 {
+                                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                                }
+                                dnsRuleRow(rule)
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                Text("One domain per line: example.com, 0.0.0.0 ads.net, ||ublock.org^ — subdomains included. Blocked domains get an instant local REFUSED, no upstream query. Applied on the next connection.")
+                Text(model.copy.text(.dnsRulesHint))
                     .font(.openSans(11))
                     .foregroundStyle(Color.octGray40)
                     .padding(.horizontal, 16)
@@ -1775,14 +1810,15 @@ struct DNSView: View {
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.dnsSettings))
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showAddRule) {
+            AddDNSRuleView()
+                .presentationDetents([.medium])
+        }
     }
 
     private func presetRow(_ preset: DNSPreset) -> some View {
         let selected = preset.matches(primary: model.settings.primaryDNS, secondary: model.settings.secondaryDNS)
-        let isRU = (LanguageStore.current ?? .english) == .russian
         return Button {
-            // Tapping a preset turns custom DNS on (a preset IS a custom
-            // choice) and fills the fields; applied on the next connect.
             model.settings.useCustomDNS = true
             model.settings.primaryDNS = preset.primary
             model.settings.secondaryDNS = preset.secondary
@@ -1795,9 +1831,9 @@ struct DNSView: View {
                         Text(preset.name)
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
-                        filterBadge(preset)
+                        presetBadge(preset)
                     }
-                    Text(preset.description(forRussian: isRU))
+                    Text(model.copy.presetDescription(preset))
                         .font(.openSans(11))
                         .foregroundStyle(Color.octGray60)
                         .lineLimit(2)
@@ -1817,15 +1853,16 @@ struct DNSView: View {
         .buttonStyle(.plain)
     }
 
-    /// One-word badge naming what the resolver blocks.
+    /// Localized filter badge naming what the resolver blocks.
     @ViewBuilder
-    private func filterBadge(_ preset: DNSPreset) -> some View {
-        let (text, color): (String, Color) = {
+    private func presetBadge(_ preset: DNSPreset) -> some View {
+        let text = model.copy.presetFilterBadge(preset)
+        let color: Color = {
             switch preset.filter {
-            case .none: return ("NO FILTER", Color.octGray40)
-            case .malware: return ("MALWARE+", Color(red: 0.13, green: 0.44, blue: 0.85))
-            case .ads: return ("ADS+", Color(red: 0.85, green: 0.45, blue: 0.1))
-            case .family: return ("FAMILY", Color(red: 0.16, green: 0.62, blue: 0.35))
+            case .none: return Color.octGray40
+            case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
+            case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+            case .family: return Color(red: 0.16, green: 0.62, blue: 0.35)
             }
         }()
         Text(text)
@@ -1834,6 +1871,46 @@ struct DNSView: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(color.opacity(0.12), in: Capsule())
+    }
+
+    private func dnsRuleRow(_ rule: DNSBlocklistEntry) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(rule.domain)
+                        .font(.openSans(14, weight: .medium))
+                        .foregroundStyle(Color.octGray100)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(rule.kind == .block ? model.copy.text(.dnsRuleBlocked) : model.copy.text(.dnsRuleOverride))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(rule.kind == .block
+                                         ? Color(red: 1.0, green: 0.25, blue: 0.35)
+                                         : Color(red: 0.13, green: 0.44, blue: 0.85))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background((rule.kind == .block
+                                      ? Color(red: 1.0, green: 0.25, blue: 0.35)
+                                      : Color(red: 0.13, green: 0.44, blue: 0.85)).opacity(0.12), in: Capsule())
+                }
+                Text(rule.kind == .block ? "0.0.0.0" : rule.ip)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.octGray40)
+            }
+            Spacer()
+            Button {
+                model.removeDNSRule(id: rule.id)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.red.opacity(0.7))
+                    .frame(width: 30, height: 30)
+                    .background(Color.red.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.copy.text(.dnsRuleDelete))
+        }
+        .padding(14)
     }
 
     private func dnsField(label: String, text: Binding<String>) -> some View {
@@ -1849,6 +1926,143 @@ struct DNSView: View {
                 .font(.openSans(15))
         }
         .padding(14)
+    }
+}
+
+// MARK: - Info tooltip components (reused across settings screens)
+
+/// Round "?" button toggling a tooltip bubble. The bubble below is part of the
+/// layout (persistent — it doesn't vanish when you scroll or tap elsewhere on
+/// the same control group).
+struct InfoDotButton: View {
+    @Binding var isVisible: Bool
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                isVisible.toggle()
+            }
+        } label: {
+            Image(systemName: "questionmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .frame(width: 20, height: 20)
+                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("info")
+    }
+}
+
+/// Rounded tooltip card with a title + body.
+struct InfoBubble: View {
+    let title: String
+    let message: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.openSans(12, weight: .semibold))
+                .foregroundStyle(Color.prim50)
+            Text(message)
+                .font(.openSans(12))
+                .foregroundStyle(Color.octGray60)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.prim50.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.prim50.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Add DNS rule sheet (block / override)
+
+struct AddDNSRuleView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var domain = ""
+    @State private var ip = ""
+    @State private var mode: DNSBlocklistEntry.Kind = .block
+    @State private var errorText: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsAddRuleDomain))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    TextField(model.copy.text(.dnsAddRuleDomainPlaceholder), text: $domain)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(12)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsAddRuleMode))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    Picker("", selection: $mode) {
+                        Text(model.copy.text(.dnsAddRuleModeBlock)).tag(DNSBlocklistEntry.Kind.block)
+                        Text(model.copy.text(.dnsAddRuleModeOverride)).tag(DNSBlocklistEntry.Kind.override)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if mode == .override {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.copy.text(.dnsAddRuleIP))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                        TextField(model.copy.text(.dnsAddRuleIPPlaceholder), text: $ip)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.decimalPad)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(12)
+                            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+
+                if let errorText {
+                    Text(errorText)
+                        .font(.openSans(12))
+                        .foregroundStyle(Color.red)
+                }
+
+                Spacer()
+
+                Button {
+                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip) {
+                        errorText = failure
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Text(model.copy.text(.dnsAddRuleAdd))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.sec50, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(domain.isEmpty || (mode == .override && ip.isEmpty))
+            }
+            .padding(16)
+            .background(Color.appBg)
+            .navigationTitle(model.copy.text(.dnsAddRule))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(model.copy.text(.dnsAddRuleCancel)) { dismiss() }
+                }
+            }
+        }
     }
 }
 

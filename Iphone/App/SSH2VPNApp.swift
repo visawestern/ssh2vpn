@@ -977,8 +977,8 @@ final class AppModel: ObservableObject {
                 message: "ignoring invalid custom DNS entries (kept \(dns.count)/\(rawDNS.count): \(dns.isEmpty ? "none valid — falling back to 8.8.8.8" : dns.joined(separator: ", ")))")
         }
         effectiveProfile.dnsServers = dns
-        // Local blocklist travels with the profile to the extension.
-        effectiveProfile.dnsBlocklist = settings.dnsBlocklistText
+        // Local rules travel with the profile to the extension (JSON).
+        effectiveProfile.dnsRules = DNSBlocklistEntry.encodeList(settings.dnsRules) ?? "[]"
         // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
         let serverIP = cachedServerIPv4
 
@@ -1069,6 +1069,30 @@ final class AppModel: ObservableObject {
     /// message-channel calls. Read-only — no connection mutation from UI.
     var extensionManager: NETunnelProviderManager? { vpn.diagnosticManager() }
 
+    // MARK: - Local DNS rules management (settings screen)
+
+    /// Adds a local DNS rule after validating it. Returns a localized
+    /// error key's message on failure (nil = added).
+    @discardableResult
+    func addDNSRule(domain: String, kind: DNSBlocklistEntry.Kind, ip: String) -> String? {
+        guard LocalDNSFilter.isValidDomain(domain) else { return copy.text(.dnsInvalidDomain) }
+        let normalized = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if settings.dnsRules.contains(where: { $0.domain == normalized }) {
+            return copy.text(.dnsDuplicateRule)
+        }
+        if kind == .override {
+            guard DNSWire.ipv4Bytes(ip) != nil else { return copy.text(.dnsInvalidIP) }
+        }
+        settings.dnsRules.append(DNSBlocklistEntry(domain: normalized, kind: kind, ip: kind == .override ? ip : ""))
+        ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
+            message: "local rule added: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+        return nil
+    }
+
+    func removeDNSRule(id: UUID) {
+        settings.dnsRules.removeAll { $0.id == id }
+    }
+
     // MARK: - Live tunnel stats + ad quota
 
     /// Remaining quota accounting for the LIVE session too (the struct only
@@ -1137,9 +1161,9 @@ struct VPNProfile: Equatable {
     var privateKey: String
     var hostKey: String
     var dnsServers: [String] = []
-    /// Local DNS blocklist (hosts/uBlock lines) — the extension refuses these
+    /// Local DNS rules (block/override) — the extension answers these
     /// domains locally, before any upstream query.
-    var dnsBlocklist: String = ""
+    var dnsRules: String = ""
 }
 
 
@@ -1277,10 +1301,10 @@ private final class VPNController {
             if let serverIP {
                 providerConfig["serverIP"] = serverIP
             }
-            // Local DNS blocklist (hosts/uBlock-style): the extension refuses
-            // these domains locally before any upstream query.
-            if !profile.dnsBlocklist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                providerConfig["dnsBlocklist"] = profile.dnsBlocklist
+            // Local DNS rules (block/override): the extension answers these
+            // domains locally before any upstream query (JSON-encoded list).
+            if !profile.dnsRules.isEmpty, profile.dnsRules != "[]" {
+                providerConfig["dnsRules"] = profile.dnsRules
             }
 
             // Reuse check: if the stored system configuration already equals

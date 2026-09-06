@@ -10,9 +10,9 @@ public struct AppSettingsState: Equatable {
     public var killSwitch: Bool
     public var connectOnDemand: Bool
     public var enableLogging: Bool
-    /// Local DNS blocklist (hosts/uBlock-style lines). Checked by the tunnel
-    /// BEFORE any upstream query; blocked domains get an instant REFUSED.
-    public var dnsBlocklistText: String
+    /// Local DNS rules (block -> A 0.0.0.0, override -> custom IPv4), applied
+    /// by the tunnel BEFORE any upstream query.
+    public var dnsRules: [DNSBlocklistEntry]
 
     public init(
         protocolName: String = "SSH2",
@@ -22,7 +22,7 @@ public struct AppSettingsState: Equatable {
         killSwitch: Bool = true,
         connectOnDemand: Bool = false,
         enableLogging: Bool = false,
-        dnsBlocklistText: String = ""
+        dnsRules: [DNSBlocklistEntry] = []
     ) {
         // SSH-2 (NIOSSH) is the only real transport; anything stored from the
         // old two-option UI (e.g. "SSH") is normalized back so no dead choice
@@ -34,12 +34,12 @@ public struct AppSettingsState: Equatable {
         self.killSwitch = killSwitch
         self.connectOnDemand = connectOnDemand
         self.enableLogging = enableLogging
-        self.dnsBlocklistText = dnsBlocklistText
+        self.dnsRules = dnsRules
     }
 
-    /// Parsed local blocklist (invalid lines dropped by the parser).
+    /// Parsed local filter (block + override rules).
     public var dnsBlocklist: LocalDNSFilter {
-        LocalDNSFilter(blocklistText: dnsBlocklistText)
+        LocalDNSFilter(entries: dnsRules)
     }
 
     /// Resolved DNS servers: custom values when enabled, otherwise empty.
@@ -84,7 +84,7 @@ public struct AppSettingsCodec {
             "killSwitch": s.killSwitch,
             "connectOnDemand": s.connectOnDemand,
             "enableLogging": s.enableLogging,
-            "dnsBlocklistText": s.dnsBlocklistText
+            "dnsRules": s.dnsRules.map { ["domain": $0.domain, "kind": $0.kind.rawValue, "ip": $0.ip] }
         ]
         guard JSONSerialization.isValidJSONObject(dict) else { throw AppSettingsError.encodingFailed }
         return try JSONSerialization.data(withJSONObject: dict)
@@ -102,7 +102,12 @@ public struct AppSettingsCodec {
             killSwitch: dict["killSwitch"] as? Bool ?? true,
             connectOnDemand: dict["connectOnDemand"] as? Bool ?? false,
             enableLogging: dict["enableLogging"] as? Bool ?? false,
-            dnsBlocklistText: dict["dnsBlocklistText"] as? String ?? ""
+            dnsRules: (dict["dnsRules"] as? [[String: String]] ?? []).compactMap { row in
+                guard let domain = row["domain"],
+                      let kindRaw = row["kind"],
+                      let kind = DNSBlocklistEntry.Kind(rawValue: kindRaw) else { return nil }
+                return DNSBlocklistEntry(domain: domain, kind: kind, ip: row["ip"] ?? "")
+            }
         )
     }
 }

@@ -5,13 +5,13 @@ final class LocalDNSFilterTests: XCTestCase {
 
     func testExactAndSubdomainBlocking() {
         var f = LocalDNSFilter(blockedDomains: ["ads.example.com"])
-        XCTAssertTrue(f.isBlocked("ads.example.com"))
-        XCTAssertTrue(f.isBlocked("ADS.Example.COM"), "case-insensitive")
-        XCTAssertTrue(f.isBlocked("tracker.ads.example.com"), "subdomain of a blocked domain")
-        XCTAssertFalse(f.isBlocked("example.com"), "parent is NOT blocked by a child entry")
-        XCTAssertFalse(f.isBlocked("notads.example.com"))
+        XCTAssertEqual(f.action(for: "ads.example.com"), .blocked)
+        XCTAssertEqual(f.action(for: "ADS.Example.COM"), .blocked, "case-insensitive")
+        XCTAssertEqual(f.action(for: "tracker.ads.example.com"), .blocked, "subdomain of a blocked domain")
+        XCTAssertEqual(f.action(for: "example.com"), .none, "parent is NOT blocked by a child entry")
+        XCTAssertEqual(f.action(for: "notads.example.com"), .none)
         f.remove(domain: "ads.example.com")
-        XCTAssertFalse(f.isBlocked("ads.example.com"))
+        XCTAssertEqual(f.action(for: "ads.example.com"), .none)
     }
 
     func testHostsFileParsing() {
@@ -26,19 +26,19 @@ final class LocalDNSFilterTests: XCTestCase {
         bad line with spaces ignored
         """
         let f = LocalDNSFilter(blocklistText: text)
-        XCTAssertTrue(f.isBlocked("doubleclick.net"))
-        XCTAssertTrue(f.isBlocked("ad.example.com"))
-        XCTAssertTrue(f.isBlocked("ublock-style.com"))
-        XCTAssertTrue(f.isBlocked("abp-no-caret.com"))
-        XCTAssertTrue(f.isBlocked("plaindomain.org"))
-        XCTAssertFalse(f.isBlocked("spaces"))
+        XCTAssertEqual(f.action(for: "doubleclick.net"), .blocked)
+        XCTAssertEqual(f.action(for: "ad.example.com"), .blocked)
+        XCTAssertEqual(f.action(for: "ublock-style.com"), .blocked)
+        XCTAssertEqual(f.action(for: "abp-no-caret.com"), .blocked)
+        XCTAssertEqual(f.action(for: "plaindomain.org"), .blocked)
+        XCTAssertEqual(f.action(for: "spaces"), .none)
     }
 
     func testEmptyAndGarbage() {
         XCTAssertTrue(LocalDNSFilter(blocklistText: "").isEmpty)
         let f = LocalDNSFilter(blocklistText: "!!!\n#\n \nhttp://not-a-domain")
-        XCTAssertFalse(f.isBlocked("http://not-a-domain"))
-        XCTAssertFalse(f.isBlocked("anything"))
+        XCTAssertEqual(f.action(for: "http://not-a-domain"), .none)
+        XCTAssertEqual(f.action(for: "anything"), .none)
     }
 }
 

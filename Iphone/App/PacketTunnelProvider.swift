@@ -232,7 +232,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let relay = RelayTransport(factory: factory,
                                        pool: pool,
                                        dnsServers: configuration.dnsServers,
-                                       blocklistText: configuration.dnsBlocklist,
+                                       dnsRules: configuration.dnsRules,
                                        receive: { [weak self] packet in
                                            guard let self else { return }
                                            let proto = packet.first.map { ($0 >> 4) == 6 ? AF_INET6 : AF_INET } ?? AF_INET
@@ -477,7 +477,7 @@ private struct TunnelConfiguration {
     let hostKey: String?
     let dnsServers: [String]
     let serverIP: String?
-    let dnsBlocklist: String
+    let dnsRules: [DNSBlocklistEntry]
 
     init(providerConfiguration: [String: Any]?) throws {
         guard let providerConfiguration,
@@ -508,8 +508,9 @@ private struct TunnelConfiguration {
         self.dnsServers = (providerConfiguration["dnsServers"] as? [String]) ?? []
         // Pre-resolved server IPv4 from app (avoids blocking DNS in startTunnel).
         self.serverIP = providerConfiguration["serverIP"] as? String
-        // Local DNS blocklist (hosts/uBlock-style lines) from app settings.
-        self.dnsBlocklist = (providerConfiguration["dnsBlocklist"] as? String) ?? ""
+        // Local DNS rules (block -> 0.0.0.0, override -> custom IP) from app
+        // settings; JSON-encoded by DNSBlocklistEntry.encodeList.
+        self.dnsRules = (providerConfiguration["dnsRules"] as? String).flatMap(DNSBlocklistEntry.decodeList(from:)) ?? []
     }
 }
 
@@ -969,7 +970,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     init(factory: SSHTransportFactory,
          pool: SSHConnectionPool,
          dnsServers: [String] = [],
-         blocklistText: String = "",
+         dnsRules: [DNSBlocklistEntry] = [],
          receive: @escaping (Data) -> Void,
          failure: @escaping (Error) -> Void,
          ready: @escaping (Error?) -> Void) {
@@ -977,12 +978,12 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         self.sshFactory = factory
         self.pool = pool
         self.dnsUpstream = dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
-        // Local filtering (uBlock/hosts-style): domains on the list are
-        // refused LOCALLY — no upstream query ever leaves the tunnel, which
-        // is both instant and private.
-        self.localFilter = LocalDNSFilter(blocklistText: blocklistText)
+        // Local filtering (uBlock/hosts-style): blocked domains answer
+        // A 0.0.0.0 and overrides answer the chosen IP — LOCALLY, so no
+        // upstream query ever leaves the tunnel. Instant and private.
+        self.localFilter = LocalDNSFilter(entries: dnsRules)
         if !localFilter.isEmpty {
-            elog(.success, "DNSFILTER", "local blocklist active: \(localFilter.blockedDomains.count) domain(s) — queries answered locally with REFUSED")
+            elog(.success, "DNSFILTER", "local rules active: \(localFilter.blockedDomains.count) block(s), \(localFilter.overrides.count) override(s) — answered locally before any upstream query")
         }
 
         self.stateMachine = TCPRelayStateMachine(factory: pool, isnGenerator: RandomISN(), idleTimeout: 120)
@@ -1228,18 +1229,37 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
 
-        // ---- 1. Local blocklist (uBlock/hosts-style, checked BEFORE cache
-        // and upstream): a listed domain is refused locally in ~0ms and the
-        // query never leaves the tunnel.
-        if let name = DNSWire.questionName(from: udp.payload), localFilter.isBlocked(name) {
-            dnsBlockedCount += 1
-            if let refused = DNSWire.refusedReply(to: udp.payload),
-               let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(refused)) {
-                repliesWritten += 1
-                receiveCallback(Data(pkt))
-                elog(.info, "DNSFILTER", "blocked \(name) -> REFUSED (local, no upstream query)")
+        // ---- 1. Local rules (uBlock/hosts-style, checked BEFORE cache and
+        // upstream): blocked domains answer A 0.0.0.0, overrides answer the
+        // chosen IPv4; non-A questions about handled domains get REFUSED.
+        // Nothing for these domains ever leaves the tunnel.
+        if let name = DNSWire.questionName(from: udp.payload) {
+            switch localFilter.action(for: name) {
+            case .none:
+                break
+            case .blocked:
+                dnsBlockedCount += 1
+                let reply: Data? = DNSWire.questionType(from: udp.payload) == 1
+                    ? DNSWire.aRecordReply(to: udp.payload, ipv4: [0, 0, 0, 0])
+                    : DNSWire.refusedReply(to: udp.payload)
+                if let reply, let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(reply)) {
+                    repliesWritten += 1
+                    receiveCallback(Data(pkt))
+                    elog(.info, "DNSFILTER", "blocked \(name) -> A 0.0.0.0 (local, no upstream query)")
+                }
+                return
+            case .override(let ip):
+                dnsBlockedCount += 1
+                let reply: Data? = DNSWire.questionType(from: udp.payload) == 1
+                    ? DNSWire.ipv4Bytes(ip).flatMap { DNSWire.aRecordReply(to: udp.payload, ipv4: $0) }
+                    : DNSWire.refusedReply(to: udp.payload)
+                if let reply, let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(reply)) {
+                    repliesWritten += 1
+                    receiveCallback(Data(pkt))
+                    elog(.info, "DNSFILTER", "override \(name) -> A \(ip) (local, no upstream query)")
+                }
+                return
             }
-            return
         }
 
         // ---- 2. Local cache: a fresh answer replays in ~0ms (id rewritten
