@@ -363,7 +363,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// start was mid-flight — fires the parked stop completion right after.
     /// Ordering guarantee: the system never sees stop-completed before
     /// start-completed, which is exactly what the old blocking start broke.
-    private func completeStart(_ error: Error?, completionHandler: @escaping (Error?) -> Void) {
+    private func completeStart(_ errorParam: Error?, completionHandler: @escaping (Error?) -> Void) {
+        var error = errorParam
         stopLock.lock()
         startInFlight = false
         let pendingStop = pendingStopCompletion
@@ -374,6 +375,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // running — tear it down before telling the system the stop is done,
         // otherwise it stays up with NetworkExtension believing it stopped.
         if pendingStop != nil {
+            // CRITICAL: report the start as CANCELLED, not as success. With
+            // success, NetworkExtension believes the tunnel is up and keeps
+            // the routes/DNS binding it installed — then our own teardown runs
+            // underneath, leaving iOS holding default routes into a dead utun.
+            // On-device that is exactly the "Wi-Fi connected, no internet"
+            // zombie state that only a profile removal (or Wi-Fi toggle) heals.
+            error = error ?? NSError(domain: "com.ssh2vpn", code: 20,
+                                     userInfo: [NSLocalizedDescriptionKey: "connection start cancelled by user"])
             packetLoop?.stop()
             packetLoop = nil
             transport?.stop()

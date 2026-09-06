@@ -263,6 +263,7 @@ final class AppModel: ObservableObject {
                     self?.attemptStartedAt = nil
                     ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
                     self?.fetchTunnelDiagnostics()
+                    self?.scheduleZombieTunnelCheck()
                 }
             case .invalid:
                 self?.connection = .disconnected
@@ -386,6 +387,49 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 self.connection = .failed("VPN profile was invalid and has been removed — tap connect to recreate it.")
                 ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "Broken VPN profile removed; ready to recreate on next connect")
+            }
+        }
+    }
+
+    // MARK: - Zombie-tunnel watchdog (self-healing "no internet" state)
+    //
+    // Failure mode: the extension dies or is torn down while NetworkExtension
+    // still holds the tunnel's default route + DNS binding. The phone then
+    // sends everything into a dead utun — the user sees "Wi-Fi connected, no
+    // internet" until they toggle Wi-Fi or reinstall the VPN profile.
+    // Detection: after ANY disconnect, wait 3s for iOS to clean up its
+    // interfaces; if our tunnel's subnet is STILL assigned to an interface
+    // while we are disconnected, the cleanup never happened. Repair: remove
+    // the VPN profile entirely (the one action iOS guarantees unwinds all
+    // routes/DNS of a packet tunnel), then recreate it on the next connect.
+
+    private func scheduleZombieTunnelCheck() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self, self.connection == .disconnected else { return }
+            // Our tunnel's primary /24 always comes from 10.203.x.x (the
+            // historic TunnelDevice range — see TunnelSubnetPicker.candidates).
+            // The fallbacks (172.31.x, 192.168.2xx.x) are NOT safe to detect
+            // on: home Wi-Fi legitimately lives there. So we only flag a utun
+            // holding a 10.203/16 address while we are disconnected — nothing
+            // else on iOS uses that range.
+            let stuck = LocalInterfaceNets.listIPv4Interfaces().filter { iface in
+                let tunnel16 = IPv4Net(addr: (10 << 24) | (203 << 16), prefix: 16)
+                return tunnel16.overlaps(IPv4Net(addr: iface.net.addr, prefix: iface.net.prefix))
+            }
+            guard !stuck.isEmpty else { return }
+            let names = stuck.map { "\($0.name) \($0.net.description)" }.joined(separator: ", ")
+            ConsoleLogStore.shared.log(level: .error, tag: "HEAL",
+                message: "zombie tunnel detected after disconnect ([\(names)]) — iOS kept the dead utun; removing VPN profile to restore internet")
+            // Full profile removal is the guaranteed unwind: same mechanism as
+            // deleting the VPN in Settings, which is the manual fix for this
+            // exact symptom. The next connect rebuilds the profile from scratch.
+            self.vpn.removeAllProfiles { [weak self] in
+                guard let self else { return }
+                Task { @MainActor in
+                    ConsoleLogStore.shared.log(level: .success, tag: "HEAL",
+                        message: "VPN profile removed — routes/DNS unwound; next connect recreates it clean")
+                }
             }
         }
     }

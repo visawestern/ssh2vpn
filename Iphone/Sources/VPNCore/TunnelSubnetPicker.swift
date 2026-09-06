@@ -91,8 +91,7 @@ public enum TunnelSubnetPicker {
 /// their routes are alive.
 public enum LocalInterfaceNets {
     /// "name addr/prefix" lines for diagnostics (app + extension).
-    public static func describeInterfaces() -> [String] {
-        #if canImport(Darwin)
+    public static func describeInterfaces() -> [String] {        #if canImport(Darwin)
         var out: [String] = []
         var head: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&head) == 0, let first = head else { return ["getifaddrs-failed"] }
@@ -142,6 +141,36 @@ public enum LocalInterfaceNets {
             let m = sm.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }.byteSwapped
             let prefix = m.nonzeroBitCount
             result.append(IPv4Net(addr: a, prefix: prefix))
+        }
+        return result
+        #else
+        return []
+        #endif
+    }
+
+    /// Live IPv4 interfaces as (name, network) pairs — the caller can then
+    // decide WHICH interface holds a route (e.g. "is our tunnel's subnet
+    /// still assigned to a utun while no tunnel should exist?").
+    public static func listIPv4Interfaces() -> [(name: String, net: IPv4Net)] {
+        #if canImport(Darwin)
+        var result: [(String, IPv4Net)] = []
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let first = head else { return [] }
+        defer { freeifaddrs(head) }
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let node = cursor {
+            defer { cursor = node.pointee.ifa_next }
+            let flags = node.pointee.ifa_flags
+            guard (flags & UInt32(IFF_UP)) != 0,
+                  (flags & UInt32(IFF_LOOPBACK)) == 0,
+                  let sa = node.pointee.ifa_addr,
+                  sa.pointee.sa_family == UInt8(AF_INET),
+                  let sm = node.pointee.ifa_netmask else { continue }
+            let name = String(cString: node.pointee.ifa_name)
+            guard name.hasPrefix("utun") else { continue }
+            let a = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }.byteSwapped
+            let m = sm.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }.byteSwapped
+            result.append((name, IPv4Net(addr: a, prefix: m.nonzeroBitCount)))
         }
         return result
         #else
