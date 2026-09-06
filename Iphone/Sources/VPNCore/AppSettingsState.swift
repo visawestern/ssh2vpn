@@ -20,7 +20,10 @@ public struct AppSettingsState: Equatable {
         connectOnDemand: Bool = false,
         enableLogging: Bool = false
     ) {
-        self.protocolName = protocolName
+        // SSH-2 (NIOSSH) is the only real transport; anything stored from the
+        // old two-option UI (e.g. "SSH") is normalized back so no dead choice
+        // survives in persisted settings.
+        self.protocolName = "SSH2"
         self.useCustomDNS = useCustomDNS
         self.primaryDNS = primaryDNS
         self.secondaryDNS = secondaryDNS
@@ -33,6 +36,23 @@ public struct AppSettingsState: Equatable {
     public var resolvedDNSServers: [String] {
         guard useCustomDNS else { return [] }
         return [primaryDNS, secondaryDNS].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    /// Custom DNS entries that are VALID IPv4 literals only. Anything else
+    /// (typos, hostnames, empty) is dropped — a bogus upstream silently
+    /// blackholes every lookup through the DNS relay.
+    public var validatedDNSServers: [String] {
+        resolvedDNSServers.filter(Self.isValidIPv4Literal)
+    }
+
+    /// Dotted-quad IPv4 check (no hostnames: the relay forwards raw IPs).
+    public static func isValidIPv4Literal(_ s: String) -> Bool {
+        let parts = s.trimmingCharacters(in: .whitespaces).split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { p in
+            guard !p.isEmpty, p.count <= 3, p.allSatisfy(\.isNumber), let v = Int(p), (0...255).contains(v) else { return false }
+            return true
+        }
     }
 }
 

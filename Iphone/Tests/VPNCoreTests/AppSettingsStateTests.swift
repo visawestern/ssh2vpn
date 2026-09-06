@@ -38,6 +38,32 @@ final class AppSettingsStateTests: XCTestCase {
         XCTAssertEqual(s.resolvedDNSServers, [])
     }
 
+    // MARK: - Custom DNS validation (typos must never reach the relay)
+
+    func testValidatedDNSServersKeepsValidIPv4Literals() {
+        let s = AppSettingsState(useCustomDNS: true, primaryDNS: "1.1.1.1", secondaryDNS: "8.8.8.8")
+        XCTAssertEqual(s.validatedDNSServers, ["1.1.1.1", "8.8.8.8"])
+    }
+
+    func testValidatedDNSServersDropsHostnamesAndTypos() {
+        let s = AppSettingsState(useCustomDNS: true, primaryDNS: "dns.google", secondaryDNS: "8.8.8")
+        XCTAssertEqual(s.validatedDNSServers, [], "hostname and 3-part value are both rejected")
+    }
+
+    func testValidatedDNSServersDropsOutOfRangeOctets() {
+        let s = AppSettingsState(useCustomDNS: true, primaryDNS: "1.1.1.999", secondaryDNS: "1.1.1.1")
+        XCTAssertEqual(s.validatedDNSServers, ["1.1.1.1"], "only the valid literal survives")
+    }
+
+    func testIPv4LiteralValidation() {
+        XCTAssertTrue(AppSettingsState.isValidIPv4Literal(" 8.8.4.4 "))
+        XCTAssertFalse(AppSettingsState.isValidIPv4Literal("8.8.4"))
+        XCTAssertFalse(AppSettingsState.isValidIPv4Literal("8.8.4.4.4"))
+        XCTAssertFalse(AppSettingsState.isValidIPv4Literal("a.b.c.d"))
+        XCTAssertFalse(AppSettingsState.isValidIPv4Literal("1.1.1.-1"))
+        XCTAssertFalse(AppSettingsState.isValidIPv4Literal("01.1.1.256"))
+    }
+
     // MARK: - Mutability (in-place)
 
     func testSettingsAreStructurallyMutableInPlace() {
@@ -95,10 +121,12 @@ final class AppSettingsStateTests: XCTestCase {
     }
 
     func testDecodePartialDictionaryUsesDefaults() throws {
-        // Only protocol present -> defaults fill the rest.
+        // Only protocol present -> defaults fill the rest. The legacy "SSH"
+        // value from the old two-option UI normalizes to the only real
+        // transport ("SSH2") — no dead protocol choice survives persistence.
         let data = try JSONSerialization.data(withJSONObject: ["protocol": "SSH"])
         let decoded = try AppSettingsCodec.decode(data)
-        XCTAssertEqual(decoded.protocolName, "SSH")
+        XCTAssertEqual(decoded.protocolName, "SSH2")
         XCTAssertEqual(decoded.useCustomDNS, false)
         XCTAssertEqual(decoded.primaryDNS, "1.1.1.1")
         XCTAssertEqual(decoded.killSwitch, true)

@@ -103,6 +103,11 @@ final class AppModel: ObservableObject {
     /// Set while a stall restart is in flight: the old tunnel's goodbye
     /// DISCONNECTED is expected and must not trigger early-death diagnosis.
     private var stallRestartArmed = false
+    /// Set while the user WANTED the connection (kill-switch auto-reconnect):
+    /// an unexpected disconnect then re-dials automatically with backoff
+    /// instead of dropping the phone onto the raw network.
+    private var userIntentConnected = false
+    private var killSwitchAttempts = 0
 
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
@@ -235,6 +240,8 @@ final class AppModel: ObservableObject {
             case .connected:
                 _ = self?.automation.markConnected()
                 self?.connection = .connected
+                self?.userIntentConnected = true
+                self?.killSwitchAttempts = 0
                 self?.startStatsPolling()
                 self?.attemptStartedAt = nil
                 self?.stallRestartArmed = false
@@ -264,6 +271,17 @@ final class AppModel: ObservableObject {
                     ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
                     self?.fetchTunnelDiagnostics()
                     self?.scheduleZombieTunnelCheck()
+                    // Kill switch (Advanced settings): the tunnel died on its
+                    // own while the user wanted it ON — redial automatically
+                    // with exponential backoff instead of silently dropping
+                    // the phone onto the raw network.
+                    if let self {
+                        if self.userIntentConnected, self.settings.killSwitch {
+                            self.scheduleKillSwitchReconnect()
+                        } else {
+                            self.userIntentConnected = false
+                        }
+                    }
                 }
             case .invalid:
                 self?.connection = .disconnected
@@ -300,8 +318,11 @@ final class AppModel: ObservableObject {
             let (servers, selectedID) = ServerListCoder.decodeServerList(data: d)
             ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "Extension store holds \(servers.count) server(s), selected=\(selectedID ?? "none")")
             // Pull the extension's own detail lines (SSH stages) now that the
-            // channel is warm, then report live counters.
-            await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager())
+            // channel is warm, then report live counters. Honors the
+            // Enable-Logging setting: off = no extension log ingestion.
+            if settings.enableLogging {
+                await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager())
+            }
             logTunnelCounters(tag: "up")
         }
     }
@@ -372,7 +393,9 @@ final class AppModel: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(12))
             guard connection == .connected else { return }
-            await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager(), timeout: 2)
+            if settings.enableLogging {
+                await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager(), timeout: 2)
+            }
             logTunnelCounters(tag: "+12s")
             self.runPostConnectSelfTest()
         }
@@ -402,6 +425,33 @@ final class AppModel: ObservableObject {
     // while we are disconnected, the cleanup never happened. Repair: remove
     // the VPN profile entirely (the one action iOS guarantees unwinds all
     // routes/DNS of a packet tunnel), then recreate it on the next connect.
+
+    // MARK: - Kill-switch auto-reconnect (unexpected drops only)
+
+    /// Re-dials after the tunnel died on its own while the user wanted it.
+    /// Exponential backoff 1s..60s; resets on success or a manual connect.
+    private func scheduleKillSwitchReconnect() {
+        killSwitchAttempts += 1
+        let delay = min(60.0, pow(2.0, Double(min(killSwitchAttempts, 6))))
+        ConsoleLogStore.shared.log(level: .warning, tag: "KILLSWITCH",
+            message: "tunnel dropped while kill switch is ON — auto-reconnecting in \(Int(delay))s (attempt \(killSwitchAttempts))")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+            // The user may have disconnected (or reconnected manually) during
+            // the backoff — the redial is only for a still-wanted tunnel.
+            guard self.userIntentConnected, self.settings.killSwitch,
+                  self.connection == .disconnected else { return }
+            guard self.remainingQuotaSeconds > 0 else {
+                ConsoleLogStore.shared.log(level: .warning, tag: "KILLSWITCH", message: "auto-reconnect skipped: free time exhausted")
+                self.userIntentConnected = false
+                return
+            }
+            guard let selected = self.selectedServer else { return }
+            ConsoleLogStore.shared.log(level: .info, tag: "KILLSWITCH", message: "auto-reconnecting to \(selected.host)...")
+            self.connect()
+        }
+    }
 
     private func scheduleZombieTunnelCheck() {
         Task { @MainActor [weak self] in
@@ -456,7 +506,9 @@ final class AppModel: ObservableObject {
                 ConsoleLogStore.shared.log(level: .warning, tag: "TUNNEL", message: "Tunnel stop reason: \(stop)")
             }
             // Final pull of the extension's own detail lines (SSH stages).
-            await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager())
+            if settings.enableLogging {
+                await VPNExtensionAPI.fetchLogs(from: vpn.diagnosticManager())
+            }
         }
         // Second pass after the extension has settled: stopTunnel runs
         // asynchronously, so the first query can overtake it and see "none".
@@ -695,6 +747,10 @@ final class AppModel: ObservableObject {
     }
 
     func connect() {
+        // Kill-switch bookkeeping: a manual connect is user intent; the
+        // redial after an unexpected drop only fires while this stays true.
+        userIntentConnected = true
+        killSwitchAttempts = 0
         // Re-entrancy guard: a second tap (same runloop or impatient finger)
         // must never stack another tunnel attempt on top of a live one.
         switch connection {
@@ -859,7 +915,9 @@ final class AppModel: ObservableObject {
                     ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "Tunnel error (live): \(err)")
                 }
                 // Pull the extension's own detail lines (SSH stages live there).
-                await VPNExtensionAPI.fetchLogs(from: self.vpn.diagnosticManager(), timeout: 2)
+                if self.settings.enableLogging {
+                    await VPNExtensionAPI.fetchLogs(from: self.vpn.diagnosticManager(), timeout: 2)
+                }
                 if Task.isCancelled { break }
                 try? await Task.sleep(for: .milliseconds(250))
             }
@@ -874,14 +932,24 @@ final class AppModel: ObservableObject {
     private func performConnectionAttempt() {
         guard !automation.isConnected else { return }
         var effectiveProfile = profile
-        effectiveProfile.dnsServers = settings.resolvedDNSServers
+        // Only VALID custom DNS entries reach the tunnel: a typo'd upstream
+        // silently blackholes every lookup (the relay forwards raw IPs, no
+        // fallback). Invalid ones are logged and dropped.
+        let rawDNS = settings.resolvedDNSServers
+        let dns = settings.validatedDNSServers
+        if rawDNS.count != dns.count {
+            ConsoleLogStore.shared.log(level: .warning, tag: "DNS",
+                message: "ignoring invalid custom DNS entries (kept \(dns.count)/\(rawDNS.count): \(dns.isEmpty ? "none valid — falling back to 8.8.8.8" : dns.joined(separator: ", ")))")
+        }
+        effectiveProfile.dnsServers = dns
         // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
         let serverIP = cachedServerIPv4
 
         // No app-side TCP ping gate: the SSH connect itself IS the probe
         // (extension has a 10s connect timeout), and every extra port-22 SYN
         // feeds the VPS per-source rate limiter. One tap = one SSH SYN.
-        self.vpn.start(profile: effectiveProfile, serverIP: serverIP) { [weak self] error in
+        self.vpn.start(profile: effectiveProfile, serverIP: serverIP,
+                       onDemandEnabled: settings.connectOnDemand) { [weak self] error in
             guard let self = self else { return }
             if let error {
                 let message = error.localizedDescription
@@ -928,6 +996,10 @@ final class AppModel: ObservableObject {
             return
         }
         _ = automation.markDisconnected()
+        // Manual disconnect = user no longer wants the tunnel: kill-switch
+        // redial must NOT fire after this.
+        userIntentConnected = false
+        killSwitchAttempts = 0
         connection = .disconnected
         attemptStartedAt = nil
         stallRestartArmed = false
@@ -955,6 +1027,10 @@ final class AppModel: ObservableObject {
     }
 
     var connectionActiveSeconds: Int { automation.activeSeconds }
+
+    /// Bridge for views (Diagnostics): the live manager for extension
+    /// message-channel calls. Read-only — no connection mutation from UI.
+    var extensionManager: NETunnelProviderManager? { vpn.diagnosticManager() }
 
     // MARK: - Live tunnel stats + ad quota
 
@@ -1092,6 +1168,10 @@ private final class VPNController {
     }
 
     func start(profile: VPNProfile, serverIP: String?, completion: @escaping (Error?) -> Void) {
+        start(profile: profile, serverIP: serverIP, onDemandEnabled: false, completion: completion)
+    }
+
+    func start(profile: VPNProfile, serverIP: String?, onDemandEnabled: Bool, completion: @escaping (Error?) -> Void) {
         // New generation: any creation-wait from an older attempt must die,
         // and its parked completion must never fire. Nothing invoked yet.
         startEpoch += 1
@@ -1190,6 +1270,11 @@ private final class VPNController {
             manager.protocolConfiguration = configurationProtocol
             manager.localizedDescription = "SSH2VPN"
             manager.isEnabled = true
+            // On-demand (Advanced settings): when enabled, the system keeps
+            // the tunnel up whenever any network is reachable. Applied on the
+            // same save as the rest of the profile so it can never desync.
+            Self.applyOnDemandRules(to: manager, enabled: onDemandEnabled)
+            let pendingOnDemand = onDemandEnabled
 
             manager.saveToPreferences { [weak self] saveError in
                 guard let self else { return }
@@ -1313,6 +1398,21 @@ private final class VPNController {
         }
     }
 
+    /// Sets or clears on-demand rules on the manager. When enabled, the
+    /// system auto-connects the tunnel on any reachable network. Never call
+    /// while a tunnel is running (apply on the profile save path only).
+    private static func applyOnDemandRules(to manager: NETunnelProviderManager, enabled: Bool) {
+        if enabled {
+            let rule = NEOnDemandRuleConnect()
+            rule.interfaceTypeMatch = .any
+            manager.onDemandRules = [rule]
+            manager.isOnDemandEnabled = true
+        } else {
+            manager.onDemandRules = []
+            manager.isOnDemandEnabled = false
+        }
+    }
+
     /// Finds the single existing profile for this app (by provider bundle id)
     /// and reuses it; creates one only if none exists. Any extra duplicate
     /// profiles that were created by earlier versions are removed so we never
@@ -1372,6 +1472,16 @@ private final class VPNController {
         startEpoch += 1
         pendingCreationCompletion = nil
         didInvokeStart = false
+        // A manual stop must also drop on-demand rules — otherwise the system
+        // immediately resurrects the tunnel the user just asked to stop (the
+        // classic "VPN turns itself back on" bug). Rules are re-applied on the
+        // next connect if the setting is still enabled.
+        if let manager, manager.isOnDemandEnabled || !(manager.onDemandRules ?? []).isEmpty {
+            manager.onDemandRules = []
+            manager.isOnDemandEnabled = false
+            manager.saveToPreferences { _ in }
+            ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "on-demand rules cleared by manual disconnect")
+        }
         manager?.connection.stopVPNTunnel()
     }
 

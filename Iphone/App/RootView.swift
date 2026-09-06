@@ -1376,11 +1376,17 @@ struct AddServerView: View {
 struct DiagnosticsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showTechnicalDetails = false
+    /// Live status snapshot pulled on appear + on every 2s while visible.
+    @State private var phase = ""
+    @State private var stopReason = ""
+    @State private var lastError = ""
+    @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Setup Progress
+                // Live tunnel state — what the extension is doing RIGHT NOW
+                // (same phase strings the console log shows).
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.setupProgress))
                         .font(.openSans(13, weight: .semibold))
@@ -1389,13 +1395,32 @@ struct DiagnosticsView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    progressRow(model.copy.text(.connecting), active: model.connection == .connecting)
+                    liveRow(icon: phaseIcon,
+                            title: connectionTitle,
+                            detail: phase.isEmpty ? "—" : phase)
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Live telemetry: pool, flows, bytes — same numbers as the
+                // connected-screen strip, so diagnostics and the main screen
+                // can never disagree.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("LIVE")
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    profileRow(label: "SSH connections", value: model.sshConnectionCount > 0 ? String(model.sshConnectionCount) : "—")
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    progressRow(model.copy.text(.preparingGateway), active: model.connection == .connecting)
+                    profileRow(label: "Active flows", value: model.activeChannelCount > 0 ? String(model.activeChannelCount) : "—")
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    progressRow(model.copy.text(.testingTunnel), active: model.connection == .connecting)
+                    profileRow(label: "Downloaded", value: fmtMB(model.tunnelDownBytes))
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    progressRow(model.copy.text(.ready), active: model.connection == .connected)
+                    profileRow(label: "Uploaded", value: fmtMB(model.tunnelUpBytes))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.ping), value: model.serverPingMs.map { "\($0) ms" } ?? "—")
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -1415,8 +1440,31 @@ struct DiagnosticsView: View {
                     profileRow(label: model.copy.text(.username), value: model.profile.username.isEmpty ? "—" : model.profile.username)
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.authentication), value: model.profile.privateKey.isEmpty ? model.copy.text(.passwordKeychain) : model.copy.text(.ed25519Key))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: "DNS", value: model.settings.useCustomDNS && !model.settings.validatedDNSServers.isEmpty ? model.settings.validatedDNSServers.joined(separator: ", ") : "8.8.8.8 (default)")
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Stop reason / last error — the WHY of the last disconnect.
+                if !stopReason.isEmpty || !lastError.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.status))
+                            .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                        if !stopReason.isEmpty {
+                            profileRow(label: "Stop reason", value: stopReason)
+                        }
+                        if !lastError.isEmpty, lastError != "none" {
+                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            profileRow(label: "Last error", value: lastError)
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
 
                 // Error
                 if case .failed(let message) = model.connection {
@@ -1428,7 +1476,7 @@ struct DiagnosticsView: View {
                             .padding(.top, 12)
                             .padding(.bottom, 8)
 
-                        Text(message)
+                        Text(friendlyFailure(message))
                             .foregroundStyle(.red)
                             .padding(14)
 
@@ -1446,6 +1494,78 @@ struct DiagnosticsView: View {
         }
         .background(Color.appBg)
         .navigationTitle(model.copy.text(.diagnosticsTitle))
+        .task {
+            await refreshExtensionStatus()
+            pollTask?.cancel()
+            pollTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    await refreshExtensionStatus()
+                }
+            }
+        }
+        .onDisappear { pollTask?.cancel() }
+    }
+
+    private func refreshExtensionStatus() async {
+        let status = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .status, timeout: 2)
+        guard !Task.isCancelled else { return }
+        phase = status["phase"] ?? ""
+        stopReason = status["stopReason"] ?? ""
+        let errRsp = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .lastError, timeout: 2)
+        if !Task.isCancelled { lastError = errRsp["error"] ?? "none" }
+    }
+
+    /// Raw internal failure strings -> what a human should read. Technical
+    /// detail stays one tap away in the disclosure below.
+    private func friendlyFailure(_ message: String) -> String {
+        switch message {
+        case "freeTimeExhausted":
+            return "Free time is over. Watch an ad to get +3 hours."
+        default:
+            return message
+        }
+    }
+
+    private var connectionTitle: String {
+        switch model.connection {
+        case .connected: return model.copy.text(.connected)
+        case .connecting: return model.copy.text(.connecting)
+        case .disconnected: return model.copy.text(.disconnected)
+        case .failed: return model.copy.text(.error)
+        }
+    }
+
+    private var phaseIcon: String {
+        switch model.connection {
+        case .connected: return "checkmark.circle.fill"
+        case .connecting: return "arrow.triangle.2.circlepath"
+        case .disconnected: return "circle"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func fmtMB(_ bytes: Int) -> String {
+        bytes > 0 ? String(format: "%.1f MB", Double(bytes) / 1_048_576) : "—"
+    }
+
+    private func liveRow(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.prim50)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.openSans(15, weight: .medium))
+                    .foregroundStyle(Color.octGray100)
+                Text(detail)
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray60)
+            }
+            Spacer()
+            if model.connection == .connecting { ProgressView().controlSize(.small) }
+        }
+        .padding(14)
     }
 
     private func progressRow(_ title: String, active: Bool) -> some View {
@@ -1469,8 +1589,10 @@ struct DiagnosticsView: View {
                 .foregroundStyle(Color.octGray60)
             Spacer()
             Text(value)
-                .font(.openSans(15))
+                .font(.openSans(15, weight: .medium))
                 .foregroundStyle(Color.octGray100)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .padding(14)
     }
@@ -1499,13 +1621,13 @@ struct ProtocolView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    protocolOption(name: "SSH2", desc: model.copy.text(.ssh2Desc), selected: model.settings.protocolName == "SSH2") {
-                        model.settings.protocolName = "SSH2"
-                    }
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    protocolOption(name: "SSH", desc: model.copy.text(.sshLegacy), selected: model.settings.protocolName == "SSH") {
-                        model.settings.protocolName = "SSH"
-                    }
+                    // The relay runs on NIOSSH (SSH-2) — the transport is the
+                    // protocol, there is no second implementation to switch
+                    // to. The old "SSH legacy" option changed a stored string
+                    // and nothing else, which is worse than not offering it.
+                    protocolOption(name: "SSH2 (SSH-2 over NIOSSH)",
+                                   desc: model.copy.text(.ssh2Desc),
+                                   selected: true) {}
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
