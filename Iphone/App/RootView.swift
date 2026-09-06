@@ -757,6 +757,10 @@ struct LocationsView: View {
                 // Fresh pings when the list opens — skipped when the boot
                 // sweep is still fresh (no double SYN spend).
                 model.refreshAllServerPingsIfStale()
+                // Heal any model-vs-system drift before the user taps a card:
+                // a stale "connected" in the model would gray out switching
+                // even though the tunnel is really down.
+                model.resyncConnectionStateWithSystem()
             }
             .sheet(isPresented: $showEdit) {
                 AddServerView(editing: true, editingID: editingServerID)
@@ -1733,6 +1737,38 @@ struct DNSView: View {
                     }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Local blocklist (uBlock/hosts-style): domains listed here
+                // are refused BY THE TUNNEL before any upstream query — no
+                // DNS request for them ever leaves the device.
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("LOCAL BLOCKLIST")
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                        Spacer()
+                        Text("\(model.settings.dnsBlocklist.blockedDomains.count) domains")
+                            .font(.openSans(11, weight: .semibold))
+                            .foregroundStyle(model.settings.dnsBlocklist.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+
+                    TextEditor(text: $model.settings.dnsBlocklistText)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 120)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.octGray0)
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                Text("One domain per line: example.com, 0.0.0.0 ads.net, ||ublock.org^ — subdomains included. Blocked domains get an instant local REFUSED, no upstream query. Applied on the next connection.")
+                    .font(.openSans(11))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
             }
             .padding(16)
         }

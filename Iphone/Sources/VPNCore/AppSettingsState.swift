@@ -10,6 +10,9 @@ public struct AppSettingsState: Equatable {
     public var killSwitch: Bool
     public var connectOnDemand: Bool
     public var enableLogging: Bool
+    /// Local DNS blocklist (hosts/uBlock-style lines). Checked by the tunnel
+    /// BEFORE any upstream query; blocked domains get an instant REFUSED.
+    public var dnsBlocklistText: String
 
     public init(
         protocolName: String = "SSH2",
@@ -18,7 +21,8 @@ public struct AppSettingsState: Equatable {
         secondaryDNS: String = "8.8.8.8",
         killSwitch: Bool = true,
         connectOnDemand: Bool = false,
-        enableLogging: Bool = false
+        enableLogging: Bool = false,
+        dnsBlocklistText: String = ""
     ) {
         // SSH-2 (NIOSSH) is the only real transport; anything stored from the
         // old two-option UI (e.g. "SSH") is normalized back so no dead choice
@@ -30,6 +34,12 @@ public struct AppSettingsState: Equatable {
         self.killSwitch = killSwitch
         self.connectOnDemand = connectOnDemand
         self.enableLogging = enableLogging
+        self.dnsBlocklistText = dnsBlocklistText
+    }
+
+    /// Parsed local blocklist (invalid lines dropped by the parser).
+    public var dnsBlocklist: LocalDNSFilter {
+        LocalDNSFilter(blocklistText: dnsBlocklistText)
     }
 
     /// Resolved DNS servers: custom values when enabled, otherwise empty.
@@ -73,7 +83,8 @@ public struct AppSettingsCodec {
             "secondaryDNS": s.secondaryDNS,
             "killSwitch": s.killSwitch,
             "connectOnDemand": s.connectOnDemand,
-            "enableLogging": s.enableLogging
+            "enableLogging": s.enableLogging,
+            "dnsBlocklistText": s.dnsBlocklistText
         ]
         guard JSONSerialization.isValidJSONObject(dict) else { throw AppSettingsError.encodingFailed }
         return try JSONSerialization.data(withJSONObject: dict)
@@ -90,7 +101,8 @@ public struct AppSettingsCodec {
             secondaryDNS: dict["secondaryDNS"] as? String ?? "8.8.8.8",
             killSwitch: dict["killSwitch"] as? Bool ?? true,
             connectOnDemand: dict["connectOnDemand"] as? Bool ?? false,
-            enableLogging: dict["enableLogging"] as? Bool ?? false
+            enableLogging: dict["enableLogging"] as? Bool ?? false,
+            dnsBlocklistText: dict["dnsBlocklistText"] as? String ?? ""
         )
     }
 }

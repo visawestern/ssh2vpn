@@ -178,6 +178,11 @@ final class AppModel: ObservableObject {
     /// servers mid-flight would silently split the session (old tunnel keeps
     /// the old server, UI shows the new one). Disconnect first.
     func selectServer(id: String) {
+        // Trust-but-verify: if the model still thinks a tunnel is up while
+        // NetworkExtension says otherwise (missed disconnect event, dead
+        // extension), the block below would refuse a switch the user can
+        // plainly see should work. Re-sync from the real NE status first.
+        resyncConnectionStateWithSystem()
         guard connection != .connected, connection != .connecting else {
             ConsoleLogStore.shared.log(level: .warning, tag: "SERVER", message: "Server switch BLOCKED: a connection is active or starting — disconnect first")
             return
@@ -185,11 +190,38 @@ final class AppModel: ObservableObject {
         localStore.select(id: id)
         selectedServer = servers.first { $0.id == id }
         refreshServerMetadata()
+        ConsoleLogStore.shared.log(level: .success, tag: "SERVER",
+            message: "switched to \(selectedServer?.host ?? id) — applies on next connect")
         Task { @MainActor in
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 vpn.ensureManagerLoaded { continuation.resume() }
             }
             await VPNExtensionAPI.selectServer(id: id, from: vpn.diagnosticManager())
+        }
+    }
+
+    /// Reconciles the model's connection state with what NetworkExtension
+    /// actually reports. Heals the drift where the UI keeps showing
+    /// connected/connecting after the tunnel died without a status event —
+    /// that drift froze server switching even though "nothing was running".
+    func resyncConnectionStateWithSystem() {
+        guard let status = vpn.currentSystemStatus() else { return }
+        let presentation: ConnectionPresentation
+        switch status {
+        case .connected: presentation = .connected
+        case .connecting, .reasserting: presentation = .connecting
+        case .disconnecting: presentation = .connecting // still winding down
+        case .disconnected, .invalid: presentation = .disconnected
+        @unknown default: return
+        }
+        if presentation == .disconnected && (connection == .connected || connection == .connecting) {
+            ConsoleLogStore.shared.log(level: .warning, tag: "SERVER",
+                message: "state drift healed: model said \(connection) but the tunnel is actually down")
+            connection = .disconnected
+            stopPhasePolling()
+            stopStatsPolling()
+            attemptStartedAt = nil
+            userIntentConnected = false
         }
     }
 
@@ -308,6 +340,9 @@ final class AppModel: ObservableObject {
         // Load the local server list on launch (instant, no extension needed).
         loadServerList()
         startServerPingTimer()
+        // Warm the NE manager in the background so status re-syncs (server
+        // switching, connect gating) always have the real system state.
+        vpn.ensureManagerLoaded { }
     }
 
     /// Confirms the extension-owned copy after a successful connect (the tunnel
@@ -942,6 +977,8 @@ final class AppModel: ObservableObject {
                 message: "ignoring invalid custom DNS entries (kept \(dns.count)/\(rawDNS.count): \(dns.isEmpty ? "none valid — falling back to 8.8.8.8" : dns.joined(separator: ", ")))")
         }
         effectiveProfile.dnsServers = dns
+        // Local blocklist travels with the profile to the extension.
+        effectiveProfile.dnsBlocklist = settings.dnsBlocklistText
         // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
         let serverIP = cachedServerIPv4
 
@@ -1100,6 +1137,9 @@ struct VPNProfile: Equatable {
     var privateKey: String
     var hostKey: String
     var dnsServers: [String] = []
+    /// Local DNS blocklist (hosts/uBlock lines) — the extension refuses these
+    /// domains locally, before any upstream query.
+    var dnsBlocklist: String = ""
 }
 
 
@@ -1236,6 +1276,11 @@ private final class VPNController {
             // which caused early-death flake where iOS killed the extension for slow launch).
             if let serverIP {
                 providerConfig["serverIP"] = serverIP
+            }
+            // Local DNS blocklist (hosts/uBlock-style): the extension refuses
+            // these domains locally before any upstream query.
+            if !profile.dnsBlocklist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                providerConfig["dnsBlocklist"] = profile.dnsBlocklist
             }
 
             // Reuse check: if the stored system configuration already equals
@@ -1498,6 +1543,13 @@ private final class VPNController {
     /// Exposes the live VPN manager so the app can talk to the tunnel
     /// extension over the app-message channel (diagnostics, errors).
     func diagnosticManager() -> NETunnelProviderManager? { manager }
+
+    /// The system's own view of the tunnel right now — the ground truth the
+    /// UI re-syncs against (model state can drift after missed events).
+    /// Nil when the manager isn't loaded yet ("unknown, don't heal").
+    func currentSystemStatus() -> NEVPNStatus? {
+        manager?.connection.status
+    }
 }
 
 /// Minimal typed API for the app -> packet-tunnel-extension message channel.

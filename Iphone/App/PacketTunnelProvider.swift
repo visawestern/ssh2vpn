@@ -232,6 +232,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let relay = RelayTransport(factory: factory,
                                        pool: pool,
                                        dnsServers: configuration.dnsServers,
+                                       blocklistText: configuration.dnsBlocklist,
                                        receive: { [weak self] packet in
                                            guard let self else { return }
                                            let proto = packet.first.map { ($0 >> 4) == 6 ? AF_INET6 : AF_INET } ?? AF_INET
@@ -476,6 +477,7 @@ private struct TunnelConfiguration {
     let hostKey: String?
     let dnsServers: [String]
     let serverIP: String?
+    let dnsBlocklist: String
 
     init(providerConfiguration: [String: Any]?) throws {
         guard let providerConfiguration,
@@ -506,6 +508,8 @@ private struct TunnelConfiguration {
         self.dnsServers = (providerConfiguration["dnsServers"] as? [String]) ?? []
         // Pre-resolved server IPv4 from app (avoids blocking DNS in startTunnel).
         self.serverIP = providerConfiguration["serverIP"] as? String
+        // Local DNS blocklist (hosts/uBlock-style lines) from app settings.
+        self.dnsBlocklist = (providerConfiguration["dnsBlocklist"] as? String) ?? ""
     }
 }
 
@@ -944,6 +948,14 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var dnsInFlight: [AnyObject] = []
     private let maxDNSInFlight = 32
     private var sweepTimer: DispatchSourceTimer?
+    /// Local hosts/uBlock-style blocklist — answered with REFUSED before any
+    /// upstream query is sent. All access on relayQueue.
+    private var localFilter: LocalDNSFilter
+    /// Local TTL-capped response cache — repeat lookups never leave the
+    /// tunnel. All access on relayQueue.
+    private var dnsCache = DNSCache()
+    private var dnsCacheHits = 0
+    private var dnsBlockedCount = 0
 
     /// pending packets received before SSH connected (bounded)
     private var pendingPackets: [Data] = []
@@ -957,6 +969,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     init(factory: SSHTransportFactory,
          pool: SSHConnectionPool,
          dnsServers: [String] = [],
+         blocklistText: String = "",
          receive: @escaping (Data) -> Void,
          failure: @escaping (Error) -> Void,
          ready: @escaping (Error?) -> Void) {
@@ -964,6 +977,13 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         self.sshFactory = factory
         self.pool = pool
         self.dnsUpstream = dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
+        // Local filtering (uBlock/hosts-style): domains on the list are
+        // refused LOCALLY — no upstream query ever leaves the tunnel, which
+        // is both instant and private.
+        self.localFilter = LocalDNSFilter(blocklistText: blocklistText)
+        if !localFilter.isEmpty {
+            elog(.success, "DNSFILTER", "local blocklist active: \(localFilter.blockedDomains.count) domain(s) — queries answered locally with REFUSED")
+        }
 
         self.stateMachine = TCPRelayStateMachine(factory: pool, isnGenerator: RandomISN(), idleTimeout: 120)
         // Server-to-phone splice: channel callbacks arrive on NIO threads and
@@ -1073,6 +1093,12 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             if loads.reduce(0, +) > 0 || loads.count > 1 {
                 let spread = loads.enumerated().map { "ssh#\($0.offset + 1)=\($0.element)" }.joined(separator: " ")
                 elog(.info, "POOL", "load [\(spread)]")
+            }
+            // Local DNS journal: blocks + cache hits over the last 30s.
+            if self.dnsBlockedCount > 0 || self.dnsCacheHits > 0 {
+                elog(.info, "DNSFILTER", "per/30s blocked=\(self.dnsBlockedCount) cacheHits=\(self.dnsCacheHits)")
+                self.dnsBlockedCount = 0
+                self.dnsCacheHits = 0
             }
         }
         timer.resume()
@@ -1201,12 +1227,39 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         let flow = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
+
+        // ---- 1. Local blocklist (uBlock/hosts-style, checked BEFORE cache
+        // and upstream): a listed domain is refused locally in ~0ms and the
+        // query never leaves the tunnel.
+        if let name = DNSWire.questionName(from: udp.payload), localFilter.isBlocked(name) {
+            dnsBlockedCount += 1
+            if let refused = DNSWire.refusedReply(to: udp.payload),
+               let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(refused)) {
+                repliesWritten += 1
+                receiveCallback(Data(pkt))
+                elog(.info, "DNSFILTER", "blocked \(name) -> REFUSED (local, no upstream query)")
+            }
+            return
+        }
+
+        // ---- 2. Local cache: a fresh answer replays in ~0ms (id rewritten
+        // to the live query). Capped at the record TTL, hard cap 300s.
+        if let cached = dnsCache.answer(for: udp.payload) {
+            dnsCacheHits += 1
+            if let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(cached)) {
+                repliesWritten += 1
+                receiveCallback(Data(pkt))
+            }
+            return
+        }
+
         var demux = DNSRelay(upstreamHost: dnsUpstream)
         guard let toSend = demux.query(udp.payload, from: flow) else { return }
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
         elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(dnsUpstream):53")
         var channelRef: RelayChannel?
+        let queryPayload = udp.payload
         channelRef = pool.open(
             flow: flow,
             onData: { [weak self] bytes in
@@ -1222,6 +1275,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                     guard let self else { return }
                     self.dnsInFlight.removeAll { ObjectIdentifier($0) == id }
                     for (f, resp) in answered {
+                        // Cache the answer for its (capped) TTL: repeat
+                        // lookups of this name resolve locally — "optimal
+                        // time" for DNS on the happy path.
+                        self.dnsCache.store(query: queryPayload, response: resp)
                         if let pkt = try? UDPReplyBuilder.reply(flow: f, payload: Array(resp)) {
                             self.repliesWritten += 1
                             self.receiveCallback(Data(pkt))
