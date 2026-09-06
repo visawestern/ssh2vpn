@@ -988,7 +988,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         // upstream query ever leaves the tunnel. Instant and private.
         self.localFilter = LocalDNSFilter(entries: dnsRules)
         if !localFilter.isEmpty {
-            elog(.success, "DNSFILTER", "local rules active: \(localFilter.blockedDomains.count) block(s), \(localFilter.overrides.count) override(s) — answered locally before any upstream query")
+            elog(.success, "DNSFILTER", "local rules active: \(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count) block(s), \(localFilter.exactOverrides.count + localFilter.subtreeOverrides.count) override(s) — answered locally before any upstream query")
         }
 
         self.stateMachine = TCPRelayStateMachine(factory: pool, isnGenerator: RandomISN(), idleTimeout: 120)

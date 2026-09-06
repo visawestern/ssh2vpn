@@ -1076,6 +1076,7 @@ final class AppModel: ObservableObject {
     /// error message on failure (nil = saved).
     @discardableResult
     func addDNSRule(domain: String, kind: DNSBlocklistEntry.Kind, ip: String,
+                    includeSubdomains: Bool = true,
                     replacing: DNSBlocklistEntry? = nil) -> String? {
         guard LocalDNSFilter.isValidDomain(domain) else { return copy.text(.dnsInvalidDomain) }
         let normalized = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1086,15 +1087,17 @@ final class AppModel: ObservableObject {
         if kind == .override {
             guard DNSWire.ipv4Bytes(ip) != nil else { return copy.text(.dnsInvalidIP) }
         }
-        let newRule = DNSBlocklistEntry(domain: normalized, kind: kind, ip: kind == .override ? ip : "")
+        let newRule = DNSBlocklistEntry(domain: normalized, kind: kind,
+                                        ip: kind == .override ? ip : "",
+                                        includeSubdomains: includeSubdomains)
         if let replacing, let idx = settings.dnsRules.firstIndex(where: { $0.id == replacing.id }) {
             settings.dnsRules[idx] = newRule
             ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
-                message: "local rule updated: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+                message: "local rule updated: \(normalized)\(includeSubdomains ? " (+subdomains)" : "") -> \(kind == .block ? "0.0.0.0" : ip)")
         } else {
             settings.dnsRules.append(newRule)
             ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
-                message: "local rule added: \(normalized) -> \(kind == .block ? "0.0.0.0" : ip)")
+                message: "local rule added: \(normalized)\(includeSubdomains ? " (+subdomains)" : "") -> \(kind == .block ? "0.0.0.0" : ip)")
         }
         return nil
     }

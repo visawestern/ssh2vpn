@@ -63,16 +63,20 @@ struct RootView: View {
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
 
-            // Vuexy-style Floating theCustomizer terminal button
-            VStack {
-                Spacer()
-                FloatingCustomizerButton(
-                    isOpen: $isConsoleOpen,
-                    isConnecting: model.connection == .connecting
-                )
-                Spacer()
+            // Vuexy-style Floating theCustomizer terminal button — shown only
+            // once a connection exists (connecting or connected); no console
+            // to read while the VPN is off.
+            if model.connection == .connecting || model.connection == .connected {
+                VStack {
+                    Spacer()
+                    FloatingCustomizerButton(
+                        isOpen: $isConsoleOpen,
+                        isConnecting: model.connection == .connecting
+                    )
+                    Spacer()
+                }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
-            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             // Right sliding Hacker Console Sidebar
             HackerConsoleSidebarView(isOpen: $isConsoleOpen)
@@ -1804,40 +1808,59 @@ struct DNSView: View {
         let selected = model.settings.presetDNS == [preset.primary, preset.secondary]
         let infoOpen = openPresetInfoID == preset.id
         return VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button {
-                    // Preset mode: fills presetDNS and switches custom OFF —
-                    // the two modes never fight over which resolver is used.
-                    model.settings.presetDNS = [preset.primary, preset.secondary]
-                    model.settings.useCustomDNS = false
-                    ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-                        message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
-                } label: {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
+            // Whole-card tap: select like a server card (green highlight).
+            // Re-tap the selected preset deselects it; tapping another
+            // preset switches. No separate select circle.
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if selected {
+                        model.settings.presetDNS = []
+                        ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                            message: "preset deselected: \(preset.name)")
+                    } else {
+                        model.settings.presetDNS = [preset.primary, preset.secondary]
+                        model.settings.useCustomDNS = false
+                        ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                            message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
                             Text(preset.name)
                                 .font(.openSans(15, weight: .medium))
                                 .foregroundStyle(Color.octGray100)
-                            FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
-                            Text("\(preset.primary) • \(preset.secondary)")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(Color.octGray40)
+                            // Compact "?" right after the name.
+                            InfoDotButtonCompact(isVisible: infoOpen) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                    openPresetInfoID = infoOpen ? nil : preset.id
+                                }
+                            }
                         }
-                        Spacer()
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 18))
-                            .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+                        FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
+                        Text("\(preset.primary) • \(preset.secondary)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.octGray40)
                     }
-                    .padding(14)
-                }
-                .buttonStyle(.plain)
-                InfoDotButtonCompact(isVisible: infoOpen) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        openPresetInfoID = infoOpen ? nil : preset.id
+                    Spacer()
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color.prim50)
                     }
                 }
-                .padding(.trailing, 14)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(selected ? Color.prim50.opacity(0.10) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(selected ? Color.prim50 : Color.clear, lineWidth: 1.5)
+                )
             }
+            .buttonStyle(.plain)
             if infoOpen {
                 InfoBubble(title: preset.name,
                            message: model.copy.presetDescription(preset))
@@ -1983,6 +2006,12 @@ struct LocalDNSRulesView: View {
                 Text(rule.kind == .block ? "0.0.0.0" : rule.ip)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.octGray40)
+                // Scope under the address: exact domain or subdomains too.
+                Text(rule.includeSubdomains
+                     ? model.copy.text(.dnsRuleScopeSubtree)
+                     : model.copy.text(.dnsRuleScopeExact))
+                    .font(.openSans(10))
+                    .foregroundStyle(Color.octGray40.opacity(0.8))
             }
             Spacer()
             Button {
@@ -2146,6 +2175,9 @@ struct AddDNSRuleView: View {
     @State private var domain = ""
     @State private var ip = ""
     @State private var mode: DNSBlocklistEntry.Kind = .block
+    /// Subtree (domain + all subdomains) or exact domain only — explicit, so
+    /// the user never has to guess how wide the rule bites.
+    @State private var includeSubdomains = true
     @State private var errorText: String?
 
     init(editing: DNSBlocklistEntry? = nil) {
@@ -2179,6 +2211,19 @@ struct AddDNSRuleView: View {
                     .pickerStyle(.segmented)
                 }
 
+                // Scope: exact domain vs domain + every subdomain. No
+                // guessing — the toggle states precisely what matches.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsRuleScope))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    Picker("", selection: $includeSubdomains) {
+                        Text(model.copy.text(.dnsRuleScopeExact)).tag(false)
+                        Text(model.copy.text(.dnsRuleScopeSubtree)).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 if mode == .override {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(model.copy.text(.dnsAddRuleIP))
@@ -2203,7 +2248,9 @@ struct AddDNSRuleView: View {
                 Spacer()
 
                 Button {
-                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip, replacing: editing) {
+                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip,
+                                                      includeSubdomains: includeSubdomains,
+                                                      replacing: editing) {
                         errorText = failure
                     } else {
                         dismiss()
@@ -2228,6 +2275,7 @@ struct AddDNSRuleView: View {
                     domain = editing.domain
                     mode = editing.kind
                     ip = editing.kind == .override ? editing.ip : ""
+                    includeSubdomains = editing.includeSubdomains
                 }
             }
             .toolbar {

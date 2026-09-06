@@ -53,6 +53,7 @@ enum CopyKey {
     case dnsRuleBlocked, dnsRuleOverride, dnsRulesEmpty, dnsRulesHint, dnsRuleDelete
     case dnsFilterMalware, dnsFilterAds
     case dnsEditRule, dnsEditRuleTitle, dnsSaveRule
+    case dnsRuleScope, dnsRuleScopeExact, dnsRuleScopeSubtree
     case chipNoFilter, chipPrivacy, chipPhishing, chipTrackers, chipAdult, chipSafeSearch
     case dnsInvalidDomain, dnsInvalidIP, dnsDuplicateRule
     case dnsRulesCount, dnsRulesCountPlural
@@ -74,6 +75,7 @@ struct AppCopy {
 
     // MARK: - English
     private let english: [CopyKey: String] = [
+        .dnsRuleScope: "Applies to", .dnsRuleScopeExact: "This domain only", .dnsRuleScopeSubtree: "Domain + subdomains",
         .dnsEditRule: "Edit rule", .dnsEditRuleTitle: "Edit DNS rule", .dnsSaveRule: "Save",
         .chipNoFilter: "NO FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRACKERS+", .chipAdult: "ADULT 18+", .chipSafeSearch: "SAFE SEARCH",
@@ -128,6 +130,7 @@ struct AppCopy {
 
     // MARK: - Russian
     private let russian: [CopyKey: String] = [
+        .dnsRuleScope: "Действует на", .dnsRuleScopeExact: "Только этот домен", .dnsRuleScopeSubtree: "Домен + поддомены",
         .dnsEditRule: "Изменить правило", .dnsEditRuleTitle: "Изменение DNS-правила", .dnsSaveRule: "Сохранить",
         .chipNoFilter: "БЕЗ ФИЛЬТРА", .chipPrivacy: "ПРИВАТНОСТЬ", .chipPhishing: "ФИШИНГ+",
         .chipTrackers: "ТРЕКЕРЫ+", .chipAdult: "18+", .chipSafeSearch: "БЕЗОП. ПОИСК",
@@ -183,6 +186,7 @@ struct AppCopy {
 
     // MARK: - Spanish
     private let spanish: [CopyKey: String] = [
+        .dnsRuleScope: "Se aplica a", .dnsRuleScopeExact: "Solo este dominio", .dnsRuleScopeSubtree: "Dominio + subdominios",
         .dnsEditRule: "Editar regla", .dnsEditRuleTitle: "Editar regla DNS", .dnsSaveRule: "Guardar",
         .chipNoFilter: "SIN FILTRO", .chipPrivacy: "PRIVACIDAD", .chipPhishing: "PHISHING+",
         .chipTrackers: "RASTREADORES+", .chipAdult: "ADULTOS +18", .chipSafeSearch: "BÚSQUEDA SEGURA",
@@ -231,6 +235,7 @@ struct AppCopy {
 
     // MARK: - German
     private let german: [CopyKey: String] = [
+        .dnsRuleScope: "Gilt für", .dnsRuleScopeExact: "Nur diese Domain", .dnsRuleScopeSubtree: "Domain + Subdomains",
         .dnsEditRule: "Regel bearbeiten", .dnsEditRuleTitle: "DNS-Regel bearbeiten", .dnsSaveRule: "Speichern",
         .chipNoFilter: "OHNE FILTER", .chipPrivacy: "PRIVATSPHÄRE", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRACKER+", .chipAdult: "ERWACHSEN 18+", .chipSafeSearch: "SICHERE SUCHE",
@@ -279,6 +284,7 @@ struct AppCopy {
 
     // MARK: - Japanese
     private let japanese: [CopyKey: String] = [
+        .dnsRuleScope: "適用範囲", .dnsRuleScopeExact: "このドメインのみ", .dnsRuleScopeSubtree: "ドメイン + サブドメイン",
         .dnsEditRule: "ルールを編集", .dnsEditRuleTitle: "DNSルールの編集", .dnsSaveRule: "保存",
         .chipNoFilter: "フィルタなし", .chipPrivacy: "プライバシー", .chipPhishing: "フィッシング+",
         .chipTrackers: "トラッカー+", .chipAdult: "18禁", .chipSafeSearch: "セーフサーチ",
@@ -319,6 +325,7 @@ struct AppCopy {
 
     // MARK: - Chinese (Simplified)
     private let chinese: [CopyKey: String] = [
+        .dnsRuleScope: "作用于", .dnsRuleScopeExact: "仅此域名", .dnsRuleScopeSubtree: "域名 + 子域名",
         .dnsEditRule: "编辑规则", .dnsEditRuleTitle: "编辑 DNS 规则", .dnsSaveRule: "保存",
         .chipNoFilter: "无过滤", .chipPrivacy: "隐私", .chipPhishing: "钓鱼+",
         .chipTrackers: "追踪器+", .chipAdult: "成人18+", .chipSafeSearch: "安全搜索",
@@ -357,6 +364,7 @@ struct AppCopy {
 
     // MARK: - French
     private let french: [CopyKey: String] = [
+        .dnsRuleScope: "S'applique à", .dnsRuleScopeExact: "Ce domaine seulement", .dnsRuleScopeSubtree: "Domaine + sous-domaines",
         .dnsEditRule: "Modifier la règle", .dnsEditRuleTitle: "Modifier la règle DNS", .dnsSaveRule: "Enregistrer",
         .chipNoFilter: "SANS FILTRE", .chipPrivacy: "CONFIDENTIALITÉ", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRAQUEURS+", .chipAdult: "ADULTES 18+", .chipSafeSearch: "RECHERCHE SÛRE",
@@ -405,6 +413,7 @@ struct AppCopy {
 
     // MARK: - Italian
     private let italian: [CopyKey: String] = [
+        .dnsRuleScope: "Si applica a", .dnsRuleScopeExact: "Solo questo dominio", .dnsRuleScopeSubtree: "Dominio + sottodomini",
         .dnsEditRule: "Modifica regola", .dnsEditRuleTitle: "Modifica regola DNS", .dnsSaveRule: "Salva",
         .chipNoFilter: "SENFILTRI", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRACKER+", .chipAdult: "ADULTI 18+", .chipSafeSearch: "RICERCA SICURA",
@@ -453,6 +462,7 @@ struct AppCopy {
 
     // MARK: - Portuguese (Brazil)
     private let portuguese: [CopyKey: String] = [
+        .dnsRuleScope: "Aplica-se a", .dnsRuleScopeExact: "Apenas este domínio", .dnsRuleScopeSubtree: "Domínio + subdomínios",
         .dnsEditRule: "Editar regra", .dnsEditRuleTitle: "Editar regra DNS", .dnsSaveRule: "Salvar",
         .chipNoFilter: "SEM FILTRO", .chipPrivacy: "PRIVACIDADE", .chipPhishing: "PHISHING+",
         .chipTrackers: "RASTREADORES+", .chipAdult: "ADULTOS +18", .chipSafeSearch: "BUSCA SEGURA",
@@ -501,6 +511,7 @@ struct AppCopy {
 
     // MARK: - Korean
     private let korean: [CopyKey: String] = [
+        .dnsRuleScope: "적용 대상", .dnsRuleScopeExact: "이 도메인만", .dnsRuleScopeSubtree: "도메인 + 하위 도메인",
         .dnsEditRule: "규칙 편집", .dnsEditRuleTitle: "DNS 규칙 편집", .dnsSaveRule: "저장",
         .chipNoFilter: "필터 없음", .chipPrivacy: "개인정보", .chipPhishing: "피싱+",
         .chipTrackers: "트래커+", .chipAdult: "성인 19+", .chipSafeSearch: "세이프서치",
@@ -540,6 +551,7 @@ struct AppCopy {
 
     // MARK: - Arabic
     private let arabic: [CopyKey: String] = [
+        .dnsRuleScope: "ينطبق على", .dnsRuleScopeExact: "هذا النطاق فقط", .dnsRuleScopeSubtree: "النطاق + النطاقات الفرعية",
         .dnsEditRule: "تعديل القاعدة", .dnsEditRuleTitle: "تعديل قاعدة DNS", .dnsSaveRule: "حفظ",
         .chipNoFilter: "بدون فلتر", .chipPrivacy: "خصوصية", .chipPhishing: "تصيّد+",
         .chipTrackers: "متتبعات+", .chipAdult: "للبالغين +18", .chipSafeSearch: "بحث آمن",
@@ -585,6 +597,7 @@ struct AppCopy {
 
     // MARK: - Hindi
     private let hindi: [CopyKey: String] = [
+        .dnsRuleScope: "लागू होता है", .dnsRuleScopeExact: "केवल यह डोमेन", .dnsRuleScopeSubtree: "डोमेन + सबडोमेन",
         .dnsEditRule: "नियम संपादित करें", .dnsEditRuleTitle: "DNS नियम संपादित करें", .dnsSaveRule: "सहेजें",
         .chipNoFilter: "बिना फ़िल्टर", .chipPrivacy: "गोपनीयता", .chipPhishing: "फ़िशिंग+",
         .chipTrackers: "ट्रैकर+", .chipAdult: "वयस्क 18+", .chipSafeSearch: "सुरक्षित खोज",
@@ -631,6 +644,7 @@ struct AppCopy {
 
     // MARK: - Thai
     private let thai: [CopyKey: String] = [
+        .dnsRuleScope: "ใช้กับ", .dnsRuleScopeExact: "โดเมนนี้เท่านั้น", .dnsRuleScopeSubtree: "โดเมน + โดเมนย่อย",
         .dnsEditRule: "แก้ไขกฎ", .dnsEditRuleTitle: "แก้ไขกฎ DNS", .dnsSaveRule: "บันทึก",
         .chipNoFilter: "ไม่กรอง", .chipPrivacy: "ความเป็นส่วนตัว", .chipPhishing: "ฟิชชิง+",
         .chipTrackers: "แทรกเกอร์+", .chipAdult: "18+", .chipSafeSearch: "เซฟเซิร์ช",
@@ -678,6 +692,7 @@ struct AppCopy {
 
     // MARK: - Turkish
     private let turkish: [CopyKey: String] = [
+        .dnsRuleScope: "Şunlara uygulanır", .dnsRuleScopeExact: "Yalnızca bu alan adı", .dnsRuleScopeSubtree: "Alan adı + alt alan adları",
         .dnsEditRule: "Kuralı düzenle", .dnsEditRuleTitle: "DNS kuralını düzenle", .dnsSaveRule: "Kaydet",
         .chipNoFilter: "FİLTRESİZ", .chipPrivacy: "GİZLİLİK", .chipPhishing: "OLTALAMA+",
         .chipTrackers: "TAKİPÇİ+", .chipAdult: "YETİŞKİN 18+", .chipSafeSearch: "GÜVENLİ ARAMA",
@@ -725,6 +740,7 @@ struct AppCopy {
 
     // MARK: - Polish
     private let polish: [CopyKey: String] = [
+        .dnsRuleScope: "Dotyczy", .dnsRuleScopeExact: "Tylko tej domeny", .dnsRuleScopeSubtree: "Domeny + subdomeny",
         .dnsEditRule: "Edytuj zasadę", .dnsEditRuleTitle: "Edytuj zasadę DNS", .dnsSaveRule: "Zapisz",
         .chipNoFilter: "BEZ FILTRA", .chipPrivacy: "PRYWATNOŚĆ", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRACKERY+", .chipAdult: "DOROŚLI 18+", .chipSafeSearch: "BEZPIECZNE WYSZUKIWANIE",
@@ -773,6 +789,7 @@ struct AppCopy {
 
     // MARK: - Dutch
     private let dutch: [CopyKey: String] = [
+        .dnsRuleScope: "Geldt voor", .dnsRuleScopeExact: "Alleen dit domein", .dnsRuleScopeSubtree: "Domein + subdomeinen",
         .dnsEditRule: "Regel bewerken", .dnsEditRuleTitle: "DNS-regel bewerken", .dnsSaveRule: "Bewaren",
         .chipNoFilter: "ZONDER FILTER", .chipPrivacy: "PRIVACY", .chipPhishing: "PHISHING+",
         .chipTrackers: "TRACKERS+", .chipAdult: "VOLWASSEN 18+", .chipSafeSearch: "VEILIG ZOEKEN",
@@ -820,6 +837,7 @@ struct AppCopy {
 
     // MARK: - Vietnamese
     private let vietnamese: [CopyKey: String] = [
+        .dnsRuleScope: "Áp dụng cho", .dnsRuleScopeExact: "Chỉ tên miền này", .dnsRuleScopeSubtree: "Tên miền + tên miền con",
         .dnsEditRule: "Sửa quy tắc", .dnsEditRuleTitle: "Sửa quy tắc DNS", .dnsSaveRule: "Lưu",
         .chipNoFilter: "KHÔNG LỌC", .chipPrivacy: "RIÊNG TƯ", .chipPhishing: "LỪA ĐẢO+",
         .chipTrackers: "TRÌNH THEO DÕI+", .chipAdult: "NGƯỜI LỚN 18+", .chipSafeSearch: "TÌM KIẾM AN TOÀN",

@@ -12,12 +12,17 @@ public struct DNSBlocklistEntry: Identifiable, Codable, Equatable, Sendable, Has
     public var kind: Kind
     /// Target IPv4 (used by override rules; block rules imply 0.0.0.0).
     public var ip: String
+    /// True (default) = the rule covers the domain AND all its subdomains;
+    /// false = only the exact domain matches. Decided in the add-rule UI.
+    public var includeSubdomains: Bool
 
-    public init(id: UUID = UUID(), domain: String, kind: Kind, ip: String = "") {
+    public init(id: UUID = UUID(), domain: String, kind: Kind, ip: String = "",
+                includeSubdomains: Bool = true) {
         self.id = id
         self.domain = domain
         self.kind = kind
         self.ip = ip
+        self.includeSubdomains = includeSubdomains
     }
 
     // MARK: - List (de)serialization for the tunnel's providerConfiguration
@@ -142,42 +147,63 @@ public enum LocalDNSAction: Equatable, Sendable {
 }
 
 public struct LocalDNSFilter: Equatable, Sendable {
-    /// Lowercased domains, no trailing dots. "example.com" blocks the
-    /// domain itself and all subdomains.
-    public private(set) var blockedDomains: Set<String>
-    /// Exact-domain overrides: domain -> IPv4 (hosts-file mapping).
-    public private(set) var overrides: [String: String]
+    /// Rules matching the exact domain only (block list).
+    public private(set) var exactBlocks: Set<String>
+    /// Rules matching the domain + every subdomain (block list).
+    public private(set) var subtreeBlocks: Set<String>
+    /// Exact-domain overrides: domain -> IPv4.
+    public private(set) var exactOverrides: [String: String]
+    /// Subtree overrides (domain + subdomains): domain -> IPv4.
+    public private(set) var subtreeOverrides: [String: String]
 
+    public init(exactBlocks: Set<String> = [], subtreeBlocks: Set<String> = [],
+                exactOverrides: [String: String] = [:], subtreeOverrides: [String: String] = [:]) {
+        self.exactBlocks = Set(exactBlocks.compactMap { Self.normalize($0) }.filter { !$0.isEmpty })
+        self.subtreeBlocks = Set(subtreeBlocks.compactMap { Self.normalize($0) }.filter { !$0.isEmpty })
+        self.exactOverrides = Self.cleanOverrides(exactOverrides)
+        self.subtreeOverrides = Self.cleanOverrides(subtreeOverrides)
+    }
+
+    /// Legacy convenience (hosts-file semantics: subdomains included).
     public init(blockedDomains: Set<String> = [], overrides: [String: String] = [:]) {
-        self.blockedDomains = Set(blockedDomains.compactMap { Self.normalize($0) }.filter { !$0.isEmpty })
+        self.init(subtreeBlocks: blockedDomains, subtreeOverrides: overrides)
+    }
+
+    private static func cleanOverrides(_ raw: [String: String]) -> [String: String] {
         var cleaned = [String: String]()
-        for (key, value) in overrides {
-            guard let d = Self.normalize(key), !d.isEmpty,
-                  DNSWire.ipv4Bytes(value) != nil else { continue }
+        for (key, value) in raw {
+            guard let d = Self.normalize(key), !d.isEmpty, DNSWire.ipv4Bytes(value) != nil else { continue }
             cleaned[d] = value
         }
-        self.overrides = cleaned
+        return cleaned
     }
 
     /// Builds the filter from structured rules (app settings -> tunnel).
+    /// includeSubdomains=false rules match the exact domain only.
     public init(entries: [DNSBlocklistEntry]) {
-        var blocked = Set<String>()
-        var overrides = [String: String]()
+        var exactBlocks = Set<String>()
+        var subtreeBlocks = Set<String>()
+        var exactOverrides = [String: String]()
+        var subtreeOverrides = [String: String]()
         for entry in entries {
             guard let d = Self.normalize(entry.domain), !d.isEmpty else { continue }
             switch entry.kind {
             case .block:
-                blocked.insert(d)
+                if entry.includeSubdomains { subtreeBlocks.insert(d) } else { exactBlocks.insert(d) }
             case .override:
-                if DNSWire.ipv4Bytes(entry.ip) != nil { overrides[d] = entry.ip }
+                if DNSWire.ipv4Bytes(entry.ip) != nil {
+                    if entry.includeSubdomains { subtreeOverrides[d] = entry.ip } else { exactOverrides[d] = entry.ip }
+                }
             }
         }
-        self.init(blockedDomains: blocked, overrides: overrides)
+        self.init(exactBlocks: exactBlocks, subtreeBlocks: subtreeBlocks,
+                  exactOverrides: exactOverrides, subtreeOverrides: subtreeOverrides)
     }
 
     /// Parses hosts-file / uBlock-style lines (legacy import + tests):
     /// "example.com", "0.0.0.0 example.com" (block), "1.2.3.4 example.com"
-    /// (override), "||example.com^", comments (# or !).
+    /// (override), "||example.com^", comments (# or !). Hosts semantics =
+    /// subtree matching.
     public init(blocklistText: String) {
         var blocked = Set<String>()
         var overrides = [String: String]()
@@ -186,7 +212,7 @@ public struct LocalDNSFilter: Equatable, Sendable {
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("!") else { continue }
             var domain: String?
             var ip: String?
-            if line.hasPrefix("||") {                       // ABP/uBlock syntax
+            if line.hasPrefix("||") {
                 let body = String(line.dropFirst(2))
                 domain = (body.split(separator: "^").first ?? body.split(separator: " ").first).map(String.init)
             } else {
@@ -200,40 +226,52 @@ public struct LocalDNSFilter: Equatable, Sendable {
             }
             if let d = domain.flatMap(Self.normalize)?.nonEmpty {
                 if let ip, ip != "0.0.0.0", ip != "127.0.0.1" {
-                    overrides[d] = ip   // hosts mapping to a real address
+                    overrides[d] = ip
                 } else {
-                    blocked.insert(d)  // 0.0.0.0 / 127.0.0.1 / bare domain
+                    blocked.insert(d)
                 }
             }
         }
-        self.init(blockedDomains: blocked, overrides: overrides)
+        self.init(subtreeBlocks: blocked, subtreeOverrides: overrides)
     }
 
-    /// The action for a domain (any case, optional trailing dot): override
-    /// (exact match only) wins over block (exact + all subdomains).
+    /// The action for a domain (any case, optional trailing dot). Precedence
+    /// level by level, most specific first:
+    ///   1. exact override for the domain itself
+    ///   2. exact block for the domain itself
+    ///   3. walking ancestors (self, then parent, ...): subtree override,
+    ///      then subtree block at each level
     public func action(for domain: String) -> LocalDNSAction {
         guard let d = Self.normalize(domain), !d.isEmpty else { return .none }
-        if let ip = overrides[d] { return .override(ip: ip) }
-        if blockedDomains.contains(d) { return .blocked }
-        // Ancestor walk: "a.b.example.com" -> "b.example.com" -> ...
+        if let ip = exactOverrides[d] { return .override(ip: ip) }
+        if exactBlocks.contains(d) { return .blocked }
+        if let ip = subtreeOverrides[d] { return .override(ip: ip) }
+        if subtreeBlocks.contains(d) { return .blocked }
         var parts = d.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         while parts.count > 1 {
             parts.removeFirst()
-            if blockedDomains.contains(parts.joined(separator: ".")) { return .blocked }
+            let ancestor = parts.joined(separator: ".")
+            if let ip = subtreeOverrides[ancestor] { return .override(ip: ip) }
+            if subtreeBlocks.contains(ancestor) { return .blocked }
         }
         return .none
     }
 
-    public var isEmpty: Bool { blockedDomains.isEmpty && overrides.isEmpty }
+    public var isEmpty: Bool {
+        exactBlocks.isEmpty && subtreeBlocks.isEmpty
+            && exactOverrides.isEmpty && subtreeOverrides.isEmpty
+    }
 
     public mutating func add(domain: String) {
-        if let d = Self.normalize(domain), !d.isEmpty { blockedDomains.insert(d) }
+        if let d = Self.normalize(domain), !d.isEmpty { subtreeBlocks.insert(d) }
     }
 
     public mutating func remove(domain: String) {
         if let d = Self.normalize(domain) {
-            blockedDomains.remove(d)
-            overrides.removeValue(forKey: d)
+            exactBlocks.remove(d)
+            subtreeBlocks.remove(d)
+            exactOverrides.removeValue(forKey: d)
+            subtreeOverrides.removeValue(forKey: d)
         }
     }
 
