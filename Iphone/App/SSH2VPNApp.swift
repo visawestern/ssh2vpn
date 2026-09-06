@@ -985,6 +985,8 @@ final class AppModel: ObservableObject {
         // No app-side TCP ping gate: the SSH connect itself IS the probe
         // (extension has a 10s connect timeout), and every extra port-22 SYN
         // feeds the VPS per-source rate limiter. One tap = one SSH SYN.
+        ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+            message: "tunnel will use DNS: \(dns.isEmpty ? "8.8.8.8 (default)" : dns.joined(separator: ", "))\(settings.dnsRules.isEmpty ? "" : " + \(settings.dnsRules.count) local rule(s)")")
         self.vpn.start(profile: effectiveProfile, serverIP: serverIP,
                        onDemandEnabled: settings.connectOnDemand) { [weak self] error in
             guard let self = self else { return }

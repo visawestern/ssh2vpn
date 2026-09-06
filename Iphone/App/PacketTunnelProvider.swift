@@ -106,7 +106,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             var providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
             elog(.info, "TUNNEL", "providerConfiguration keys: \(providerConfiguration?.keys.sorted() ?? [])")
-            // Extension-owned server list is the source of truth.
+            // Extension-owned server list is the source of truth for the
+            // SERVER (host/credentials), but NOT for per-connection settings:
+            // dnsServers / dnsRules are freshly chosen by the user on every
+            // connect and arrive in providerConfiguration. The store's copy
+            // stays stale (last-saved profile) — overwriting the fresh values
+            // with it is the "selected a preset but the tunnel still runs the
+            // old 8.8.8.8" bug.
             if let selectedID = serverStore.selectedID(),
                let selected = serverStore.load(id: selectedID) {
                 var merged = providerConfiguration ?? [:]
@@ -114,13 +120,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 merged["port"] = selected.port
                 merged["username"] = selected.username
                 merged["hostKey"] = selected.hostKey
-                merged["dnsServers"] = selected.dnsServers
                 if let pwd = selected.password, !pwd.isEmpty { merged["password"] = pwd }
                 else { merged.removeValue(forKey: "password") }
                 if let key = selected.privateKey, !key.isEmpty { merged["privateKey"] = key }
                 else { merged.removeValue(forKey: "privateKey") }
+                // Keep the app-provided DNS when present; fall back to the
+                // stored profile only when the app sent nothing (first start,
+                // on-demand launch without the app).
+                let appDNS = (providerConfiguration?["dnsServers"] as? [String]) ?? []
+                merged["dnsServers"] = appDNS.isEmpty ? selected.dnsServers : appDNS
                 providerConfiguration = merged
-                elog(.info, "TUNNEL", "using extension-owned server id=\(selectedID) host=\(selected.host)")
+                elog(.info, "TUNNEL", "using extension-owned server id=\(selectedID) host=\(selected.host) dns=\(merged["dnsServers"] ?? [])")
             }
             let configuration = try TunnelConfiguration(providerConfiguration: providerConfiguration)
             tunnelPhase = "config"
@@ -140,6 +150,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 id: persistID, name: configuration.host, host: configuration.host, port: configuration.port,
                 username: configuration.username, hostKey: configuration.hostKey ?? "",
                 dnsServers: configuration.dnsServers, hasPassword: false, hasPrivateKey: false)
+            // Keep the store's DNS in step with what the app just sent, so
+            // the next on-demand start (no app involved) uses the same choice.
+            if !configuration.dnsServers.isEmpty {
+                storedProfile.dnsServers = configuration.dnsServers
+            }
             storedProfile.password = configuration.password
             storedProfile.privateKey = (providerConfiguration?["privateKey"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             storedProfile.hasPassword = storedProfile.password?.isEmpty == false
