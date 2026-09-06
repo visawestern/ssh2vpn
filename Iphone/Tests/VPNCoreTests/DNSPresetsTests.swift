@@ -42,4 +42,27 @@ final class DNSPresetsTests: XCTestCase {
         XCTAssertTrue(filters.contains(.ads))
         XCTAssertTrue(filters.contains(.family))
     }
+
+    func testEveryPresetHasBothDescriptions() {
+        // The UI shows exactly one of these — empty text would render a
+        // broken row.
+        for preset in DNSPresets.all {
+            XCTAssertFalse(preset.descriptionEN.isEmpty, "\(preset.name) has no EN description")
+            XCTAssertFalse(preset.descriptionRU.isEmpty, "\(preset.name) has no RU description")
+        }
+    }
+
+    func testPresetsGroupedByFilterStayQueryable() {
+        for filter in DNSPreset.Filter.allCases {
+            let group = DNSPresets.presets(matching: filter)
+            XCTAssertFalse(group.isEmpty, "group \(filter.rawValue) must not be empty")
+            XCTAssertTrue(group.allSatisfy { $0.filter == filter })
+        }
+    }
+
+    func testDescriptionLocalizationSwitch() {
+        let preset = DNSPresets.all[0]
+        XCTAssertEqual(preset.description(forRussian: true), preset.descriptionRU)
+        XCTAssertEqual(preset.description(forRussian: false), preset.descriptionEN)
+    }
 }

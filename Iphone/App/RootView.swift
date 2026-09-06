@@ -1713,8 +1713,8 @@ struct DNSView: View {
                     .padding(.horizontal, 16)
 
                 // Curated public presets: tap to fill the fields with a known
-                // good resolver (incl. content-filtering ones). The manual
-                // fields stay editable — a preset is just a quick start.
+                // good resolver. Grouped by what they block; the description
+                // spells out the blocking so the user knows what they get.
                 VStack(alignment: .leading, spacing: 0) {
                     Text("PUBLIC PRESETS")
                         .font(.openSans(13, weight: .semibold))
@@ -1743,6 +1743,7 @@ struct DNSView: View {
 
     private func presetRow(_ preset: DNSPreset) -> some View {
         let selected = preset.matches(primary: model.settings.primaryDNS, secondary: model.settings.secondaryDNS)
+        let isRU = (LanguageStore.current ?? .english) == .russian
         return Button {
             // Tapping a preset turns custom DNS on (a preset IS a custom
             // choice) and fills the fields; applied on the next connect.
@@ -1750,19 +1751,25 @@ struct DNSView: View {
             model.settings.primaryDNS = preset.primary
             model.settings.secondaryDNS = preset.secondary
             ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-                message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary)) — \(presetFilterText(preset))")
+                message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
         } label: {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(preset.name)
                             .font(.openSans(15, weight: .medium))
                             .foregroundStyle(Color.octGray100)
                         filterBadge(preset)
                     }
+                    Text(preset.description(forRussian: isRU))
+                        .font(.openSans(11))
+                        .foregroundStyle(Color.octGray60)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("\(preset.primary) • \(preset.secondary)")
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.octGray40)
                 }
                 Spacer()
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -1791,15 +1798,6 @@ struct DNSView: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(color.opacity(0.12), in: Capsule())
-    }
-
-    private func presetFilterText(_ preset: DNSPreset) -> String {
-        switch preset.filter {
-        case .none: return "no filtering"
-        case .malware: return "blocks malware & phishing"
-        case .ads: return "blocks ads & trackers"
-        case .family: return "blocks adult content (family-safe)"
-        }
     }
 
     private func dnsField(label: String, text: Binding<String>) -> some View {
