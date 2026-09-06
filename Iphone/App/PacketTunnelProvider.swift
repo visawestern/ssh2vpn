@@ -244,6 +244,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             elog(.info, "POOL", "ssh pool ready: 1 connection (grows on demand, max 4)")
 
             let dnsUpstream = configuration.dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
+            elog(.info, "TUNNEL", "config loaded: dns=\(configuration.dnsServers) rules=\(configuration.dnsRules.count) (blocklist from app)")
             let relay = RelayTransport(factory: factory,
                                        pool: pool,
                                        dnsServers: configuration.dnsServers,
@@ -1261,6 +1262,16 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         let flow = RelayFlow(srcAddr: parsed.flow.sourceAddressBytes, srcPort: parsed.flow.sourcePort,
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
+
+        // Always log what the filter SAW: with an active ruleset this proves
+        // whether the rule engine even evaluated the query, and shows the
+        // DNS cache's appearance (a cache hit is visibility too — the user
+        // sees exactly which domains were resolved from where).
+        if !localFilter.isEmpty || dnsCacheHits > 0 {
+            if let nm = DNSWire.questionName(from: udp.payload) {
+                elog(.info, "DNSFILTER", "query \(nm) (payload \(udp.payload.count)B, hits=\(dnsCacheHits), rules=\(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count + localFilter.exactOverrides.count + localFilter.subtreeOverrides.count))")
+            }
+        }
 
         // ---- 1. Local rules (uBlock/hosts-style, checked BEFORE cache and
         // upstream): blocked domains answer A 0.0.0.0, overrides answer the

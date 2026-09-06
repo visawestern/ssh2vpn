@@ -222,6 +222,14 @@ final class AppModel: ObservableObject {
             stopStatsPolling()
             attemptStartedAt = nil
             userIntentConnected = false
+        } else if presentation == .connected && connection == .disconnected {
+            // Tunnel came up out of band (on-demand, system restart) while
+            // the UI still reported disconnected — adopt the live state so
+            // switching doesn't look broken.
+            ConsoleLogStore.shared.log(level: .warning, tag: "SERVER",
+                message: "state resync: model said disconnected but the tunnel is actually UP")
+            connection = .connected
+            startStatsPolling()
         }
     }
 
