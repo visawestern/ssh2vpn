@@ -375,11 +375,13 @@ struct ConnectView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.white)
                     .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
             )
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
@@ -750,6 +752,7 @@ struct LocationsView: View {
                         }
                         .padding(14)
                         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                        .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                 }
@@ -863,6 +866,7 @@ struct LocationsView: View {
             .padding(16)
         }
         .buttonStyle(.plain)
+        .contentShape(.rect)
         .disabled(switchLocked)
         .opacity(switchLocked && !isSelected ? 0.55 : 1.0)
         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
@@ -973,6 +977,8 @@ struct SettingsViewNew: View {
                                     .foregroundStyle(Color.octGray40)
                             }
                             .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     }
@@ -1002,6 +1008,8 @@ struct SettingsViewNew: View {
                                     .foregroundStyle(Color.octGray40)
                             }
                             .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     }
@@ -1057,6 +1065,7 @@ struct SettingsViewNew: View {
         }
         .padding(14)
         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(.rect)
     }
 }
 
@@ -1092,11 +1101,13 @@ struct LanguagePickerSheet: View {
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 language == selected
                                     ? Color.sec50.opacity(0.08)
                                     : Color.clear
                             )
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
 
@@ -1152,7 +1163,9 @@ struct LanguageOverlay: View {
                                     }
                                 }
                                 .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                                .contentShape(.rect)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(language.title)
@@ -1699,9 +1712,10 @@ struct ProtocolView: View {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
                     .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
-                    .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
@@ -1825,49 +1839,63 @@ struct DNSView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
+                VStack(spacing: 6) {
+                    // Row 1: name + "?" on the left, chips pushed right
+                    // (space-between) — everything on one line, compact.
+                    HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Text(preset.name)
-                                .font(.openSans(15, weight: .medium))
+                                .font(.openSans(14, weight: .semibold))
                                 .foregroundStyle(Color.octGray100)
-                            // Compact "?" right after the name.
+                                .lineLimit(1)
                             InfoDotButtonCompact(isVisible: infoOpen) {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                                     openPresetInfoID = infoOpen ? nil : preset.id
                                 }
                             }
                         }
+                        Spacer(minLength: 8)
                         FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
-                        Text("\(preset.primary) • \(preset.secondary)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color.octGray40)
                     }
-                    Spacer()
-                    if selected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color.prim50)
+                    // Row 2: the resolver IPs. Small but DARK — readable,
+                    // not the washed-out gray the review called invisible.
+                    HStack(spacing: 6) {
+                        Text("\(preset.primary)  •  \(preset.secondary)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.octGray80)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        if selected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.prim50)
+                        }
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(selected ? Color.prim50.opacity(0.10) : Color.clear)
+                        .fill(selected ? Color.prim50.opacity(0.10) : Color.octGray0)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(selected ? Color.prim50 : Color.clear, lineWidth: 1.5)
+                        .stroke(selected ? Color.prim50 : Color.octGray05, lineWidth: selected ? 1.5 : 1)
                 )
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
             if infoOpen {
                 InfoBubble(title: preset.name,
                            message: model.copy.presetDescription(preset))
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 10)
             }
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
     }
 
     private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
