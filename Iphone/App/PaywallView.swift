@@ -146,7 +146,6 @@ struct PaywallView: View {
         VStack(spacing: 12) {
             featureRow(icon: "bolt.fill", color: Color(red: 0.95, green: 0.78, blue: 0.25), text: model.copy.text(.paywallFeatureUnlimited))
             featureRow(icon: "megaphone.fill", color: Color(red: 0.95, green: 0.55, blue: 0.35), text: model.copy.text(.paywallFeatureNoAds))
-            featureRow(icon: "globe.americas.fill", color: Color(red: 0.40, green: 0.68, blue: 0.95), text: model.copy.text(.paywallFeatureLocations))
         }
         .padding(18)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
