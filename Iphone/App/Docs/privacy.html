@@ -13,6 +13,8 @@
   .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; }
   .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#40C98C,#2E9E6B); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800; }
   select { font:inherit; padding:7px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  .langwrap { display:flex; align-items:center; gap:8px; }
+  .flag { font-size:19px; line-height:1; }
   h1 { font-size:24px; margin:14px 0 4px; }
   .updated { color:var(--mut); font-size:13px; margin-bottom:18px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
@@ -29,7 +31,7 @@
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot">S</span> SSH2VPN</div>
-    <select id="lang" onchange="apply()"></select>
+    <div class="langwrap"><span id="flag" class="flag"></span><select id="lang" onchange="apply()"></select></div>
   </header>
   <h1 id="t-title"></h1>
   <div class="updated" id="t-updated"></div>
@@ -57,14 +59,23 @@ const T = {
 "vi":{"title":"Chính sách Bảo mật","updated":"Cập nhật lần cuối: tháng 9 năm 2026","footer":"Chính sách Bảo mật","s":[["Dữ liệu chúng tôi thu thập","Không có. SSH2VPN không thu thập, lưu trữ hay truyền dữ liệu cá nhân nào. Không tài khoản, không phân tích, không trình theo dõi, không mã định danh quảng cáo trong ứng dụng."],["Dữ liệu của bạn nằm ở đâu","Mọi thứ đều ở trên thiết bị của bạn. Thông tin đăng nhập máy chủ (mật khẩu, khóa) chỉ được lưu trong Keychain của iOS và không bao giờ rời khỏi đó. Cài đặt kết nối và bộ đếm thời gian miễn phí được lưu cục bộ trên thiết bị."],["Máy chủ VPN của bạn","SSH2VPN định tuyến lưu lượng qua máy chủ bạn tự cung cấp (VPS riêng của bạn). Chúng tôi không vận hành máy chủ nào, không thấy lưu lượng của bạn và không có quyền truy cập kết nối VPN hay nhật ký của nó."],["Bên thứ ba","Ứng dụng chỉ liên lạc với các máy chủ bạn cấu hình. Để hiển thị vị trí máy chủ trên bản đồ, tên máy chủ công khai hoặc IP có thể được gửi đến dịch vụ định vị công khai (ipwhois.app hoặc ip-api.com). Đây là yêu cầu ngoài duy nhất và không chứa thông tin gì về bạn."],["Mua hàng","Nâng cấp 'Không giới hạn' tùy chọn được App Store của Apple xử lý hoàn toàn. Chúng tôi không bao giờ thấy thông tin thanh toán, tên hay Apple ID của bạn. Trạng thái mua hàng do StoreKit quản lý trên thiết bị."],["Trẻ em","Ứng dụng không dành cho trẻ em dưới 13 tuổi và không thu thập gì từ bất kỳ ai, kể cả trẻ em."],["Thay đổi","Nếu chính sách này thay đổi, phiên bản cập nhật sẽ đi kèm trong ứng dụng."],["Liên hệ","Có câu hỏi? Liên hệ qua trang sản phẩm trên App Store."]]},
 "zh-Hans":"zh","pt-BR":"pt"
 };
-const NAMES = {en:"English",ru:"Русский",es:"Español",de:"Deutsch",fr:"Français",it:"Italiano",pt:"Português",ja:"日本語",zh:"简体中文",ko:"한국어",ar:"العربية",hi:"हिन्दी",th:"ไทย",tr:"Türkçe",pl:"Polski",nl:"Nederlands",vi:"Tiếng Việt"};
-let cur = (navigator.language||"en").toLowerCase();
-if (T[cur]) {} else if (T[cur.split("-")[0]]) { cur = cur.split("-")[0]; }
-else if (T["zh-Hans"] && cur.startsWith("zh")) { cur = "zh"; }
-else if (T["pt-BR"] && cur.startsWith("pt")) { cur = "pt"; }
-else { cur = "en"; }
+const FLAGS = {en:"\u{1F1EC}\u{1F1E7}",es:"\u{1F1EA}\u{1F1F8}",de:"\u{1F1E9}\u{1F1EA}",fr:"\u{1F1EB}\u{1F1F0}",it:"\u{1F1EE}\u{1F1F9}",pt:"\u{1F1E7}\u{1F1F7}",ja:"\u{1F1EF}\u{1F1F5}",zh:"\u{1F1E8}\u{1F1F3}",ko:"\u{1F1F0}\u{1F1F7}",ar:"\u{1F1F8}\u{1F1E6}",hi:"\u{1F1EE}\u{1F1F3}",th:"\u{1F1F9}\u{1F1ED}",tr:"\u{1F1F9}\u{1F1F7}",pl:"\u{1F1F5}\u{1F1F1}",nl:"\u{1F1F3}\u{1F1F1}",vi:"\u{1F1FB}\u{1F1F3}",ru:"\u{1F1F7}\u{1F1FA}"};
+const NAMES = {en:"English",es:"Espa\u00f1ol",de:"Deutsch",fr:"Fran\u00e7ais",it:"Italiano",pt:"Portugu\u00eas",ja:"\u65e5\u672c\u8a9e",zh:"\u7b80\u4f53\u4e2d\u6587",ko:"\ud55c\uad6d\uc5b4",ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629",hi:"\u0939\u093f\u0928\u094d\u0926\u0940",th:"\u0e44\u0e17\u0e22",tr:"T\u00fcrk\u00e7e",pl:"Polski",nl:"Nederlands",vi:"Ti\u1ebfng Vi\u1ec7t",ru:"\u0420\u0443\u0441\u0441\u043a\u0438\u0439"};
+// Russian is LAST on purpose (owner's decision).
+const ORDER = ["en","es","de","fr","it","pt","ja","zh","ko","ar","hi","th","tr","pl","nl","vi","ru"];
+let cur = (window.APP_LANG || navigator.language || "en");
+if (!T[cur] || typeof T[cur] === "string") {
+  const l = String(cur).toLowerCase();
+  if (T[l] && typeof T[l] === "object") { cur = l; }
+  else if (T[l.split("-")[0]] && typeof T[l.split("-")[0]] === "object") { cur = l.split("-")[0]; }
+  else { cur = "en"; }
+}
+if (typeof T[cur] === "string") { cur = T[cur]; }
 function apply(){
-  const t = T[cur] || T.en;
+  const sel = document.getElementById("lang");
+  if (sel && sel.value) { cur = sel.value; }
+  const t = (typeof T[cur] === "object") ? T[cur] : T.en;
+  document.getElementById("flag").textContent = FLAGS[cur] || "\u{1F310}";
   document.getElementById("t-title").textContent = t.title;
   document.getElementById("t-updated").textContent = t.updated;
   document.getElementById("t-footer").textContent = t.footer;
@@ -74,13 +85,13 @@ function apply(){
 }
 (function init(){
   const sel = document.getElementById("lang");
-  for (const k of Object.keys(NAMES)) {
-    if (!T[k]) continue;
+  for (const k of ORDER) {
+    if (typeof T[k] !== "object") continue;
     const o = document.createElement("option");
-    o.value = k; o.textContent = NAMES[k];
-    if (k === cur) o.selected = true;
+    o.value = k; o.textContent = (FLAGS[k]||"") + " " + NAMES[k];
     sel.appendChild(o);
   }
+  sel.value = cur;
   apply();
 })();
 </script>

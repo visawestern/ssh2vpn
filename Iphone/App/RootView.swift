@@ -273,7 +273,7 @@ struct ConnectView: View {
         }
         .fullScreenCover(isPresented: $showDocsSheet) {
             NavigationStack {
-                DocsView()
+                DocsView(language: model.selectedLanguage?.rawValue)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button {
@@ -1231,12 +1231,12 @@ struct SettingsViewNew: View {
                             .padding(.bottom, 8)
 
                         // App Store-required legal documents.
-                        NavigationLink(destination: DocsView(page: .privacy)) {
+                        NavigationLink(destination: DocsView(page: .privacy, language: model.selectedLanguage?.rawValue)) {
                             settingsRow(icon: "hand.raised.fill", title: model.copy.text(.privacyPolicyTitle), desc: model.copy.text(.privacyPolicyDesc))
                         }
                         .buttonStyle(.plain)
                         Divider().background(Color.octGray05).padding(.horizontal, 16)
-                        NavigationLink(destination: DocsView(page: .terms)) {
+                        NavigationLink(destination: DocsView(page: .terms, language: model.selectedLanguage?.rawValue)) {
                             settingsRow(icon: "doc.text.fill", title: model.copy.text(.termsOfUseTitle), desc: model.copy.text(.termsOfUseDesc))
                         }
                         .buttonStyle(.plain)

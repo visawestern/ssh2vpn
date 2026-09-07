@@ -13,6 +13,8 @@
   .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; }
   .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#40C98C,#2E9E6B); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800; }
   select { font:inherit; padding:7px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  .langwrap { display:flex; align-items:center; gap:8px; }
+  .flag { font-size:19px; line-height:1; }
   h1 { font-size:24px; margin:14px 0 4px; }
   .updated { color:var(--mut); font-size:13px; margin-bottom:18px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
@@ -28,7 +30,7 @@
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot">S</span> SSH2VPN</div>
-    <select id="lang" onchange="apply()"></select>
+    <div class="langwrap"><span id="flag" class="flag"></span><select id="lang" onchange="apply()"></select></div>
   </header>
   <h1 id="t-title"></h1>
   <div class="updated" id="t-updated"></div>
@@ -56,14 +58,23 @@ const T = {
 "vi":{"title":"Điều khoản Sử dụng","updated":"Cập nhật lần cuối: tháng 9 năm 2026","footer":"Điều khoản Sử dụng","s":[["Chấp nhận","Tải xuống và sử dụng SSH2VPN đồng nghĩa bạn chấp nhận các Điều khoản Sử dụng này. Nếu không đồng ý, đừng sử dụng ứng dụng."],["Ứng dụng là gì","SSH2VPN là ứng dụng khách kết nối thiết bị của bạn với máy chủ do chính bạn cung cấp, qua giao thức SSH2 trên hồ sơ VPN tiêu chuẩn của iOS. Chúng tôi không cung cấp, vận hành hay kiểm soát bất kỳ máy chủ nào. Bạn chịu trách nhiệm có quyền truy cập hợp pháp vào máy chủ của mình và tuân thủ điều khoản của nhà cung cấp."],["Trách nhiệm của bạn","Bạn sử dụng SSH2VPN tự chịu rủi ro. Bạn đồng ý chỉ dùng ứng dụng cho mục đích hợp pháp, tuân thủ mọi luật áp dụng và quy tắc của mọi mạng hoặc dịch vụ mà bạn kết nối tới."],["Mua hàng","Nâng cấp 'Không giới hạn' tùy chọn là giao dịch mua trong ứng dụng một lần do Apple xử lý theo điều khoản chuẩn của App Store. Hoàn tiền do Apple xử lý theo chính sách của họ. Nếu giao dịch bị hoàn tiền hoặc thu hồi, các tính năng Không giới hạn sẽ bị gỡ bỏ."],["Gói miễn phí và quảng cáo","Gói miễn phí cấp thời gian kết nối giới hạn, có thể gia hạn bằng cách xem quảng cáo có thưởng tùy chọn. Khả năng cung cấp quảng cáo và thời gian miễn phí không được đảm bảo và có thể thay đổi."],["Không bảo hành","Ứng dụng được cung cấp \"nguyên trạng\", không kèm bất kỳ bảo hành nào. Chúng tôi không đảm bảo hoạt động liên tục, không lỗi, hay tương thích với mọi máy chủ và cấu hình mạng."],["Trách nhiệm","Trong phạm vi pháp luật cho phép, chúng tôi không chịu trách nhiệm về thiệt hại, mất dữ liệu hay tổn thất phát sinh từ việc sử dụng ứng dụng hoặc downtime của các máy chủ bạn vận hành hoặc dựa vào."],["Thay đổi","Các điều khoản này có thể thay đổi cùng bản cập nhật ứng dụng. Tiếp tục sử dụng sau khi cập nhật nghĩa là bạn chấp nhận điều khoản đã cập nhật."],["Liên hệ","Có câu hỏi? Liên hệ qua trang sản phẩm trên App Store."]]},
 "zh-Hans":"zh","pt-BR":"pt"
 };
-const NAMES = {en:"English",ru:"Русский",es:"Español",de:"Deutsch",fr:"Français",it:"Italiano",pt:"Português",ja:"日本語",zh:"简体中文",ko:"한국어",ar:"العربية",hi:"हिन्दी",th:"ไทย",tr:"Türkçe",pl:"Polski",nl:"Nederlands",vi:"Tiếng Việt"};
-let cur = (navigator.language||"en").toLowerCase();
-if (T[cur]) {} else if (T[cur.split("-")[0]]) { cur = cur.split("-")[0]; }
-else if (cur.startsWith("zh")) { cur = "zh"; }
-else if (cur.startsWith("pt")) { cur = "pt"; }
-else { cur = "en"; }
+const FLAGS = {en:"\u{1F1EC}\u{1F1E7}",es:"\u{1F1EA}\u{1F1F8}",de:"\u{1F1E9}\u{1F1EA}",fr:"\u{1F1EB}\u{1F1F0}",it:"\u{1F1EE}\u{1F1F9}",pt:"\u{1F1E7}\u{1F1F7}",ja:"\u{1F1EF}\u{1F1F5}",zh:"\u{1F1E8}\u{1F1F3}",ko:"\u{1F1F0}\u{1F1F7}",ar:"\u{1F1F8}\u{1F1E6}",hi:"\u{1F1EE}\u{1F1F3}",th:"\u{1F1F9}\u{1F1ED}",tr:"\u{1F1F9}\u{1F1F7}",pl:"\u{1F1F5}\u{1F1F1}",nl:"\u{1F1F3}\u{1F1F1}",vi:"\u{1F1FB}\u{1F1F3}",ru:"\u{1F1F7}\u{1F1FA}"};
+const NAMES = {en:"English",es:"Espa\u00f1ol",de:"Deutsch",fr:"Fran\u00e7ais",it:"Italiano",pt:"Portugu\u00eas",ja:"\u65e5\u672c\u8a9e",zh:"\u7b80\u4f53\u4e2d\u6587",ko:"\ud55c\uad6d\uc5b4",ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629",hi:"\u0939\u093f\u0928\u094d\u0926\u0940",th:"\u0e44\u0e17\u0e22",tr:"T\u00fcrk\u00e7e",pl:"Polski",nl:"Nederlands",vi:"Ti\u1ebfng Vi\u1ec7t",ru:"\u0420\u0443\u0441\u0441\u043a\u0438\u0439"};
+// Russian is LAST on purpose (owner's decision).
+const ORDER = ["en","es","de","fr","it","pt","ja","zh","ko","ar","hi","th","tr","pl","nl","vi","ru"];
+let cur = (window.APP_LANG || navigator.language || "en");
+if (!T[cur] || typeof T[cur] === "string") {
+  const l = String(cur).toLowerCase();
+  if (T[l] && typeof T[l] === "object") { cur = l; }
+  else if (T[l.split("-")[0]] && typeof T[l.split("-")[0]] === "object") { cur = l.split("-")[0]; }
+  else { cur = "en"; }
+}
+if (typeof T[cur] === "string") { cur = T[cur]; }
 function apply(){
-  const t = T[cur] || T.en;
+  const sel = document.getElementById("lang");
+  if (sel && sel.value) { cur = sel.value; }
+  const t = (typeof T[cur] === "object") ? T[cur] : T.en;
+  document.getElementById("flag").textContent = FLAGS[cur] || "\u{1F310}";
   document.getElementById("t-title").textContent = t.title;
   document.getElementById("t-updated").textContent = t.updated;
   document.getElementById("t-footer").textContent = t.footer;
@@ -73,13 +84,13 @@ function apply(){
 }
 (function init(){
   const sel = document.getElementById("lang");
-  for (const k of Object.keys(NAMES)) {
-    if (!T[k]) continue;
+  for (const k of ORDER) {
+    if (typeof T[k] !== "object") continue;
     const o = document.createElement("option");
-    o.value = k; o.textContent = NAMES[k];
-    if (k === cur) o.selected = true;
+    o.value = k; o.textContent = (FLAGS[k]||"") + " " + NAMES[k];
     sel.appendChild(o);
   }
+  sel.value = cur;
   apply();
 })();
 </script>
