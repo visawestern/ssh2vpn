@@ -592,6 +592,26 @@ struct ConnectView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!model.canWatchAd)
+
+                // Buy Unlimited — shown only while not owned.
+                Button {
+                    model.showPaywall()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "infinity")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(model.copy.text(.buyUnlimited, price: "$5"))
+                            .font(.openSans(12, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Color(red: 0.95, green: 0.62, blue: 0.18),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
