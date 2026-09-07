@@ -84,31 +84,10 @@ public enum ServerMetadataResolver {
             )
         }
 
-        // Try ip-api.com
-        if let url = URL(string: "http://ip-api.com/json/\(trimmed)?fields=status,message,country,countryCode,city,lat,lon") {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 3.0
-            if let (data, response) = try? await URLSession.shared.data(for: request),
-               let http = response as? HTTPURLResponse, http.statusCode == 200,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String, status == "success" {
-                let country = json["country"] as? String ?? "Unknown"
-                let code = json["countryCode"] as? String ?? ""
-                let city = json["city"] as? String ?? ""
-                let lat = json["lat"] as? Double ?? 48.0
-                let lon = json["lon"] as? Double ?? 11.0
-                return ServerGeoInfo(
-                    country: country,
-                    countryCode: code,
-                    city: city,
-                    flag: flagEmoji(for: code),
-                    lat: lat,
-                    lon: lon
-                )
-            }
-        }
-
-        // Fallback to ipwhois.app
+        // ipwhois.app first: for anycast addresses like 8.8.8.8 ip-api.com
+        // reports the network's registered office (Ashburn, VA), which paints
+        // the map dot a continent away from the real exit node. ipwhois gives
+        // the same data with the actual region (California).
         if let url = URL(string: "https://ipwhois.app/json/\(trimmed)") {
             var request = URLRequest(url: url)
             request.timeoutInterval = 3.0
@@ -121,6 +100,30 @@ public enum ServerMetadataResolver {
                 let city = json["city"] as? String ?? ""
                 let lat = json["latitude"] as? Double ?? 48.0
                 let lon = json["longitude"] as? Double ?? 11.0
+                return ServerGeoInfo(
+                    country: country,
+                    countryCode: code,
+                    city: city,
+                    flag: flagEmoji(for: code),
+                    lat: lat,
+                    lon: lon
+                )
+            }
+        }
+
+        // Fallback to ip-api.com
+        if let url = URL(string: "http://ip-api.com/json/\(trimmed)?fields=status,message,country,countryCode,city,lat,lon") {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 3.0
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let http = response as? HTTPURLResponse, http.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let status = json["status"] as? String, status == "success" {
+                let country = json["country"] as? String ?? "Unknown"
+                let code = json["countryCode"] as? String ?? ""
+                let city = json["city"] as? String ?? ""
+                let lat = json["lat"] as? Double ?? 48.0
+                let lon = json["lon"] as? Double ?? 11.0
                 return ServerGeoInfo(
                     country: country,
                     countryCode: code,
