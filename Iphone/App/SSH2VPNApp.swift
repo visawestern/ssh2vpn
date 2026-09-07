@@ -507,7 +507,7 @@ final class AppModel: ObservableObject {
             // the backoff — the redial is only for a still-wanted tunnel.
             guard self.userIntentConnected, self.settings.killSwitch,
                   self.connection == .disconnected else { return }
-            guard self.remainingQuotaSeconds > 0 else {
+            guard self.quota.allowsConnection(now: Date()) else {
                 ConsoleLogStore.shared.log(level: .warning, tag: "KILLSWITCH", message: "auto-reconnect skipped: free time exhausted")
                 self.userIntentConnected = false
                 return
@@ -829,11 +829,14 @@ final class AppModel: ObservableObject {
             ConsoleLogStore.shared.log(level: .error, tag: "CONNECT", message: "No server selected")
             return
         }
-        // Free-tier gate: no quota, no tunnel. Re-read the shared ledger so
-        // an expiry caught by the kernel (or a purchase made elsewhere) is
-        // reflected here without a failed-connect flash.
+        // Free-tier gate: no opens > 0 → no tunnel. Unlimited users always
+        // have budget (`allowsConnection`). Re-read the shared ledger so an
+        // expiry caught by the kernel (or a purchase made elsewhere) is
+        // reflected here without a failed-connect flash. This is the ONLY
+        // place the app re-reads the countdown outside launch — after that the
+        // UI runs its own in-memory countdown until the next connect tap.
         reloadQuota()
-        guard remainingQuotaSeconds > 0 else {
+        guard quota.allowsConnection(now: Date()) else {
             ConsoleLogStore.shared.log(level: .error, tag: "QUOTA", message: "Connect blocked: free time exhausted — watch an ad to earn +3h")
             connection = .failed("freeTimeExhausted")
             return
@@ -1083,10 +1086,9 @@ final class AppModel: ObservableObject {
     func tickConnectionTimer() {
         objectWillChange.send()
         automation.tick()
-        // No app-side drain: the wall-clock budget is enforced and metered in
-        // the KERNEL (extension). The app's copy of the ledger is display-only;
-        // it refreshes from the shared keychain so the ring stays honest.
-        reloadQuotaIfNeeded()
+        // Countdown runs in memory: the ledger was read at launch (and again
+        // on every connect); `remaining(now:)` decays against the wall clock,
+        // so NOTHING is polled here — the kernel keychain is left alone.
     }
 
     // MARK: - 1s display timer (owned here so it can self-invalidate)
@@ -1114,13 +1116,6 @@ final class AppModel: ObservableObject {
     func stopDisplayTimer() {
         displayTimer?.invalidate()
         displayTimer = nil
-    }
-
-    /// Refreshes the display ledger from the shared keychain. Called on the
-    /// tick; cheap (one keychain read/second is negligible).
-    private func reloadQuotaIfNeeded() {
-        let fresh = QuotaLedgerStore().load().withInitialGrant(now: Date())
-        if fresh != quota { quota = fresh }
     }
 
     // MARK: - Console grace window

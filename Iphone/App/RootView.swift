@@ -157,6 +157,7 @@ struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showAddServer = false
     @State private var showLocationsSheet = false
+    @State private var showDocsSheet = false
     /// Post-tap cooldown: the power button stays disabled for a fixed window
     /// after every press (connect or disconnect), then re-enables itself.
     @State private var powerCooldown = false
@@ -254,6 +255,22 @@ struct ConnectView: View {
                 LocationsView()
             }
         }
+        .fullScreenCover(isPresented: $showDocsSheet) {
+            NavigationStack {
+                DocsView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                showDocsSheet = false
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color.octGray100)
+                            }
+                            .accessibilityLabel(model.copy.text(.cancel))
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: - Top Status Card
@@ -275,6 +292,22 @@ struct ConnectView: View {
                 .foregroundStyle(Color.octGray100)
             Spacer()
         }
+        .overlay(alignment: .trailing) {
+            HStack(spacing: 10) {
+                // Buy (unlimited) — hidden once the plan is owned.
+                if !model.isUnlimited {
+                    headerIconButton(icon: "sparkles", tint: Color(red: 0.85, green: 0.55, blue: 0.15)) {
+                        Task { await model.buyUnlimited() }
+                    }
+                    .accessibilityLabel(model.copy.text(.buyUnlimited))
+                }
+                // Documentation book (standalone HTML guide).
+                headerIconButton(icon: "book.closed.fill", tint: Color(red: 0.25, green: 0.45, blue: 0.85)) {
+                    showDocsSheet = true
+                }
+                .accessibilityLabel(model.copy.text(.documentation))
+            }
+        }
         .padding(.vertical, 14)
         .padding(.horizontal, 20)
         .background(
@@ -282,6 +315,30 @@ struct ConnectView: View {
                 .fill(Color.white)
                 .shadow(color: Color.black.opacity(0.05), radius: 10, y: 4)
         )
+    }
+
+    /// Small round header action: translucent chip, Apple-style feedback on press.
+    private func headerIconButton(icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(tint.opacity(0.10))
+                )
+        }
+        .buttonStyle(HeaderIconButtonStyle())
+    }
+
+    private struct HeaderIconButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+                .opacity(configuration.isPressed ? 0.7 : 1.0)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
     }
 
     // MARK: - Central Power Button (with arc progress ring)
