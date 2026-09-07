@@ -84,19 +84,29 @@ public struct FloatingCustomizerButton: View {
 
 public struct HackerConsoleSidebarView: View {
     @Binding var isOpen: Bool
-    /// Whether local logging is enabled in Advanced settings. Only when it is
-    /// on do we show the SHARE/Export button — otherwise the combo is shown
-    /// but greyed, because a dump with logging off carries no extension lines.
-    @Binding var enableLogging: Bool
     @State private var entries: [ConsoleLogEntry] = ConsoleLogStore.shared.entries
     @State private var autoScroll: Bool = true
     @State private var showCopiedToast: Bool = false
     @State private var showShareSheet: Bool = false
     @State private var shareFileUrl: URL?
+    /// Nil = every category; otherwise only that tag (e.g. "DNSFILTER").
+    @State private var filterTag: String? = nil
 
-    public init(isOpen: Binding<Bool>, enableLogging: Binding<Bool>) {
+    public init(isOpen: Binding<Bool>) {
         self._isOpen = isOpen
-        self._enableLogging = enableLogging
+    }
+
+    /// Distinct tags present in the buffer, top-counted, so the filter chips
+    /// stay useful instead of listing tags that never appear.
+    private var availableTags: [String] {
+        var counts: [String: Int] = [:]
+        for e in entries { counts[e.tag, default: 0] += 1 }
+        return counts.keys.sorted { counts[$0]! > counts[$1]! }
+    }
+
+    private var visibleEntries: [ConsoleLogEntry] {
+        guard let filterTag else { return entries }
+        return entries.filter { $0.tag == filterTag }
     }
 
     public var body: some View {
@@ -189,7 +199,7 @@ public struct HackerConsoleSidebarView: View {
 
                 Spacer()
 
-                Text("\(entries.count) lines")
+                Text(filterTag == nil ? "\(entries.count) lines" : "\(visibleEntries.count)/\(entries.count) \(filterTag!)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0))
                     .padding(.horizontal, 6)
@@ -252,13 +262,10 @@ public struct HackerConsoleSidebarView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Export/Share button — shown only while local logging is on,
-                // so the user never gets a dump that silently lacks the
-                // extension's DNSFILTER lines (the exact trap that bit us).
-                if enableLogging {
-                    Button {
-                        exportLogsToFile()
-                    } label: {
+                // Export/Share button
+                Button {
+                    exportLogsToFile()
+                } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "square.and.arrow.up")
                             Text("SHARE")
@@ -270,8 +277,22 @@ public struct HackerConsoleSidebarView: View {
                         .background(Color(red: 0.0, green: 1.0, blue: 0.4).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
-                }
+
                 Spacer()
+            }
+
+            // Type filter: ALL + one chip per distinct tag. Tapping a chip
+            // shows only that category (e.g. DNSFILTER), which is exactly how
+            // you watch the DNS blocklist verdict in isolation.
+            if !availableTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        filterChip(title: "ALL", tag: nil)
+                        ForEach(availableTags, id: \.self) { tag in
+                            filterChip(title: tag, tag: tag)
+                        }
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -279,16 +300,40 @@ public struct HackerConsoleSidebarView: View {
         .background(Color(red: 0.03, green: 0.04, blue: 0.07))
     }
 
+    // MARK: - Filter chip
+    private func filterChip(title: String, tag: String?) -> some View {
+        let isActive = filterTag == tag
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                filterTag = tag
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(isActive ? Color.black : Color(red: 0.0, green: 0.94, blue: 1.0))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    isActive
+                        ? Color(red: 0.0, green: 0.94, blue: 1.0)
+                        : Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.12),
+                    in: Capsule()
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Terminal Log List
     private var terminalLogList: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 5) {
-                    if entries.isEmpty {
+                    if visibleEntries.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("/* SSH2VPN Terminal Logger Initialized */")
                                 .foregroundStyle(Color.gray.opacity(0.7))
-                            Text("/* Ready to capture transport events... */")
+                            Text(filterTag.map { "/* No \"\($0)\" entries yet */" }
+                                 ?? "/* Ready to capture transport events... */")
                                 .foregroundStyle(Color.gray.opacity(0.7))
                         }
                         .font(.system(size: 11, design: .monospaced))
@@ -298,7 +343,7 @@ public struct HackerConsoleSidebarView: View {
                         // top, right where the eye lands when the drawer
                         // opens — no scrolling down a growing backlog to see
                         // what just happened. Older entries drift downward.
-                        ForEach(entries.reversed()) { entry in
+                        ForEach(visibleEntries.reversed()) { entry in
                             logRow(entry)
                                 .id(entry.id)
                         }
@@ -318,25 +363,27 @@ public struct HackerConsoleSidebarView: View {
         }
     }
 
-    // MARK: - Log Row with Hacker Colors
+    // MARK: - Log Row with Hacker Colors (2 lines per entry: meta, then body)
     private func logRow(_ entry: ConsoleLogEntry) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            // Timestamp
-            Text(entry.formattedTimestamp)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Color.gray.opacity(0.8))
+        VStack(alignment: .leading, spacing: 2) {
+            // Line 1 — date like now + type/tag
+            HStack(spacing: 6) {
+                Text(entry.formattedTimestamp)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.gray.opacity(0.8))
 
-            // Tag badge
-            Text("[\(entry.tag)]")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(tagColor(for: entry.level))
+                Text("[\(entry.tag)]")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tagColor(for: entry.level))
+            }
 
-            // Message body
+            // Line 2 — the actual parameters / message body
             Text(entry.message)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(messageColor(for: entry.level))
                 .lineLimit(nil)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

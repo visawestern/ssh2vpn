@@ -74,10 +74,12 @@ struct RootView: View {
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
 
-            // Vuexy-style Floating theCustomizer terminal button — shown only
-            // once a connection exists (connecting or connected); no console
-            // to read while the VPN is off.
-            if model.connection == .connecting || model.connection == .connected {
+            // Vuexy-style Floating terminal button — shown only when the
+            // user has a connection (connecting or connected) AND local
+            // logging is enabled. If logging is off there is nothing to read
+            // in the console, so the button stays hidden even mid-connect.
+            if (model.connection == .connecting || model.connection == .connected)
+                && model.settings.enableLogging {
                 VStack {
                     Spacer()
                     FloatingCustomizerButton(
@@ -89,9 +91,13 @@ struct RootView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
 
-            // Right sliding Hacker Console Sidebar
-            HackerConsoleSidebarView(isOpen: $isConsoleOpen,
-                                     enableLogging: $model.settings.enableLogging)
+            // Right sliding Hacker Console Sidebar — only reachable while
+            // logging is enabled; close it if the toggle flips off mid-open.
+            if model.settings.enableLogging {
+                HackerConsoleSidebarView(isOpen: $isConsoleOpen)
+            } else {
+                Color.clear.onAppear { isConsoleOpen = false }
+            }
 
             if model.needsLanguageSelection {
                 LanguageOverlay()

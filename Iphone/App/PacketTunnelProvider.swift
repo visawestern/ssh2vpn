@@ -1309,46 +1309,45 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                              dstAddr: parsed.flow.destinationAddressBytes, dstPort: parsed.flow.destinationPort,
                              transport: .udp)
 
-        // Always log what the filter SAW: with an active ruleset this proves
-        // whether the rule engine even evaluated the query, and shows the
-        // DNS cache's appearance (a cache hit is visibility too — the user
-        // sees exactly which domains were resolved from where).
-        if let nm = DNSWire.questionName(from: udp.payload) {
-            elog(.info, "DNSFILTER",
-                "query \(nm) ifA=\(DNSWire.questionType(from: udp.payload) == 1) (payload \(udp.payload.count)B, rules=\(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count + localFilter.exactOverrides.count + localFilter.subtreeOverrides.count))")
-        }
+        // Always log what the filter SAW. Every query gets a verdict line
+        // (blocked / override / pass) so a domain that does NOT match any
+        // rule is still visible — silence used to look like a dead path.
+        let qName = DNSWire.questionName(from: udp.payload)
+        let qType = DNSWire.questionType(from: udp.payload)
 
         // ---- 1. Local rules (uBlock/hosts-style, checked BEFORE cache and
         // upstream): blocked domains answer A 0.0.0.0, overrides answer the
         // chosen IPv4; non-A questions about handled domains get REFUSED.
         // Nothing for these domains ever leaves the tunnel.
-        if let name = DNSWire.questionName(from: udp.payload) {
+        if let name = qName {
             switch localFilter.action(for: name) {
-            case .none:
-                break
             case .blocked:
                 dnsBlockedCount += 1
-                let reply: Data? = DNSWire.questionType(from: udp.payload) == 1
+                let reply: Data? = qType == 1
                     ? DNSWire.aRecordReply(to: udp.payload, ipv4: [0, 0, 0, 0])
                     : DNSWire.refusedReply(to: udp.payload)
                 if let reply, let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(reply)) {
                     repliesWritten += 1
                     receiveCallback(Data(pkt))
-                    elog(.info, "DNSFILTER", "blocked \(name) -> A 0.0.0.0 (local, no upstream query)")
                 }
+                elog(.info, "DNSFILTER", "match \(name) -> BLOCK A 0.0.0.0 (local, no upstream query)")
                 return
             case .override(let ip):
                 dnsBlockedCount += 1
-                let reply: Data? = DNSWire.questionType(from: udp.payload) == 1
+                let reply: Data? = qType == 1
                     ? DNSWire.ipv4Bytes(ip).flatMap { DNSWire.aRecordReply(to: udp.payload, ipv4: $0) }
                     : DNSWire.refusedReply(to: udp.payload)
                 if let reply, let pkt = try? UDPReplyBuilder.reply(flow: flow, payload: Array(reply)) {
                     repliesWritten += 1
                     receiveCallback(Data(pkt))
-                    elog(.info, "DNSFILTER", "override \(name) -> A \(ip) (local, no upstream query)")
                 }
+                elog(.info, "DNSFILTER", "match \(name) -> OVERRIDE \(ip) (local, no upstream query)")
                 return
+            case .none:
+                elog(.info, "DNSFILTER", "match \(name) -> PASS (not in any local rule)")
             }
+        } else {
+            elog(.info, "DNSFILTER", "match ??? (unparseable query name, payload \(udp.payload.count)B)")
         }
 
         // ---- 2. Local cache: a fresh answer replays in ~0ms (id rewritten
