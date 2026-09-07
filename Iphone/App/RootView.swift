@@ -568,24 +568,32 @@ struct ConnectView: View {
 
             Spacer()
 
-            // Buy Unlimited — only while not owned. Green bag button before
-            // the rewarded-ad button (color was switched from amber to green
-            // at the owner's request).
+            // Buy (unlimited) — icon-only, no label, next to the ad button so
+            // all monetization lives in this one row. Spinner while a purchase
+            // is in flight (StoreKit sandbox can hang). Hidden once owned.
             if !model.isUnlimited {
                 Button {
                     model.showPaywall()
                 } label: {
-                    Image(systemName: "bag.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            Color.sec50,
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
+                    Group {
+                        if model.store.isPurchasing {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "bag.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(Color.prim50)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(Color.prim50.opacity(0.12))
+                    )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(model.copy.text(.buyUnlimited, price: "$5"))
+                .buttonStyle(HeaderIconButtonStyle())
+                .accessibilityLabel(model.copy.text(.buyUnlimited))
+                .disabled(model.store.isPurchasing)
             }
 
             // Rewarded ad refill — only when the user hasn't bought unlimited.
