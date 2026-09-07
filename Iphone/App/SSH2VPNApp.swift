@@ -55,7 +55,7 @@ final class AppModel: ObservableObject {
     let store = StoreManager()
 
     // MARK: - Paywall (double-offer flow)
-    // Stage 1: full-price unlimited ($4.99 one-time). If dismissed, stage 2
+    // Stage 1: full-price unlimited ($5 one-time). If dismissed, stage 2
     // shows a one-time $3 discount offer. If THAT is dismissed, the discount
     // is never offered again on this device — only the full price. Not shown
     // to users who already own Unlimited.

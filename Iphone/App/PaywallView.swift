@@ -3,7 +3,7 @@ import SwiftUI
 /// Full-screen paywall shown when the user taps the Unlimited buy button.
 ///
 /// Double-offer flow (persisted across launches):
-///  - `.full`   : one-time price ($4.99) — dismiss escalates to `.discount`.
+///  - `.full`   : one-time price ($5) — dismiss escalates to `.discount`.
 ///  - `.discount`: one-time $3 offer. Its close button is locked for 3s to
 ///    hold attention; dismissing it marks the discount as declined forever,
 ///    so only the full price is ever offered again on this device.
@@ -14,9 +14,12 @@ struct PaywallView: View {
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
-    /// The real price the StoreKit product will actually charge, straight from
-    /// the product's display string — so the UI can never lie about the price.
-    private var displayPrice: String? { model.store.product?.displayPrice }
+    /// The price shown in the UI. Real prices in App Store Connect are a $5
+    /// one-time purchase, with a flat $3 offer on the discount stage — shown
+    /// exactly, no cents.
+    private var displayPrice: String? {
+        isDiscount ? "$3" : "$5"
+    }
 
     var body: some View {
         ZStack {

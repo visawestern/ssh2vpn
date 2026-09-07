@@ -653,6 +653,16 @@ struct WorldMapView: View {
     @EnvironmentObject private var model: AppModel
     @State private var isPulsing = false
 
+    /// Geographic coordinates -> normalized [0...1] map position, clamped to
+    /// the frame so geo data can never push a dot off the map. Recomputed
+    /// from the LIVE map size on every relayout, so rotating the device
+    /// re-projects every server dot onto the new map dimensions.
+    private static func mapPosition(lon: Double, lat: Double, mapWidth: CGFloat, mapHeight: CGFloat) -> CGPoint {
+        let lonNorm = min(max((lon + 180.0) / 360.0, 0.0), 1.0)
+        let latNorm = min(max((90.0 - lat) / 180.0, 0.0), 1.0)
+        return CGPoint(x: lonNorm * mapWidth, y: latNorm * mapHeight)
+    }
+
     var body: some View {
         GeometryReader { geo in
             // 80% of the available width keeps the map dominant but leaves a
@@ -661,11 +671,10 @@ struct WorldMapView: View {
             let mapHeight = mapWidth * (954.0 / 1920.0)
             let hasServer = !model.profile.host.isEmpty
 
-            // Map server's real geographic coordinates to world map position
-            let lonNorm = (model.serverLongitude + 180.0) / 360.0
-            let latNorm = (90.0 - model.serverLatitude) / 180.0
-            let dotX = min(max(lonNorm * mapWidth, 24), mapWidth - 24)
-            let dotY = min(max(latNorm * mapHeight, 22), mapHeight - 22)
+            // Selected-server marker: re-projected from the current map size.
+            let pos = Self.mapPosition(lon: model.serverLongitude, lat: model.serverLatitude, mapWidth: mapWidth, mapHeight: mapHeight)
+            let dotX = min(max(pos.x, 24), mapWidth - 24)
+            let dotY = min(max(pos.y, 22), mapHeight - 22)
 
             HStack {
                 Spacer()
@@ -676,14 +685,15 @@ struct WorldMapView: View {
                     .frame(width: mapWidth, height: mapHeight)
                     .opacity(0.9)
 
-                // Static dots for inactive servers, colored by ping
+                // Static dots for inactive servers, colored by ping. Each dot
+                // is re-projected from the LIVE map size on every relayout,
+                // so rotation keeps every server on land.
                 ForEach(model.servers) { server in
                     let isSelected = server.id == model.selectedServer?.id
                     if !isSelected, let geo = model.serverGeoCache[server.id] {
-                        let lon = (geo.lon + 180.0) / 360.0
-                        let lat = (90.0 - geo.lat) / 180.0
-                        let x = min(max(lon * mapWidth, 12), mapWidth - 12)
-                        let y = min(max(lat * mapHeight, 12), mapHeight - 12)
+                        let p = Self.mapPosition(lon: geo.lon, lat: geo.lat, mapWidth: mapWidth, mapHeight: mapHeight)
+                        let x = min(max(p.x, 12), mapWidth - 12)
+                        let y = min(max(p.y, 12), mapHeight - 12)
                         let ping = model.serverPingCache[server.id]
                         let dotColor: Color = {
                             guard let ms = ping else { return Color.octGray40 }
@@ -1099,7 +1109,7 @@ struct SettingsViewNew: View {
                         } else {
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(model.copy.text(.buyUnlimitedPrice, price: model.store.product?.displayPrice))
+                                    Text(model.copy.text(.buyUnlimitedPrice, price: "$5"))
                                         .font(.openSans(15, weight: .bold))
                                         .foregroundStyle(Color.octGray100)
                                     Text(model.copy.text(.buyUnlimitedDesc))
@@ -1118,7 +1128,7 @@ struct SettingsViewNew: View {
                                         }
                                         Text(model.store.isPurchasing
                                              ? model.copy.text(.purchasing)
-                                             : model.copy.text(.buyUnlimited, price: model.store.product?.displayPrice))
+                                             : model.copy.text(.buyUnlimited, price: "$5"))
                                             .font(.openSans(12, weight: .semibold))
                                     }
                                     .foregroundStyle(.white)
