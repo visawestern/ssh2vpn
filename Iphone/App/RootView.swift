@@ -27,6 +27,14 @@ extension View {
     }
 }
 
+fileprivate func formatTime(_ t: TimeInterval) -> String {
+    let h = Int(t) / 3600
+    let m = (Int(t) % 3600) / 60
+    let s = Int(t) % 60
+    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+    return String(format: "%02d:%02d", m, s)
+}
+
 extension Font {
     static func openSans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         Font.custom("OpenSans-\(weightName(weight))", size: size)
@@ -216,11 +224,6 @@ struct ConnectView: View {
 
                 Spacer(minLength: 8)
 
-                // Free-time quota + rewarded-ad refill (stub ad for now)
-                quotaBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, vSize == .compact ? 6 : 10)
-
                 // Selected Location Card
                 selectedLocationCard
                     .padding(.horizontal, 16)
@@ -271,6 +274,10 @@ struct ConnectView: View {
                     }
             }
         }
+        .fullScreenCover(isPresented: $model.isPaywallPresented) {
+            PaywallView()
+                .environmentObject(model)
+        }
     }
 
     // MARK: - Top Status Card
@@ -293,20 +300,13 @@ struct ConnectView: View {
             Spacer()
         }
         .overlay(alignment: .trailing) {
-            HStack(spacing: 10) {
-                // Buy (unlimited) — hidden once the plan is owned.
-                if !model.isUnlimited {
-                    headerIconButton(icon: "sparkles", tint: Color(red: 0.85, green: 0.55, blue: 0.15)) {
-                        Task { await model.buyUnlimited() }
-                    }
-                    .accessibilityLabel(model.copy.text(.buyUnlimited))
-                }
-                // Documentation book (standalone HTML guide).
-                headerIconButton(icon: "book.closed.fill", tint: Color(red: 0.25, green: 0.45, blue: 0.85)) {
-                    showDocsSheet = true
-                }
-                .accessibilityLabel(model.copy.text(.documentation))
+            // Documentation book (standalone HTML guide). The buy button lives
+            // in the quota bar next to the ad button (one place for all
+            // monetization, icon-only there).
+            headerIconButton(icon: "book.closed.fill", tint: Color(red: 0.25, green: 0.45, blue: 0.85)) {
+                showDocsSheet = true
             }
+            .accessibilityLabel(model.copy.text(.documentation))
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 20)
@@ -503,14 +503,6 @@ struct ConnectView: View {
         }
     }
 
-    private func formatTime(_ t: TimeInterval) -> String {
-        let h = Int(t) / 3600
-        let m = (Int(t) % 3600) / 60
-        let s = Int(t) % 60
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-        return String(format: "%02d:%02d", m, s)
-    }
-
     // MARK: - Live stats strip (connected only)
 
     private var statsStrip: some View {
@@ -550,68 +542,7 @@ struct ConnectView: View {
         String(format: "%.1f", Double(bytes) / 1_048_576)
     }
 
-    // MARK: - Free-time quota / rewarded-ad bar
-
-    private var quotaBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: model.isUnlimited ? "infinity" : "hourglass")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(model.isUnlimited ? Color.sec50 : (model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25)))
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.isUnlimited
-                     ? model.copy.text(.unlimitedBadge)
-                     : model.copy.text(.freeTimeLeft))
-                    .font(.openSans(10, weight: .semibold))
-                    .foregroundStyle(Color.octGray40)
-                Text(model.isUnlimited ? "∞" : formatTime(model.remainingQuotaSeconds))
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.octGray100)
-            }
-
-            Spacer()
-
-            // Rewarded ad refill — only when the user hasn't bought unlimited.
-            if !model.isUnlimited {
-                Button { model.watchAd() } label: {
-                    HStack(spacing: 5) {
-                        if model.adPlaying {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "play.rectangle.fill")
-                                .font(.system(size: 12))
-                        }
-                        Text(model.adPlaying ? "…" : adButtonText)
-                            .font(.openSans(12, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        (model.canWatchAd ? Color.sec50 : Color.octGray40),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(!model.canWatchAd)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
     }
-
-    /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
-    /// when the 12h bank is full.
-    private var adButtonText: String {
-        if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
-        let s = Int(model.adCooldownRemaining)
-        if s > 0 { return "\(Int((s + 59) / 60))m" }
-        return "MAX"
-    }
-}
 
 // MARK: - Power Button Style (Apple Design - instant feedback)
 
@@ -1077,16 +1008,26 @@ struct SettingsViewNew: View {
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
-                    // Unlimited (StoreKit) card — shown only while NOT unlimited.
-                    if !model.isUnlimited {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(model.copy.text(.buyUnlimited))
+                    // Unlimited (StoreKit) card — always visible. Shows the
+                    // purchase UI while not owned, and the owned state
+                    // (badge + .purchaseOwned) once the user bought it.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.isUnlimited
+                             ? model.copy.text(.unlimitedBadge)
+                             : model.copy.text(.buyUnlimited))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.octGray100)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        if model.isUnlimited {
+                            Text(model.copy.text(.purchaseOwned))
                                 .font(.openSans(13, weight: .semibold))
                                 .foregroundStyle(Color.sec50)
                                 .padding(.horizontal, 16)
-                                .padding(.top, 12)
                                 .padding(.bottom, 8)
-
+                        } else {
                             HStack(spacing: 14) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(model.copy.text(.buyUnlimitedPrice))
@@ -1098,7 +1039,7 @@ struct SettingsViewNew: View {
                                         .lineLimit(2)
                                 }
                                 Spacer()
-                                Button(action: { Task { await model.buyUnlimited() } }) {
+                                Button(action: { model.showPaywall() }) {
                                     HStack(spacing: 6) {
                                         if model.store.isPurchasing {
                                             ProgressView().scaleEffect(0.7)
@@ -1122,6 +1063,33 @@ struct SettingsViewNew: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 12)
 
+                            // Free-time earned via rewarded ad — lives here
+                            // now that the main screen has no quota bar.
+                            Button { model.watchAd() } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: model.adPlaying ? "hourglass" : "play.rectangle.fill")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(model.adPlaying ? "…" : settingsAdButtonText)
+                                        .font(.openSans(12, weight: .semibold))
+                                    Spacer()
+                                    if !model.adPlaying {
+                                        Text(formatTime(model.remainingQuotaSeconds))
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(Color.octGray60)
+                                    }
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background((model.canWatchAd ? Color.sec50 : Color.octGray40),
+                                            in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!model.canWatchAd)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+
+                            // Restore for past buyers.
                             Button {
                                 Task { await model.restorePurchase() }
                             } label: {
@@ -1138,8 +1106,8 @@ struct SettingsViewNew: View {
                             .buttonStyle(.plain)
                             .padding(.bottom, 6)
                         }
-                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
                     }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Diagnostics card
                     VStack(alignment: .leading, spacing: 0) {
@@ -1223,6 +1191,15 @@ struct SettingsViewNew: View {
         .padding(14)
         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
         .contentShape(.rect)
+    }
+
+    /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
+    /// when the 12h bank is full.
+    private var settingsAdButtonText: String {
+        if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
+        let s = Int(model.adCooldownRemaining)
+        if s > 0 { return "\(Int((s + 59) / 60))m" }
+        return "MAX"
     }
 }
 

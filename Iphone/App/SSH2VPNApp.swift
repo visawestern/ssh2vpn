@@ -1,6 +1,6 @@
 import SwiftUI
 import Network
-import NetworkExtension
+@preconcurrency import NetworkExtension
 import VPNCore
 import os
 
@@ -53,6 +53,48 @@ final class AppModel: ObservableObject {
 
     /// StoreKit purchase + entitlement restore for Unlimited.
     let store = StoreManager()
+
+    // MARK: - Paywall (double-offer flow)
+    // Stage 1: full-price unlimited ($4.99 one-time). If dismissed, stage 2
+    // shows a one-time $3 discount offer. If THAT is dismissed, the discount
+    // is never offered again on this device — only the full price. Not shown
+    // to users who already own Unlimited.
+    enum PaywallStage: Equatable {
+        case full
+        case discount
+    }
+    private static let paywallDiscountDeclinedKey = "ssh2vpn.paywallDiscountDeclined.v1"
+    static var paywallDiscountDeclined: Bool {
+        get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
+    }
+    @Published var paywallStage = PaywallStage.full
+    @Published var isPaywallPresented = false
+
+    func showPaywall() {
+        guard !isUnlimited else { return }
+        paywallStage = .full
+        isPaywallPresented = true
+    }
+
+    func paywallPaid() {
+        reloadQuota()
+        isPaywallPresented = false
+    }
+
+    /// Dismisses the paywall (user closed it). Full price -> escalate to the
+    /// $3 discount offer unless it was already declined once; discount -> mark
+    /// declined forever, never offer it again.
+    func dismissPaywall() {
+        if paywallStage == .full, !Self.paywallDiscountDeclined {
+            paywallStage = .discount
+            return
+        }
+        if paywallStage == .discount {
+            Self.paywallDiscountDeclined = true
+        }
+        isPaywallPresented = false
+    }
 
     // Local copy of the server list (plain UserDefaults in the app container).
     // This is the UI source of truth: add/select/delete apply instantly even
@@ -494,10 +536,10 @@ final class AppModel: ObservableObject {
     // MARK: - Kill-switch auto-reconnect (unexpected drops only)
 
     /// Re-dials after the tunnel died on its own while the user wanted it.
-    /// Exponential backoff 1s..60s; resets on success or a manual connect.
+    /// Exponential backoff 1s..1h; resets on success or a manual connect.
     private func scheduleKillSwitchReconnect() {
         killSwitchAttempts += 1
-        let delay = min(60.0, pow(2.0, Double(min(killSwitchAttempts, 6))))
+        let delay = min(3600.0, pow(2.0, Double(min(killSwitchAttempts, 12))))
         ConsoleLogStore.shared.log(level: .warning, tag: "KILLSWITCH",
             message: "tunnel dropped while kill switch is ON — auto-reconnecting in \(Int(delay))s (attempt \(killSwitchAttempts))")
         Task { @MainActor [weak self] in
@@ -540,7 +582,7 @@ final class AppModel: ObservableObject {
             // deleting the VPN in Settings, which is the manual fix for this
             // exact symptom. The next connect rebuilds the profile from scratch.
             self.vpn.removeAllProfiles { [weak self] in
-                guard let self else { return }
+                guard self != nil else { return }
                 Task { @MainActor in
                     ConsoleLogStore.shared.log(level: .success, tag: "HEAL",
                         message: "VPN profile removed — routes/DNS unwound; next connect recreates it clean")
@@ -878,7 +920,7 @@ final class AppModel: ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
             if let selected = self.selectedServer {
-                if let resolved = try? await SSHEndpointResolver.resolve(selected.host),
+                if let resolved = try? SSHEndpointResolver.resolve(selected.host),
                    let ipv4 = resolved.ipv4.first {
                     self.cachedServerIPv4 = ipv4
                 } else {
@@ -1271,12 +1313,20 @@ final class AppModel: ObservableObject {
 
     /// Triggered from the Settings Unlimited card. Buys `com.sshtunnel.unlimited`
     /// and, on success, sets the shared ledger to unlimited (kernel honors it).
-    func buyUnlimited() async {
-        guard let error = await store.purchaseUnlimited() else {
+    /// Returns the StoreKit outcome so callers can react to cancellation (e.g.
+    /// show the discounted follow-up offer).
+    func buyUnlimited() async -> StoreManager.PurchaseOutcome {
+        let outcome = await store.purchaseUnlimited()
+        switch outcome {
+        case .success:
             reloadQuota()
-            return
+            ConsoleLogStore.shared.log(level: .success, tag: "IAP", message: "unlimited purchased and applied")
+        case .failure(let msg):
+            ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(msg)")
+        case .userCancelled, .pending:
+            break
         }
-        ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(error)")
+        return outcome
     }
 
     /// Restore button: re-checks App Store entitlements and, if owned,
@@ -1505,7 +1555,6 @@ private final class VPNController {
             // the tunnel up whenever any network is reachable. Applied on the
             // same save as the rest of the profile so it can never desync.
             Self.applyOnDemandRules(to: manager, enabled: onDemandEnabled)
-            let pendingOnDemand = onDemandEnabled
 
             manager.saveToPreferences { [weak self] saveError in
                 guard let self else { return }
@@ -1575,13 +1624,14 @@ private final class VPNController {
             guard let completion = self.pendingCreationCompletion else { return }
             self.pendingCreationCompletion = nil
             guard let manager = self.manager else { completion(saveError); return }
+            let budgetForRetry = budget
             manager.saveToPreferences { [weak self] retryError in
                 guard let self, self.startEpoch == epoch else { return }
                 if retryError == nil {
                     ConsoleLogStore.shared.log(level: .success, tag: "VPN", message: "VPN profile created after waiting")
                     self.reloadAndStart(manager: manager, completion: completion)
                 } else {
-                    self.waitForProfileCreation(epoch: epoch, saveError: retryError, budget: budget)
+                    self.waitForProfileCreation(epoch: epoch, saveError: retryError, budget: budgetForRetry)
                 }
             }
         }
@@ -1651,7 +1701,7 @@ private final class VPNController {
     private func resolveManager(completion: @escaping (Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
             guard let self = self else { return }
-            if let error {
+            if error != nil {
                 // A transient load error shouldn't block a first-time create.
                 self.manager = NETunnelProviderManager()
                 self.knownConnection = self.manager?.connection
@@ -1797,7 +1847,7 @@ enum VPNExtensionAPI {
     @MainActor
     static func pushDNSRules(_ rules: [DNSBlocklistEntry], to manager: NETunnelProviderManager?) {
         let list = DNSBlocklistEntry.encodeList(rules)
-        let args: [String: Any] = ["rules": list]
+        let args: [String: Any] = ["rules": list as Any]
         Task {
             _ = await call(from: manager, cmd: .dnsRulesSet, args: args)
         }

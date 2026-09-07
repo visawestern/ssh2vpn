@@ -332,21 +332,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.ipv6Settings = nil
             // Settings echo: proves WHAT we installed (vs what iOS honored —
             // compare with the NWPath gateways line in the self-test).
-            elog(.info, "TUNNEL", "netsettings v4=\(choice.deviceAddress)/24 default excluded=0 v6=none(v4-only-experiment) dns=\(dnsUpstream)")
-            if !configuration.dnsServers.isEmpty {
-                let dns = NEDNSSettings(servers: configuration.dnsServers)
-                dns.matchDomains = [""]
-                settings.dnsSettings = dns
-            } else {
-                // Always pin DNS to the relay's upstream: without dnsSettings
-                // the phone keeps querying the physical LAN resolver, whose
-                // address is unreachable from the VPS (LAN blackhole) — DNS
-                // dies and URLSession reports "offline". matchDomains [""] sends
-                // every lookup through utun into the DNS-over-TCP relay.
-                let dns = NEDNSSettings(servers: [dnsUpstream])
-                dns.matchDomains = [""]
-                settings.dnsSettings = dns
-            }
+            elog(.info, "TUNNEL", "netsettings v4=\(choice.deviceAddress)/24 default excluded=0 v6=none(v4-only-experiment) dns=\(choice.deviceAddress)(tunnel-local)")
+            // Advertise the tunnel's OWN address as the DNS server, never a
+            // public resolver. Evidence (ssh2vpn log): when 8.8.8.8 was
+            // advertised, iOS quietly escalated lookups to ENCRYPTED DNS —
+            // flows to 8.8.8.8:853 (DoT) and 8.8.8.8:443 (DoH) were relayed as
+            // plain tcp flows, bypassing the local UDP:53 DNSFILTER entirely
+            // (blocked names like dzen.ru simply never appeared). Pointing DNS
+            // at the utun device address forces every query to arrive as
+            // cleartext UDP:53 -> utun, where handleDNSPacket() applies local
+            // rules and forwards the rest upstream over the SSH channel.
+            let dns = NEDNSSettings(servers: [choice.deviceAddress])
+            dns.matchDomains = [""]
+            settings.dnsSettings = dns
 
             // Route-debug: dump the ACTUAL installed objects (not our intent).
             // If includedRoutes ever shows NONE here, the default route was
@@ -826,7 +824,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
     private func scheduleReconnect() {
         reconnectController.isStopped = stopped
         guard case .scheduleReconnect = reconnectController.scheduleReconnect() else { return }
-        let delay = ReconnectPolicy(baseDelay: 1, maxDelay: 30, jitter: 0.2)
+        let delay = ReconnectPolicy(baseDelay: 1, maxDelay: 3600, jitter: 0.2)
             .delay(for: reconnectController.reconnectAttempt, randomUnit: Double.random(in: 0...1))
         let work = DispatchWorkItem { [weak self] in
             self?.stateQueue.async {
@@ -1406,11 +1404,15 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         guard let toSend = demux.query(udp.payload, from: flow) else { return }
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
-        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(dnsUpstream):53")
+        let upstreamHost = "\(dnsUpstream)"
+        let upstreamPort = 53
+        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(upstreamHost):\(upstreamPort)")
         var channelRef: RelayChannel?
         let queryPayload = udp.payload
-        channelRef = pool.open(
+        channelRef = pool.openTo(
             flow: flow,
+            targetHost: upstreamHost,
+            targetPort: upstreamPort,
             onData: { [weak self] bytes in
                 guard let self else { return }
                 // demux is per-query local: safe to drive inline here; only

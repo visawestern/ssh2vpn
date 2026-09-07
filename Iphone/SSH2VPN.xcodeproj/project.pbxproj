@@ -27,6 +27,7 @@
 		A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000041 /* HackerConsoleSidebarView.swift */; };
 		A10000010000000000000042 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000042 /* StoreManager.swift */; };
 		A10000010000000000000043 /* DocsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000043 /* DocsView.swift */; };
+		A10000010000000000000045 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000045 /* PaywallView.swift */; };
 		A10000010000000000000044 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000044 /* index.html */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
 		C30000010000000000000002 /* gateway.py in Resources */ = {isa = PBXBuildFile; fileRef = C40000010000000000000001 /* gateway.py */; };
@@ -89,6 +90,7 @@
 		A20000010000000000000041 /* HackerConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HackerConsoleSidebarView.swift; sourceTree = "<group>"; };
 		A20000010000000000000042 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		A20000010000000000000043 /* DocsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000045 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		A20000010000000000000044 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/index.html"; sourceTree = "<group>"; };
 		A20000010000000000000050 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
 		C40000010000000000000001 /* gateway.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ../Gateway/gateway.py; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 				A20000010000000000000041 /* HackerConsoleSidebarView.swift */,
 				A20000010000000000000042 /* StoreManager.swift */,
 				A20000010000000000000043 /* DocsView.swift */,
+				A20000010000000000000045 /* PaywallView.swift */,
 				A20000010000000000000044 /* index.html */,
 				A20000010000000000000050 /* StoreKitConfig.storekit */,
 				A20000010000000000000005 /* Info.plist */,
@@ -335,6 +338,7 @@
 				A10000010000000000000041 /* HackerConsoleSidebarView.swift in Sources */,
 				A10000010000000000000042 /* StoreManager.swift in Sources */,
 				A10000010000000000000043 /* DocsView.swift in Sources */,
+				A10000010000000000000045 /* PaywallView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

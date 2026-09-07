@@ -15,9 +15,35 @@ final class StoreManager: ObservableObject {
 
     private var lastError: String?
 
+    enum PurchaseOutcome: Equatable {
+        case success
+        case userCancelled
+        case pending
+        case failure(String)
+    }
+
     init() {
         // Refresh entitlement state on launch (restores across reinstall).
         Task { await loadProduct() }
+        // Required transaction-updates listener: StoreKit delivers some
+        // transactions asynchronously (apple-id approval pages, purchases
+        // started elsewhere), and without iterating Transaction.updates the
+        // app risks missing a success outright.
+        listenForTransactions()
+    }
+
+    /// Long-lived observer for asynchronous StoreKit transactions. Applies the
+    /// unlimited entitlement whenever a verified purchase of our product shows
+    /// up outside the direct `purchase(url:...)` path.
+    private func listenForTransactions() {
+        Task { [weak self] in
+            for await result in Transaction.updates {
+                guard case .verified(let transaction) = result,
+                      transaction.productID == Self.unlimitedProductID else { continue }
+                await transaction.finish()
+                self?.applyUnlimited()
+            }
+        }
     }
 
     func loadProduct() async {
@@ -45,11 +71,16 @@ final class StoreManager: ObservableObject {
         return owned
     }
 
-    /// Buys the one-time Unlimited product. Returns an error message (nil on
-    /// success). Marks the shared ledger unlimited on success.
-    func purchaseUnlimited() async -> String? {
-        guard let product else { return nil }
-        guard !isPurchasing else { return nil }
+    /// Buys the one-time Unlimited product. Returns a typed outcome so the UI
+    /// can tell a real success from a user cancellation / pending approval /
+    /// unavailable product — the old `String?` conflated "no product loaded"
+    /// with success and silently ate failures.
+    func purchaseUnlimited() async -> PurchaseOutcome {
+        guard let product else {
+            let msg = lastError ?? "product not loaded"
+            return .failure(msg)
+        }
+        guard !isPurchasing else { return .pending }
         isPurchasing = true
         defer { isPurchasing = false }
 
@@ -58,7 +89,7 @@ final class StoreManager: ObservableObject {
             result = try await product.purchase()
         } catch {
             lastError = error.localizedDescription
-            return error.localizedDescription
+            return .failure(error.localizedDescription)
         }
         switch result {
         case .success(let verification):
@@ -66,16 +97,16 @@ final class StoreManager: ObservableObject {
             case .verified(let transaction):
                 await transaction.finish()
                 applyUnlimited()
-                return nil
+                return .success
             case .unverified(_, let error):
-                return error.localizedDescription
+                return .failure(error.localizedDescription)
             }
         case .userCancelled:
-            return nil
+            return .userCancelled
         case .pending:
-            return nil
+            return .pending
         @unknown default:
-            return nil
+            return .pending
         }
     }
 

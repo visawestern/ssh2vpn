@@ -82,9 +82,20 @@ public final class SSHConnectionPool: @unchecked Sendable {
     private var pendingGrows = 0
     private var nextIndex: Int
     private var closed = false
+    /// Consecutive failed heal dials. Drives the exponential backoff so a dead
+    /// gateway doesn't get hammered: 1s, 2s, 4s ... capped at 1h (3600s).
+    /// Guarded by `lock`.
+    private var healAttempts = 0
     private let policy: SSHPoolPolicy
     private let connector: Connector
     private let log: (ConsoleLogLevel, String, String) -> Void
+
+    /// Exponential backoff delay (seconds) for heal retry `attempt` (1-based).
+    /// Grows 1s, 2s, 4s ... clamped to a hard 3600s (1 hour) ceiling so a dead
+    /// server is never DDOSed with connect spam.
+    static func healDelay(forAttempt attempt: Int) -> TimeInterval {
+        min(3600, pow(2, Double(max(1, attempt) - 1)))
+    }
 
     public init(initial: Link,
                 policy: SSHPoolPolicy = SSHPoolPolicy(),
@@ -126,6 +137,8 @@ public final class SSHConnectionPool: @unchecked Sendable {
     }
 
     /// Re-establishes one connection outside the lock (connector is async).
+    /// First dial is immediate; on failure the retry backs off exponentially
+    /// (1s → 2s → 4s → ... capped at 1h) instead of hammering dead gateways.
     private func heal() {
         lock.lock()
         if closed {
@@ -137,6 +150,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
             lock.unlock()
             return
         }
+        let attempt = healAttempts + 1
         pendingGrows += 1
         lock.unlock()
         connector { [weak self] result in
@@ -154,6 +168,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
                 self.lock.lock()
                 if !self.closed {
                     self.entries.append(Entry(link: link, inFlight: 0))
+                    self.healAttempts = 0
                     let n = self.entries.count
                     self.lock.unlock()
                     self.watch(link: link)
@@ -163,13 +178,21 @@ public final class SSHConnectionPool: @unchecked Sendable {
                     link.channel.close(promise: nil)
                 }
             case .failure(let error):
-                self.log(.error, "POOL", "replacement ssh connection failed: \(error.localizedDescription) — retrying in 3s")
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
+                self.lock.lock()
+                self.healAttempts = attempt
+                let nextAttempt = self.healAttempts + 1
+                let shouldRetry = self.entries.isEmpty && !self.closed
+                let delay = Self.healDelay(forAttempt: nextAttempt)
+                let retryLabel = delay >= 3600 ? "1h" : "\(Int(delay))s"
+                self.lock.unlock()
+                self.log(.error, "POOL", "replacement ssh connection failed: \(error.localizedDescription) — retrying in \(retryLabel) (attempt \(nextAttempt))")
+                guard shouldRetry else { return }
+                DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
                     guard let self else { return }
                     self.lock.lock()
-                    let shouldRetry = self.entries.isEmpty && !self.closed
+                    let stillRetry = self.entries.isEmpty && !self.closed
                     self.lock.unlock()
-                    if shouldRetry { self.heal() }
+                    if stillRetry { self.heal() }
                 }
             }
         }
@@ -211,6 +234,25 @@ public final class SSHConnectionPool: @unchecked Sendable {
     public func open(flow: RelayFlow,
                      onData: @escaping (Data) -> Void,
                      onClosed: @escaping () -> Void) -> RelayChannel {
+        let targetHost = flow.dstAddr.map(String.init).joined(separator: ".")
+        let targetPort = Int(flow.dstPort)
+        return openTo(flow: flow, targetHost: targetHost, targetPort: targetPort,
+                      onData: onData, onClosed: onClosed)
+    }
+
+    /// Opens a direct-tcpip channel for `flow` toward an explicit remote
+    /// target instead of the flow destination. The DNS path needs this:
+    /// queries arrive at the tunnel's OWN IP (dstAddr == utun address, e.g.
+    /// 10.203.113.2:53), and without the override the server would try to
+    /// open a channel to the phone's private tunnel address — every lookup
+    /// fails with "direct-tcpip open FAILED <tunnel-ip>:53". TCP flows use
+    /// `open(flow:onData:onClosed:)` and the flow destination is used as-is.
+    @discardableResult
+    public func openTo(flow: RelayFlow,
+                       targetHost: String,
+                       targetPort: Int,
+                       onData: @escaping (Data) -> Void,
+                       onClosed: @escaping () -> Void) -> RelayChannel {
         lock.lock()
         if closed || entries.isEmpty {
             // Empty while healing: the flow gets a dead channel now and the
@@ -244,12 +286,11 @@ public final class SSHConnectionPool: @unchecked Sendable {
         log(.info, "POOL", "flow \(s):\(flow.srcPort) -> \(d):\(flow.dstPort) via ssh#\(index + 1) (\(total) ch on it)")
 
         let opener = NIOSSHChannelOpener(handler: entry.link.handler, eventLoop: entry.link.channel.eventLoop)
-        let targetHost = flow.dstAddr.map(String.init).joined(separator: ".")
         let originator = (try? SocketAddress(
             ipAddress: flow.srcAddr.map(String.init).joined(separator: "."),
             port: Int(flow.srcPort)))
             ?? (try! SocketAddress(ipAddress: "0.0.0.0", port: 0))
-        return opener.open(targetHost: targetHost, targetPort: Int(flow.dstPort),
+        return opener.open(targetHost: targetHost, targetPort: targetPort,
                            originatorAddress: originator,
                            onData: onData,
                            onClosed: { [weak self] in

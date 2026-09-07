@@ -21,8 +21,19 @@ public final class SSHRelayChannelFactory: RelayChannelFactory {
     }
 
     public func open(flow: RelayFlow, onData: @escaping (Data) -> Void, onClosed: @escaping () -> Void) -> RelayChannel {
-        let targetHost = flow.dstAddr.map(String.init).joined(separator: ".")
-        let targetPort = Int(flow.dstPort)
+        open(flow: flow, targetHost: nil, targetPort: nil, onData: onData, onClosed: onClosed)
+    }
+
+    /// Opens a direct-tcpip channel for `flow` toward an explicit remote
+    /// target. Used by the DNS path, whose queries arrive at the tunnel's OWN
+    /// DNS IP (dstAddr == the utun address, e.g. 10.203.113.2:53) — the real
+    /// upstream resolver must be substituted for the flow destination, or the
+    /// SSH server tries to reach the phone's private tunnel address and every
+    /// lookup dies with "direct-tcpip open FAILED <tunnel-ip>:53".
+    public func open(flow: RelayFlow, targetHost: String?, targetPort: Int?,
+                     onData: @escaping (Data) -> Void, onClosed: @escaping () -> Void) -> RelayChannel {
+        let targetHost = targetHost ?? flow.dstAddr.map(String.init).joined(separator: ".")
+        let targetPort = targetPort ?? Int(flow.dstPort)
         let originator: SocketAddress = {
             if let addr = try? SocketAddress(ipAddress: flow.srcAddr.map(String.init).joined(separator: "."),
                                              port: Int(flow.srcPort)) {
