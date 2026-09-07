@@ -20,8 +20,15 @@ struct SSH2VPNApp: App {
 final class AppModel: ObservableObject {
     @Published var selectedLanguage: AppLanguage? = LanguageStore.current
     @Published var connection = ConnectionPresentation.disconnected {
-        didSet { updateIdleTimer() }
+        didSet {
+            updateIdleTimer()
+            updateConsoleGrace(previous: oldValue)
+        }
     }
+    /// Wall-clock moment the last session ended (disconnect / failure). The
+    /// floating console button stays reachable for a short grace window after
+    /// that, so the user can still read logs once the tunnel drops.
+    @Published var lastDisconnectAt: Date?
     @Published var serverName = "My VPS"
 
     // MARK: - Live tunnel stats (polled from the extension every 2s)
@@ -34,10 +41,18 @@ final class AppModel: ObservableObject {
     @Published var tunnelDownBytes = 0
     private var statsPollTask: Task<Void, Never>?
 
-    // MARK: - Free-time quota (3h free, then +3h per rewarded-ad view)
-    @Published var quota: AdQuota = AdQuotaStore().load()
+    // MARK: - Usage budget (3h free wall-clock, then rewarded-ad refills, or
+    // unlimited one-time purchase). The ENFORCEMENT lives in the extension
+    // (QuotaLedgerStore, shared keychain); the app only displays it and
+    // writes credit (ad view / purchase). Starting the tunnel from iOS
+    // Settings still obeys the kernel gate because the extension checks the
+    // same ledger on start.
+    @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
     /// True while the ad stub is "playing" (disables the button).
     @Published var adPlaying = false
+
+    /// StoreKit purchase + entitlement restore for Unlimited.
+    let store = StoreManager()
 
     // Local copy of the server list (plain UserDefaults in the app container).
     // This is the UI source of truth: add/select/delete apply instantly even
@@ -351,6 +366,13 @@ final class AppModel: ObservableObject {
         // Warm the NE manager in the background so status re-syncs (server
         // switching, connect gating) always have the real system state.
         vpn.ensureManagerLoaded { }
+        // Sync usage budget + honors a StoreKit purchase (e.g. the user
+        // reinstalled the app; the entitlement survives in App Store).
+        reloadQuota()
+        Task { @MainActor [weak self] in
+            let owned = await self?.store.refreshEntitlement() ?? false
+            if owned { self?.reloadQuota() }
+        }
     }
 
     /// Confirms the extension-owned copy after a successful connect (the tunnel
@@ -807,8 +829,10 @@ final class AppModel: ObservableObject {
             ConsoleLogStore.shared.log(level: .error, tag: "CONNECT", message: "No server selected")
             return
         }
-        // Free-tier gate: no quota, no tunnel. The user earns more by
-        // watching a rewarded ad (stub) from the main screen.
+        // Free-tier gate: no quota, no tunnel. Re-read the shared ledger so
+        // an expiry caught by the kernel (or a purchase made elsewhere) is
+        // reflected here without a failed-connect flash.
+        reloadQuota()
         guard remainingQuotaSeconds > 0 else {
             ConsoleLogStore.shared.log(level: .error, tag: "QUOTA", message: "Connect blocked: free time exhausted — watch an ad to earn +3h")
             connection = .failed("freeTimeExhausted")
@@ -1059,17 +1083,81 @@ final class AppModel: ObservableObject {
     func tickConnectionTimer() {
         objectWillChange.send()
         automation.tick()
-        // Free-time drain: one quota second per connected second. When the
-        // well runs dry the session ends itself — the UI already shows the
-        // countdown and the ad button.
-        guard connection == .connected else { return }
-        quota.consume(1)
-        AdQuotaStore().save(quota)
-        if remainingQuotaSeconds <= 0 {
-            ConsoleLogStore.shared.log(level: .warning, tag: "QUOTA",
-                                       message: "Free time exhausted — disconnecting until an ad is watched")
-            disconnect()
-            connection = .failed("freeTimeExhausted")
+        // No app-side drain: the wall-clock budget is enforced and metered in
+        // the KERNEL (extension). The app's copy of the ledger is display-only;
+        // it refreshes from the shared keychain so the ring stays honest.
+        reloadQuotaIfNeeded()
+    }
+
+    // MARK: - 1s display timer (owned here so it can self-invalidate)
+
+    private var displayTimer: Timer?
+
+    /// Keeps the 1s tick running while a session is live OR the console-grace
+    /// window is open; stops itself (fires once more, then dies) once neither
+    /// applies, so the floating console button hides at exactly T+2:00.
+    func startDisplayTimerIfNeeded() {
+        guard connection == .connected || consoleGraceActive else {
+            stopDisplayTimer()
+            return
+        }
+        guard displayTimer == nil else { return }
+        displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.tickConnectionTimer()
+            if self.connection != .connected && !self.consoleGraceActive {
+                self.stopDisplayTimer()
+            }
+        }
+    }
+
+    func stopDisplayTimer() {
+        displayTimer?.invalidate()
+        displayTimer = nil
+    }
+
+    /// Refreshes the display ledger from the shared keychain. Called on the
+    /// tick; cheap (one keychain read/second is negligible).
+    private func reloadQuotaIfNeeded() {
+        let fresh = QuotaLedgerStore().load().withInitialGrant(now: Date())
+        if fresh != quota { quota = fresh }
+    }
+
+    // MARK: - Console grace window
+
+    /// True for 2 minutes after the last session ended, so the floating
+    /// console button stays usable (and readable) right after a disconnect.
+    private func updateConsoleGrace(previous: ConnectionPresentation) {
+        let wasActive: Bool
+        switch previous {
+        case .connecting, .connected: wasActive = true
+        case .disconnected, .failed: wasActive = false
+        }
+        switch connection {
+        case .connecting, .connected:
+            lastDisconnectAt = nil
+        case .disconnected, .failed:
+            if wasActive { lastDisconnectAt = Date() }
+        }
+    }
+
+    /// 2-minute window after a disconnect during which the console stays open
+    /// to the floating button.
+    var consoleGraceActive: Bool {
+        guard let t = lastDisconnectAt else { return false }
+        return Date().timeIntervalSince(t) < 120
+    }
+
+    /// Single source of truth for the floating console button + sidebar:
+    /// only with logging enabled, and only while connecting/connected or
+    /// within the post-disconnect grace window.
+    var showConsoleButton: Bool {
+        guard settings.enableLogging else { return false }
+        switch connection {
+        case .connecting, .connected:
+            return true
+        case .disconnected, .failed:
+            return consoleGraceActive
         }
     }
 
@@ -1128,22 +1216,36 @@ final class AppModel: ObservableObject {
         VPNExtensionAPI.pushDNSRules(settings.dnsRules, to: vpn.diagnosticManager())
     }
 
-    // MARK: - Live tunnel stats + ad quota
+    // MARK: - Live tunnel stats + usage budget
 
-    /// Remaining quota accounting for the LIVE session too (the struct only
-    /// gets drained via ticks — subtracting activeSeconds keeps the countdown
-    /// real between ticks).
-    var remainingQuotaSeconds: TimeInterval {
-        max(0, quota.remainingSeconds - TimeInterval(automation.activeSeconds))
+    /// Wall-clock seconds of budget remaining right now (0 when unlimited).
+    var remainingQuotaSeconds: TimeInterval { quota.remaining(now: Date()) }
+
+    var isUnlimited: Bool { quota.isUnlimited }
+
+    /// Normalized [0...1] fraction remaining (for the ring/progress).
+    var quotaFraction: Double {
+        guard !quota.isUnlimited, let _ = quota.expires else { return 1 }
+        let frac = quota.remaining(now: Date()) / QuotaLedger.maxBudgetSeconds
+        return min(1, max(0, frac))
     }
 
-    /// Seconds until the ad button unlocks (0 = ready to watch now).
-    var adCooldownRemaining: TimeInterval { quota.adCooldownRemaining(now: Date()) }
+    /// Seconds until the rewarded-ad button unlocks (0 = ready to press now).
+    /// The bank refills once per hour and is capped at 12h.
+    var adCooldownRemaining: TimeInterval {
+        guard let last = quota.lastAdView else { return 0 }
+        return max(0, QuotaLedger.adCooldownSeconds - Date().timeIntervalSince(last))
+    }
 
-    var canWatchAd: Bool { quota.canWatchAd(now: Date()) && !adPlaying }
+    /// True when an ad may be creditable (not unlimited, cooldown over,
+    /// bank under the 12h cap).
+    var canWatchAd: Bool {
+        !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
+    }
 
-    /// Rewarded-ad stub: simulates a 2s ad view, then banks +3h. Real SDK
-    /// slots in here later — only this function changes.
+    /// Rewarded-ad stub: simulates a 2s ad view, then banks +3h wall-clock
+    /// into the SHARED ledger so the kernel honors it. Real ad SDK slots in
+    /// here later — only this function changes.
     func watchAd() {
         guard canWatchAd else { return }
         adPlaying = true
@@ -1152,14 +1254,44 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(for: .seconds(2))
             guard let self else { return }
             self.adPlaying = false
-            if self.quota.watchAd(now: Date()) {
-                AdQuotaStore().save(self.quota)
-                let hours = Int(self.quota.bankedSeconds / 3600)
-                ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "reward credited: +3h (banked \(hours)h total)")
+            let now = Date()
+            var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
+            if let credited = ledger.creditingAdView(now: now) {
+                ledger = credited
+                QuotaLedgerStore().save(ledger)
+                self.reloadQuota()
+                ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "reward credited: +3h wall-clock (expires \(ledger.expires.map { QuotaLedger.formatter.string(from: $0) } ?? "never"))")
             } else {
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (cooldown or bank full)")
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (unlimited or bank full)")
             }
         }
+    }
+
+    /// Re-reads the shared ledger (after an ad view / purchase / app start).
+    func reloadQuota() {
+        quota = QuotaLedgerStore().load().withInitialGrant(now: Date())
+        // ensure initial grant is persisted once
+        _ = QuotaLedgerStore().save(quota)
+    }
+
+    /// Triggered from the Settings Unlimited card. Buys `com.sshtunnel.unlimited`
+    /// and, on success, sets the shared ledger to unlimited (kernel honors it).
+    func buyUnlimited() async {
+        guard let error = await store.purchaseUnlimited() else {
+            reloadQuota()
+            return
+        }
+        ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(error)")
+    }
+
+    /// Restore button: re-checks App Store entitlements and, if owned,
+    /// re-applies unlimited to the shared ledger.
+    func restorePurchase() async {
+        let owned = await store.refreshEntitlement()
+        reloadQuota()
+        ConsoleLogStore.shared.log(level: owned ? .success : .info,
+                                   tag: "IAP",
+                                   message: owned ? "unlimited restored" : "no previous purchase found")
     }
 
     /// Polls the extension status every 2s while connected: SSH pool size,

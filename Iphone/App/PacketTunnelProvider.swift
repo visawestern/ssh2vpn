@@ -117,6 +117,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func runStartSequence(completionHandler: @escaping (Error?) -> Void) {
         tunnelPhase = "begin"
+        // KERNEL-side usage gate. The budget is read from the SHARED keychain
+        // here in the extension — not trusted from the app — so launching the
+        // tunnel from iOS Settings (which never touches the app) hits the same
+        // check. Without an unlimited purchase, a lapsed wall-clock budget
+        // means the tunnel simply doesn't start.
+        let ledger = QuotaLedgerStore().load().withInitialGrant(now: Date())
+        _ = saveLedgerIfNeeded(ledger)
+        if !ledger.allowsConnection(now: Date()) {
+            let elapsed = ledger.remaining(now: Date())
+            lastRuntimeError = "quotaExhausted"
+            elog(.error, "QUOTA", "start refused by kernel: budget exhausted (unlimited=\(ledger.isUnlimited), remaining=\(Int(elapsed))s)")
+            let err = NSError(domain: NEVPNErrorDomain, code: 8, userInfo: [NSLocalizedDescriptionKey: "quotaExhausted"])
+            completeStart(err, completionHandler: completionHandler)
+            return
+        }
         do {
             var providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
             elog(.info, "TUNNEL", "providerConfiguration keys: \(providerConfiguration?.keys.sorted() ?? [])")
@@ -445,6 +460,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func applyDNSRulesFromApp(_ rules: [DNSBlocklistEntry]) {
         guard let relay = transport as? RelayTransport else { return }
         relay.applyDNSRules(rules)
+    }
+
+    /// Persists a ledger change only when the values changed (avoids a write
+    /// storm on every start). Returns true if a write happened.
+    private func saveLedgerIfNeeded(_ ledger: QuotaLedger) -> Bool {
+        let store = QuotaLedgerStore()
+        let current = store.load()
+        // compare effective fields
+        if current.isUnlimited == ledger.isUnlimited,
+           current.expires == ledger.expires {
+            return false
+        }
+        return store.save(ledger)
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
@@ -1116,8 +1144,21 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         // Periodic sweep bounds ghost flows (channels that died silently).
         let timer = DispatchSource.makeTimerSource(queue: relayQueue)
         timer.schedule(deadline: .now() + 30, repeating: 30)
+        // capture the failure callback so the watchdog can self-destruct the
+        // session (it is a local param of start(), not a stored property).
+        let quotaFailure = failure
         timer.setEventHandler { [weak self] in
             guard let self else { return }
+            // KERNEL-side expiry watchdog: while the tunnel is up, if the
+            // wall-clock budget lapses (and the user hasn't bought unlimited)
+            // we tear the session down right here — the check runs in the
+            // extension, so even a Settings-started tunnel obeys it.
+            if !QuotaLedgerStore().load().withInitialGrant(now: Date()).allowsConnection(now: Date()) {
+                elog(.warning, "QUOTA", "kernel watchdog: budget expired mid-session — stopping tunnel")
+                quotaFailure(NSError(domain: NEVPNErrorDomain, code: 8,
+                                     userInfo: [NSLocalizedDescriptionKey: "quotaExhausted"]))
+                return
+            }
             let n = self.stateMachine.expireIdle()
             if n > 0 {
                 elog(.info, "RELAY", "sweep expired \(n) idle flow(s)")

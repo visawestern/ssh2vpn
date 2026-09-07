@@ -74,12 +74,12 @@ struct RootView: View {
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
 
-            // Vuexy-style Floating terminal button — shown only when the
-            // user has a connection (connecting or connected) AND local
-            // logging is enabled. If logging is off there is nothing to read
-            // in the console, so the button stays hidden even mid-connect.
-            if (model.connection == .connecting || model.connection == .connected)
-                && model.settings.enableLogging {
+            // Vuexy-style Floating terminal button — shown only when logging is
+            // enabled AND the session is live (connecting/connected) or still
+            // within the 2-minute post-disconnect grace window, so logs stay
+            // readable right after the tunnel drops. If logging is off there
+            // is nothing to read in the console.
+            if model.showConsoleButton {
                 VStack {
                     Spacer()
                     FloatingCustomizerButton(
@@ -91,9 +91,10 @@ struct RootView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
 
-            // Right sliding Hacker Console Sidebar — only reachable while
-            // logging is enabled; close it if the toggle flips off mid-open.
-            if model.settings.enableLogging {
+            // Right sliding Hacker Console Sidebar — reachable exactly while
+            // the button is (see showConsoleButton); close it when the grace
+            // window lapses or logging is flipped off mid-open.
+            if model.showConsoleButton {
                 HackerConsoleSidebarView(isOpen: $isConsoleOpen)
             } else {
                 Color.clear.onAppear { isConsoleOpen = false }
@@ -154,7 +155,6 @@ struct OctohideTabBar: View {
 
 struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var timer: Timer?
     @State private var showAddServer = false
     @State private var showLocationsSheet = false
     /// Post-tap cooldown: the power button stays disabled for a fixed window
@@ -202,7 +202,9 @@ struct ConnectView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                 } else if case .failed(let msg) = model.connection {
-                    Text(msg == "freeTimeExhausted" ? model.copy.text(.failureFreeTimeExhausted) : "connectionError: \(msg)")
+                    Text(msg == "freeTimeExhausted" || msg == "quotaExhausted"
+                         ? model.copy.text(.failureFreeTimeExhausted)
+                         : "connectionError: \(msg)")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
                         .lineLimit(2)
@@ -227,15 +229,17 @@ struct ConnectView: View {
         }
         .background(Color.appBg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { startTimerIfNeeded() }
-        .onDisappear { timer?.invalidate(); timer = nil }
+        .onAppear { model.startDisplayTimerIfNeeded() }
+        .onDisappear { model.stopDisplayTimer() }
         .onChange(of: model.connection) { newStatus in
             switch newStatus {
             case .connected:
-                startTimerIfNeeded()
+                model.startDisplayTimerIfNeeded()
             case .disconnected, .failed:
-                timer?.invalidate()
-                timer = nil
+                // Handles both cases: starts the 1s tick during the 2-minute
+                // console-grace window (button hides at exactly T+2:00), and
+                // stops it immediately when there is nothing to tick for.
+                model.startDisplayTimerIfNeeded()
             case .connecting:
                 break
             }
@@ -442,14 +446,6 @@ struct ConnectView: View {
         }
     }
 
-    private func startTimerIfNeeded() {
-        guard model.connection == .connected else { return }
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak model] _ in
-            model?.tickConnectionTimer()
-        }
-    }
-
     private func formatTime(_ t: TimeInterval) -> String {
         let h = Int(t) / 3600
         let m = (Int(t) % 3600) / 60
@@ -501,47 +497,48 @@ struct ConnectView: View {
 
     private var quotaBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.remainingQuotaSeconds > 0 ? "hourglass" : "hourglass.badge.exclamationmark")
+            Image(systemName: model.isUnlimited ? "infinity" : "hourglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25))
+                .foregroundStyle(model.isUnlimited ? Color.sec50 : (model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25)))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(model.copy.text(.freeTimeLeft))
+                Text(model.isUnlimited
+                     ? model.copy.text(.unlimitedBadge)
+                     : model.copy.text(.freeTimeLeft))
                     .font(.openSans(10, weight: .semibold))
                     .foregroundStyle(Color.octGray40)
-                Text(formatTime(model.remainingQuotaSeconds))
+                Text(model.isUnlimited ? "∞" : formatTime(model.remainingQuotaSeconds))
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Color.octGray100)
             }
 
             Spacer()
 
-            Button { model.watchAd() } label: {
-                HStack(spacing: 5) {
-                    if model.adPlaying {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "play.rectangle.fill")
-                            .font(.system(size: 12))
+            // Rewarded ad refill — only when the user hasn't bought unlimited.
+            if !model.isUnlimited {
+                Button { model.watchAd() } label: {
+                    HStack(spacing: 5) {
+                        if model.adPlaying {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "play.rectangle.fill")
+                                .font(.system(size: 12))
+                        }
+                        Text(model.adPlaying ? "…" : adButtonText)
+                            .font(.openSans(12, weight: .semibold))
                     }
-                    Text(model.adPlaying
-                         ? "…"
-                         : (model.canWatchAd
-                            ? model.copy.text(.watchAdPlus3h)
-                            : cooldownText))
-                        .font(.openSans(12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        (model.canWatchAd ? Color.sec50 : Color.octGray40),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    (model.canWatchAd ? Color.sec50 : Color.octGray40),
-                    in: RoundedRectangle(cornerRadius: 10)
-                )
+                .buttonStyle(.plain)
+                .disabled(!model.canWatchAd)
             }
-            .buttonStyle(.plain)
-            .disabled(!model.canWatchAd)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -549,12 +546,13 @@ struct ConnectView: View {
         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
     }
 
-    /// "59m" while the 1-view-per-hour cooldown runs, "MAX" when the
-    /// 3-view bank is full.
-    private var cooldownText: String {
-        if model.quota.bankedSeconds >= 3 * 3600 { return "MAX" }
+    /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
+    /// when the 12h bank is full.
+    private var adButtonText: String {
+        if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
         let s = Int(model.adCooldownRemaining)
-        return s > 0 ? "\((s + 59) / 60)m" : "…"
+        if s > 0 { return "\(Int((s + 59) / 60))m" }
+        return "MAX"
     }
 }
 
@@ -1021,6 +1019,70 @@ struct SettingsViewNew: View {
                         .buttonStyle(.plain)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Unlimited (StoreKit) card — shown only while NOT unlimited.
+                    if !model.isUnlimited {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(model.copy.text(.buyUnlimited))
+                                .font(.openSans(13, weight: .semibold))
+                                .foregroundStyle(Color.sec50)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                                .padding(.bottom, 8)
+
+                            HStack(spacing: 14) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(model.copy.text(.buyUnlimitedPrice))
+                                        .font(.openSans(15, weight: .bold))
+                                        .foregroundStyle(Color.octGray100)
+                                    Text(model.copy.text(.buyUnlimitedDesc))
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                                Button(action: { Task { await model.buyUnlimited() } }) {
+                                    HStack(spacing: 6) {
+                                        if model.store.isPurchasing {
+                                            ProgressView().scaleEffect(0.7)
+                                        } else {
+                                            Image(systemName: "infinity")
+                                                .font(.system(size: 12))
+                                        }
+                                        Text(model.store.isPurchasing
+                                             ? model.copy.text(.purchasing)
+                                             : model.copy.text(.buyUnlimited))
+                                            .font(.openSans(12, weight: .semibold))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                    .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(model.store.isPurchasing)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+
+                            Button {
+                                Task { await model.restorePurchase() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                    Text(model.copy.text(.restorePurchase))
+                                        .font(.openSans(12))
+                                }
+                                .foregroundStyle(Color.sec50)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 6)
+                        }
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    }
 
                     // Diagnostics card
                     VStack(alignment: .leading, spacing: 0) {
@@ -1661,8 +1723,8 @@ struct DiagnosticsView: View {
     /// detail stays one tap away in the disclosure below.
     private func friendlyFailure(_ message: String) -> String {
         switch message {
-        case "freeTimeExhausted":
-            return "Free time is over. Watch an ad to get +3 hours."
+        case "freeTimeExhausted", "quotaExhausted":
+            return model.copy.text(.failureFreeTimeExhausted)
         default:
             return message
         }
