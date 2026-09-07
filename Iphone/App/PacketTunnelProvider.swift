@@ -993,6 +993,8 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var dnsCache = DNSCache()
     private var dnsCacheHits = 0
     private var dnsBlockedCount = 0
+    /// Total UDP packets that reached handleDNSPacket (port-53 gate is below).
+    private var rawUDPSeen = 0
     /// SSH/NAT keepalive: one throwaway direct-tcpip open every 15s. Idle
     /// NAT mappings on flaky Wi-Fi kill the SSH TCP stream after ~45s
     /// otherwise; a tiny SSH round trip keeps every pooled connection
@@ -1142,8 +1144,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                 let more = live.count > 8 ? " (+\(live.count - 8) more)" : ""
                 elog(.info, "RELAY", "live \(live.count) flow(s): \(shown)\(more)")
             }
-            if self.droppedUDPNonDNS > 0 || self.droppedNonTCPUDP > 0 || self.droppedParse > 0 {
-                elog(.info, "RELAY", "dropped/30s udp-nonDNS=\(self.droppedUDPNonDNS) nonTCPUDP=\(self.droppedNonTCPUDP) parse=\(self.droppedParse) lastDst=\(self.lastDroppedDst)")
+            if self.droppedUDPNonDNS > 0 || self.droppedNonTCPUDP > 0 || self.droppedParse > 0 || self.rawUDPSeen > 0 {
+                elog(.info, "RELAY", "dns/30s udpSeen=\(self.rawUDPSeen) udp-nonDNS=\(self.droppedUDPNonDNS) nonTCPUDP=\(self.droppedNonTCPUDP) parse=\(self.droppedParse) lastDst=\(self.lastDroppedDst) blocked=\(self.dnsBlockedCount)")
+                self.rawUDPSeen = 0
                 self.droppedUDPNonDNS = 0
                 self.droppedNonTCPUDP = 0
                 self.droppedParse = 0
@@ -1286,6 +1289,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// sit idle, so the whole failure class disappears. Everything else UDP
     /// is dropped (TCP fallback covers real traffic). Runs on relayQueue only.
     private func handleDNSPacket(_ packet: Data) {
+        rawUDPSeen += 1
+        // EVERY UDP packet on port 53 is counted so we can tell — in one
+        // dump — whether the app's DNS query even reaches the relay. If this
+        // count stays 0 while Safari browses, the query never arrives.
         guard let parsed = try? IPv4Parser.parse(packet),
               parsed.flow.transport == .udp else { return } // unreachable: caller checked
         guard parsed.flow.destinationPort == 53 else {
@@ -1306,10 +1313,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         // whether the rule engine even evaluated the query, and shows the
         // DNS cache's appearance (a cache hit is visibility too — the user
         // sees exactly which domains were resolved from where).
-        if !localFilter.isEmpty || dnsCacheHits > 0 {
-            if let nm = DNSWire.questionName(from: udp.payload) {
-                elog(.info, "DNSFILTER", "query \(nm) (payload \(udp.payload.count)B, hits=\(dnsCacheHits), rules=\(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count + localFilter.exactOverrides.count + localFilter.subtreeOverrides.count))")
-            }
+        if let nm = DNSWire.questionName(from: udp.payload) {
+            elog(.info, "DNSFILTER",
+                "query \(nm) ifA=\(DNSWire.questionType(from: udp.payload) == 1) (payload \(udp.payload.count)B, rules=\(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count + localFilter.exactOverrides.count + localFilter.subtreeOverrides.count))")
         }
 
         // ---- 1. Local rules (uBlock/hosts-style, checked BEFORE cache and

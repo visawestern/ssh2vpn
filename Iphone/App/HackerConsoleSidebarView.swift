@@ -84,14 +84,19 @@ public struct FloatingCustomizerButton: View {
 
 public struct HackerConsoleSidebarView: View {
     @Binding var isOpen: Bool
+    /// Whether local logging is enabled in Advanced settings. Only when it is
+    /// on do we show the SHARE/Export button — otherwise the combo is shown
+    /// but greyed, because a dump with logging off carries no extension lines.
+    @Binding var enableLogging: Bool
     @State private var entries: [ConsoleLogEntry] = ConsoleLogStore.shared.entries
     @State private var autoScroll: Bool = true
     @State private var showCopiedToast: Bool = false
     @State private var showShareSheet: Bool = false
     @State private var shareFileUrl: URL?
 
-    public init(isOpen: Binding<Bool>) {
+    public init(isOpen: Binding<Bool>, enableLogging: Binding<Bool>) {
         self._isOpen = isOpen
+        self._enableLogging = enableLogging
     }
 
     public var body: some View {
@@ -247,22 +252,25 @@ public struct HackerConsoleSidebarView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Export/Share button
-                Button {
-                    exportLogsToFile()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("SHARE")
+                // Export/Share button — shown only while local logging is on,
+                // so the user never gets a dump that silently lacks the
+                // extension's DNSFILTER lines (the exact trap that bit us).
+                if enableLogging {
+                    Button {
+                        exportLogsToFile()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("SHARE")
+                        }
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.0, green: 1.0, blue: 0.4))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color(red: 0.0, green: 1.0, blue: 0.4).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.0, green: 1.0, blue: 0.4))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color(red: 0.0, green: 1.0, blue: 0.4).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-
                 Spacer()
             }
         }

@@ -90,7 +90,8 @@ struct RootView: View {
             }
 
             // Right sliding Hacker Console Sidebar
-            HackerConsoleSidebarView(isOpen: $isConsoleOpen)
+            HackerConsoleSidebarView(isOpen: $isConsoleOpen,
+                                     enableLogging: $model.settings.enableLogging)
 
             if model.needsLanguageSelection {
                 LanguageOverlay()
