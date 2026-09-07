@@ -14,6 +14,10 @@ struct PaywallView: View {
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
+    /// The real price the StoreKit product will actually charge, straight from
+    /// the product's display string — so the UI can never lie about the price.
+    private var displayPrice: String? { model.store.product?.displayPrice }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -121,7 +125,7 @@ struct PaywallView: View {
             }
             .padding(.bottom, 2)
 
-            Text(model.copy.text(isDiscount ? .paywallDiscountTitle : .paywallTitle))
+            Text(model.copy.text(isDiscount ? .paywallDiscountTitle : .paywallTitle, price: displayPrice))
                 .font(.openSans(28, weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
@@ -165,22 +169,18 @@ struct PaywallView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if isDiscount {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.copy.text(.paywallDiscountTag))
+                    Text(model.copy.text(.paywallDiscountTag, price: displayPrice))
                         .font(.openSans(11, weight: .bold))
                         .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.30))
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("$3")
+                        Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                        Text(model.copy.text(.paywallOldPrice))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .strikethrough()
                     }
                 }
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("$4.99")
+                    Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                 }
@@ -209,7 +209,7 @@ struct PaywallView: View {
                 }
                 Text(model.store.isPurchasing
                      ? model.copy.text(.purchasing)
-                     : (isDiscount ? model.copy.text(.paywallBuyDiscount) : model.copy.text(.buyUnlimited)))
+                     : (isDiscount ? model.copy.text(.paywallBuyDiscount, price: displayPrice) : model.copy.text(.buyUnlimited, price: displayPrice)))
                     .font(.openSans(16, weight: .bold))
             }
             .foregroundStyle(.white)

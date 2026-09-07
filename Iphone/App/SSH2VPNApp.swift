@@ -412,8 +412,15 @@ final class AppModel: ObservableObject {
         // reinstalled the app; the entitlement survives in App Store).
         reloadQuota()
         Task { @MainActor [weak self] in
-            let owned = await self?.store.refreshEntitlement() ?? false
-            if owned { self?.reloadQuota() }
+            // Re-read the real App Store purchase on every launch. If it was
+            // revoked/deleted in StoreKit (e.g. a refunded test purchase), the
+            // unlimited flag is also cleared from the shared ledger so the app
+            // truly returns to the free tier instead of staying stuck paid.
+            // Reload quota into memory either way so the main screen's ad /
+            // counter UI reflects the cleared (or re-applied) state instantly.
+            let owned = await self?.store.refreshEntitlementClearingIfRevoked() ?? false
+            self?.reloadQuota()
+            _ = owned
         }
     }
 

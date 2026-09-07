@@ -71,6 +71,25 @@ final class StoreManager: ObservableObject {
         return owned
     }
 
+    /// Same entitlement check as `refreshEntitlement()`, but when the purchase
+    /// is gone it also CLEARS the unlimited flag from the shared ledger (the
+    /// keychain record the tunnel extension reads). Used on the periodic deep
+    /// check so a refunded / deleted test purchase actually flips the app back
+    /// to the free tier instead of staying stuck in the paid state forever.
+    @discardableResult
+    func refreshEntitlementClearingIfRevoked() async -> Bool {
+        let owned = await refreshEntitlement()
+        if !owned {
+            let store = QuotaLedgerStore()
+            var ledger = store.load()
+            if ledger.unlimited {
+                ledger = ledger.removingUnlimited()
+                store.save(ledger)
+            }
+        }
+        return owned
+    }
+
     /// Buys the one-time Unlimited product. Returns a typed outcome so the UI
     /// can tell a real success from a user cancellation / pending approval /
     /// unavailable product — the old `String?` conflated "no product loaded"

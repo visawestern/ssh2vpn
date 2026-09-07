@@ -67,6 +67,7 @@ enum CopyKey {
     case paywallFeatureUnlimited, paywallFeatureNoAds, paywallFeatureLocations
     case paywallOneTime, paywallDiscountTag, paywallOldPrice
     case paywallDiscountTitle, paywallDiscountSubtitle, paywallBuyDiscount
+    case paywallFullPriceFallback
 }
 
 struct AppCopy {
@@ -81,6 +82,18 @@ struct AppCopy {
             .vietnamese: vietnamese,
         ]
         return values[language]?[key] ?? english[key]!
+    }
+
+    /// Returns the localized string with the StoreKit-driven real price
+    /// substituted for any hardcoded legacy price tokens (`$4.99`, `$3`, or an
+    /// explicit `{price}` placeholder). Falls back to the copied price when the
+    /// product price isn't available yet.
+    func text(_ key: CopyKey, price: String?) -> String {
+        let base = text(key)
+        guard let price, !price.isEmpty else { return base }
+        // Exact token first, then any dollar-amount left in legacy copy.
+        let withToken = base.replacingOccurrences(of: "{price}", with: price)
+        return withToken.replacingOccurrences(of: #"\$[0-9]+(?:\.[0-9]{1,2})?"#, with: price, options: .regularExpression)
     }
 
     // MARK: - English
@@ -153,9 +166,10 @@ struct AppCopy {
         .paywallOneTime: "One-time · forever",
         .paywallDiscountTag: "LIMITED OFFER",
         .paywallOldPrice: "$4.99",
-        .paywallDiscountTitle: "Unlock Unlimited — $3 today",
-        .paywallDiscountSubtitle: "One-time special price. Dismissing this will not show it again.",
-        .paywallBuyDiscount: "Get it for $3",
+        .paywallDiscountTitle: "Unlock Unlimited — today",
+        .paywallDiscountSubtitle: "One-time price. Dismissing this will not show this offer again.",
+        .paywallBuyDiscount: "Get Unlimited",
+        .paywallFullPriceFallback: "$4.99",
     ]
 
     // MARK: - Russian
@@ -229,9 +243,9 @@ struct AppCopy {
         .paywallOneTime: "Разовая · навсегда",
         .paywallDiscountTag: "ВЫГОДНОЕ ПРЕДЛОЖЕНИЕ",
         .paywallOldPrice: "$4.99",
-        .paywallDiscountTitle: "Открой безлимит — $3 сегодня",
-        .paywallDiscountSubtitle: "Разовая спеццена. Выйдете — и предложение исчезнет.",
-        .paywallBuyDiscount: "Получить за $3",
+        .paywallDiscountTitle: "Открой безлимит — сегодня",
+        .paywallDiscountSubtitle: "Разовая покупка. Выйдете — и предложение исчезнет.",
+        .paywallBuyDiscount: "Получить безлимит",
     ]
 
     // MARK: - Spanish
