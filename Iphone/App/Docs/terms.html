@@ -30,7 +30,7 @@
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot">S</span> SSH2VPN</div>
-    <div class="langwrap"><span id="flag" class="flag"></span><select id="lang" onchange="apply()"></select></div>
+    <select id="lang" onchange="apply()"></select>
   </header>
   <h1 id="t-title"></h1>
   <div class="updated" id="t-updated"></div>
@@ -74,7 +74,6 @@ function apply(){
   const sel = document.getElementById("lang");
   if (sel && sel.value) { cur = sel.value; }
   const t = (typeof T[cur] === "object") ? T[cur] : T.en;
-  document.getElementById("flag").textContent = FLAGS[cur] || "\u{1F310}";
   document.getElementById("t-title").textContent = t.title;
   document.getElementById("t-updated").textContent = t.updated;
   document.getElementById("t-footer").textContent = t.footer;
@@ -87,7 +86,7 @@ function apply(){
   for (const k of ORDER) {
     if (typeof T[k] !== "object") continue;
     const o = document.createElement("option");
-    o.value = k; o.textContent = NAMES[k];
+    o.value = k; o.textContent = (FLAGS[k]||"") + " " + NAMES[k];
     sel.appendChild(o);
   }
   sel.value = cur;
