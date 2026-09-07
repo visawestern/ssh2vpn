@@ -568,26 +568,21 @@ struct ConnectView: View {
 
             Spacer()
 
-            // Buy Unlimited — only while not owned. Green purchase button with
-            // a cart icon, placed BEFORE the ad button, price shown honestly.
+            // Buy Unlimited — only while not owned. Green bag button before
+            // the rewarded-ad button (color was switched from amber to green
+            // at the owner's request).
             if !model.isUnlimited {
                 Button {
                     model.showPaywall()
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "cart.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("$5")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                    }
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        Color.sec50,
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
+                    Image(systemName: "bag.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Color.sec50,
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(model.copy.text(.buyUnlimited, price: "$5"))
