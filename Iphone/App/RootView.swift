@@ -1230,6 +1230,17 @@ struct SettingsViewNew: View {
                             .padding(.top, 12)
                             .padding(.bottom, 8)
 
+                        // App Store-required legal documents.
+                        NavigationLink(destination: DocsView(page: .privacy)) {
+                            settingsRow(icon: "hand.raised.fill", title: model.copy.text(.privacyPolicyTitle), desc: model.copy.text(.privacyPolicyDesc))
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        NavigationLink(destination: DocsView(page: .terms)) {
+                            settingsRow(icon: "doc.text.fill", title: model.copy.text(.termsOfUseTitle), desc: model.copy.text(.termsOfUseDesc))
+                        }
+                        .buttonStyle(.plain)
+
                         HStack {
                             Text(model.copy.text(.version))
                                 .font(.openSans(15))

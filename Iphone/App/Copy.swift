@@ -26,6 +26,8 @@ enum CopyKey {
     case deleteServer, deleteServerConfirm
     // About
     case about, version
+    // App Store-required legal documents (About card)
+    case privacyPolicyTitle, privacyPolicyDesc, termsOfUseTitle, termsOfUseDesc
     // Diagnostics
     case setupProgress, preparingGateway, testingTunnel
     case profile, authentication, passwordKeychain, ed25519Key
@@ -140,6 +142,7 @@ struct AppCopy {
         .protocolDesc: "Select VPN protocol", .dnsDesc: "Configure DNS servers", .advancedDesc: "Advanced settings",
         .locations: "Locations", .yourServer: "Your Server", .noServerConfigured: "No server configured",
         .addServerLabel: "Add Server", .addServerDesc: "Connect to your own VPS", .active: "Active", .deleteServer: "Delete Server", .deleteServerConfirm: "Are you sure you want to delete this server? Its stored credentials will be removed.", .about: "About",
+        .privacyPolicyTitle: "Privacy Policy", .privacyPolicyDesc: "How your data is handled", .termsOfUseTitle: "Terms of Use", .termsOfUseDesc: "Rules for using the app",
         .version: "Version", .setupProgress: "Setup progress", .preparingGateway: "Preparing gateway",
         .testingTunnel: "Testing tunnel", .profile: "Profile", .authentication: "Authentication",
         .passwordKeychain: "Password / Keychain", .ed25519Key: "Ed25519 key", .error: "Error",
@@ -224,6 +227,7 @@ struct AppCopy {
         .advancedDesc: "Дополнительные настройки", .locations: "Локации", .yourServer: "Ваш сервер",
         .noServerConfigured: "Сервер не настроен", .addServerLabel: "Добавить сервер",
         .addServerDesc: "Подключиться к вашему VPS", .active: "Активен", .deleteServer: "Удалить сервер", .deleteServerConfirm: "Вы уверены, что хотите удалить этот сервер? Сохранённые учётные данные будут удалены.", .about: "О приложении", .version: "Версия",
+        .privacyPolicyTitle: "Политика конфиденциальности", .privacyPolicyDesc: "Как обрабатываются ваши данные", .termsOfUseTitle: "Условия использования", .termsOfUseDesc: "Правила использования приложения",
         .setupProgress: "Процесс настройки", .preparingGateway: "Подготовка шлюза", .testingTunnel: "Проверка туннеля",
         .profile: "Профиль", .authentication: "Аутентификация", .passwordKeychain: "Пароль / Связка ключей",
         .ed25519Key: "Ключ Ed25519", .error: "Ошибка", .technicalDetails: "Технические подробности",
@@ -252,7 +256,7 @@ struct AppCopy {
         .paywallDiscountSubtitle: "Разовая покупка. Выйдете — и предложение исчезнет.",
         .paywallBuyDiscount: "Получить безлимит",
         .paywallFullPriceFallback: "$5",
-        .diagnosticsTitle: "Диагностика", .diagLive: "В ЭФИРЕ", .diagSSHConnections: "SSH-соединения", .diagActiveFlows: "Активные потоки", .diagDownloaded: "Скачано", .diagUploaded: "Отправлено", .diagDNS: "DNS", .diagLocalRulesLine: "%d активных · %d заблокировано", .diagStopReason: "Причина остановки", .diagLastError: "Последняя ошибка", .diagDNSPending: "DNS ОЖИДАЕТ", .diagLiveNow: "Сейчас", .diagOnNextConnect: "При след. подключении", .diagDefaultDNS: "8.8.8.8 (по умолчанию)",
+        .diagLive: "В ЭФИРЕ", .diagSSHConnections: "SSH-соединения", .diagActiveFlows: "Активные потоки", .diagDownloaded: "Скачано", .diagUploaded: "Отправлено", .diagDNS: "DNS", .diagLocalRulesLine: "%d активных · %d заблокировано", .diagStopReason: "Причина остановки", .diagLastError: "Последняя ошибка", .diagDNSPending: "DNS ОЖИДАЕТ", .diagLiveNow: "Сейчас", .diagOnNextConnect: "При след. подключении", .diagDefaultDNS: "8.8.8.8 (по умолчанию)",
     ]
 
     // MARK: - Spanish
@@ -308,6 +312,7 @@ struct AppCopy {
         .advancedDesc: "Ajustes avanzados", .locations: "Ubicaciones", .yourServer: "Tu servidor",
         .noServerConfigured: "Ningún servidor configurado", .addServerLabel: "Añadir servidor",
         .addServerDesc: "Conectar a tu propio VPS", .active: "Activo", .about: "Acerca de", .version: "Versión",
+        .privacyPolicyTitle: "Política de Privacidad", .privacyPolicyDesc: "Cómo se tratan tus datos", .termsOfUseTitle: "Términos de Uso", .termsOfUseDesc: "Reglas para usar la app",
         .setupProgress: "Progreso de configuración", .preparingGateway: "Preparando pasarela",
         .testingTunnel: "Probando túnel", .profile: "Perfil", .authentication: "Autenticación",
         .passwordKeychain: "Contraseña / Llavero", .ed25519Key: "Clave Ed25519", .error: "Error",
@@ -373,6 +378,7 @@ struct AppCopy {
         .advancedDesc: "Erweiterte Einstellungen", .locations: "Standorte", .yourServer: "Dein Server",
         .noServerConfigured: "Kein Server konfiguriert", .addServerLabel: "Server hinzufügen",
         .addServerDesc: "Mit eigenem VPS verbinden", .active: "Aktiv", .about: "Über", .version: "Version",
+        .privacyPolicyTitle: "Datenschutzerklärung", .privacyPolicyDesc: "Wie deine Daten behandelt werden", .termsOfUseTitle: "Nutzungsbedingungen", .termsOfUseDesc: "Regeln für die Nutzung der App",
         .setupProgress: "Einrichtungsfortschritt", .preparingGateway: "Gateway wird vorbereitet",
         .testingTunnel: "Tunnel wird getestet", .profile: "Profil", .authentication: "Authentifizierung",
         .passwordKeychain: "Passwort / Schlüsselbund", .ed25519Key: "Ed25519-Schlüssel", .error: "Fehler",
@@ -433,6 +439,7 @@ struct AppCopy {
         .advanced: "詳細設定", .protocolDesc: "VPNプロトコルを選択", .dnsDesc: "DNSサーバーを設定", .advancedDesc: "高度な設定",
         .locations: "ロケーション", .yourServer: "マイサーバー", .noServerConfigured: "サーバーが設定されていません", .addServerLabel: "サーバーを追加",
         .addServerDesc: "自身のVPSに接続", .active: "アクティブ", .about: "アプリについて", .version: "バージョン",
+        .privacyPolicyTitle: "プライバシーポリシー", .privacyPolicyDesc: "データの取り扱いについて", .termsOfUseTitle: "利用規約", .termsOfUseDesc: "アプリ利用のルール",
         .setupProgress: "セットアップの進行状況", .preparingGateway: "ゲートウェイの準備", .testingTunnel: "トンネルのテスト", .profile: "プロフィール",
         .authentication: "認証", .passwordKeychain: "パスワード / キーチェーン", .ed25519Key: "Ed25519鍵", .error: "エラー",
         .technicalDetails: "技術的な詳細", .diagnosticsTitle: "診断", .noServer: "サーバーなし", .setupFailed: "VPNの設定に失敗しました",
@@ -489,6 +496,7 @@ struct AppCopy {
         .advanced: "高级", .protocolDesc: "选择 VPN 协议", .dnsDesc: "配置 DNS 服务器", .advancedDesc: "高级设置", .locations: "节点位置",
         .yourServer: "你的服务器", .noServerConfigured: "未配置服务器", .addServerLabel: "添加服务器", .addServerDesc: "连接到你的 VPS",
         .active: "已启用", .about: "关于", .version: "版本", .setupProgress: "设置进度", .preparingGateway: "准备网关",
+        .privacyPolicyTitle: "隐私政策", .privacyPolicyDesc: "数据如何处理", .termsOfUseTitle: "使用条款", .termsOfUseDesc: "应用使用规则",
         .testingTunnel: "测试隧道", .profile: "配置文件", .authentication: "认证", .passwordKeychain: "密码 / 钥匙串",
         .ed25519Key: "Ed25519 密钥", .error: "错误", .technicalDetails: "技术详情", .diagnosticsTitle: "诊断", .noServer: "没有服务器",
         .diagLive: "实时", .diagSSHConnections: "SSH 连接", .diagActiveFlows: "活动流", .diagDownloaded: "已下载", .diagUploaded: "已上传", .diagDNS: "DNS", .diagLocalRulesLine: "%d 条生效 · %d 条拦截", .diagStopReason: "停止原因", .diagLastError: "最近错误", .diagDNSPending: "DNS 待生效", .diagLiveNow: "当前", .diagOnNextConnect: "下次连接时", .diagDefaultDNS: "8.8.8.8（默认）",
@@ -550,6 +558,7 @@ struct AppCopy {
         .advancedDesc: "Paramètres avancés", .locations: "Emplacements", .yourServer: "Votre serveur",
         .noServerConfigured: "Aucun serveur configuré", .addServerLabel: "Ajouter un serveur",
         .addServerDesc: "Se connecter à votre VPS", .active: "Actif", .about: "À propos", .version: "Version",
+        .privacyPolicyTitle: "Politique de Confidentialité", .privacyPolicyDesc: "Comment vos données sont traitées", .termsOfUseTitle: "Conditions d'Utilisation", .termsOfUseDesc: "Règles d'utilisation de l'app",
         .setupProgress: "Progression de la configuration", .preparingGateway: "Préparation de la passerelle",
         .testingTunnel: "Test du tunnel", .profile: "Profil", .authentication: "Authentification",
         .passwordKeychain: "Mot de passe / Trousseau", .ed25519Key: "Clé Ed25519", .error: "Erreur",
@@ -615,6 +624,7 @@ struct AppCopy {
         .advancedDesc: "Impostazioni avanzate", .locations: "Posizioni", .yourServer: "Il tuo server",
         .noServerConfigured: "Nessun server configurato", .addServerLabel: "Aggiungi server",
         .addServerDesc: "Connettiti al tuo VPS", .active: "Attivo", .about: "Info", .version: "Versione",
+        .privacyPolicyTitle: "Informativa sulla Privacy", .privacyPolicyDesc: "Come vengono trattati i tuoi dati", .termsOfUseTitle: "Termini di Utilizzo", .termsOfUseDesc: "Regole per usare l'app",
         .setupProgress: "Avanzamento configurazione", .preparingGateway: "Preparazione gateway",
         .testingTunnel: "Test tunnel", .profile: "Profilo", .authentication: "Autenticazione",
         .passwordKeychain: "Password / Portachiavi", .ed25519Key: "Chiave Ed25519", .error: "Errore",
@@ -680,6 +690,7 @@ struct AppCopy {
         .advancedDesc: "Configurações avançadas", .locations: "Locais", .yourServer: "Seu servidor",
         .noServerConfigured: "Nenhum servidor configurado", .addServerLabel: "Adicionar servidor",
         .addServerDesc: "Conectar ao seu próprio VPS", .active: "Ativo", .about: "Sobre", .version: "Versão",
+        .privacyPolicyTitle: "Política de Privacidade", .privacyPolicyDesc: "Como seus dados são tratados", .termsOfUseTitle: "Termos de Uso", .termsOfUseDesc: "Regras para usar o app",
         .setupProgress: "Progresso da configuração", .preparingGateway: "Preparando gateway",
         .testingTunnel: "Testando túnel", .profile: "Perfil", .authentication: "Autenticação",
         .passwordKeychain: "Senha / Chaveiro", .ed25519Key: "Chave Ed25519", .error: "Erro",
@@ -740,6 +751,7 @@ struct AppCopy {
         .advanced: "고급 설정", .protocolDesc: "VPN 프로토콜 선택", .dnsDesc: "DNS 서버 설정", .advancedDesc: "고급 옵션",
         .locations: "서버 위치", .yourServer: "내 서버", .noServerConfigured: "구성된 서버 없음", .addServerLabel: "서버 추가",
         .addServerDesc: "내 VPS에 연결", .active: "활성", .about: "정보", .version: "버전", .setupProgress: "설정 진행 상황",
+        .privacyPolicyTitle: "개인정보 처리방침", .privacyPolicyDesc: "데이터 처리 방식", .termsOfUseTitle: "이용약관", .termsOfUseDesc: "앱 사용 규칙",
         .preparingGateway: "게이트웨이 준비 중", .testingTunnel: "터널 테스트 중", .profile: "프로필", .authentication: "인증",
         .passwordKeychain: "비밀번호 / 키체인", .ed25519Key: "Ed25519 키", .error: "오류", .technicalDetails: "기술적 세부사항",
         .diagnosticsTitle: "진단", .noServer: "서버 없음", .setupFailed: "VPN 설정 실패", .selectedServer: "선택된 서버", .ping: "Ping",
@@ -800,6 +812,7 @@ struct AppCopy {
         .locations: "المواقع", .yourServer: "خادمك", .noServerConfigured: "لا يوجد خادم مهيأ",
         .addServerLabel: "إضافة خادم", .addServerDesc: "الاتصال بخادم VPS الخاص بك", .active: "نشط",
         .about: "حول التطبيق", .version: "الإصدار", .setupProgress: "تقدم الإعداد", .preparingGateway: "إعداد بوابة",
+        .privacyPolicyTitle: "سياسة الخصوصية", .privacyPolicyDesc: "كيفية التعامل مع بياناتك", .termsOfUseTitle: "شروط الاستخدام", .termsOfUseDesc: "قواعد استخدام التطبيق",
         .testingTunnel: "اختبار النفق", .profile: "الملف الشخصي", .authentication: "المصادقة",
         .passwordKeychain: "كلمة المرور / سلسلة المفاتيح", .ed25519Key: "مفتاح Ed25519", .error: "خطأ",
         .technicalDetails: "تفاصيل تقنية", .diagnosticsTitle: "التشخيص", .noServer: "لا يوجد خادم",
@@ -863,6 +876,7 @@ struct AppCopy {
         .locations: "स्थान", .yourServer: "आपका सर्वर", .noServerConfigured: "कोई सर्वर कॉन्फ़िगर नहीं है",
         .addServerLabel: "सर्वर जोड़ें", .addServerDesc: "अपने VPS से कनेक्ट करें", .active: "सक्रिय",
         .about: "के बारे में", .version: "संस्करण", .setupProgress: "सेटअप प्रगति",
+        .privacyPolicyTitle: "गोपनीयता नीति", .privacyPolicyDesc: "आपका डेटा कैसे संभाला जाता है", .termsOfUseTitle: "उपयोग की शर्तें", .termsOfUseDesc: "ऐप उपयोग के नियम",
         .preparingGateway: "गेटवे तैयार कर रहा है", .testingTunnel: "टनल का परीक्षण", .profile: "प्रोफ़ाइल",
         .authentication: "प्रमाणीकरण", .passwordKeychain: "पासवर्ड / कीचेन", .ed25519Key: "Ed25519 की", .error: "त्रुटि",
         .technicalDetails: "तकनीकी विवरण", .diagnosticsTitle: "डायग्नोस्टिक्स", .noServer: "कोई सर्वर नहीं",
@@ -926,6 +940,7 @@ struct AppCopy {
         .locations: "ตำแหน่ง", .yourServer: "เซิร์ฟเวอร์ของคุณ", .noServerConfigured: "ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์",
         .addServerLabel: "เพิ่มเซิร์ฟเวอร์", .addServerDesc: "เชื่อมต่อกับ VPS ของคุณ", .active: "ใช้งานอยู่",
         .about: "เกี่ยวกับ", .version: "เวอร์ชัน", .setupProgress: "ความคืบหน้าการตั้งค่า",
+        .privacyPolicyTitle: "นโยบายความเป็นส่วนตัว", .privacyPolicyDesc: "ข้อมูลของคุณถูกจัดการอย่างไร", .termsOfUseTitle: "ข้อกำหนดการใช้งาน", .termsOfUseDesc: "กฎการใช้แอป",
         .preparingGateway: "กำลังเตรียมเกตเวย์", .testingTunnel: "กำลังทดสอบอุโมงค์", .profile: "โปรไฟล์",
         .authentication: "การยืนยันตัวตน", .passwordKeychain: "รหัสผ่าน / คลังกุญแจ", .ed25519Key: "คีย์ Ed25519",
         .error: "ข้อผิดพลาด", .technicalDetails: "รายละเอียดทางเทคนิค", .diagnosticsTitle: "การวินิจฉัย",
@@ -990,6 +1005,7 @@ struct AppCopy {
         .advancedDesc: "Gelişmiş ayarlar", .locations: "Konumlar", .yourServer: "Sunucunuz",
         .noServerConfigured: "Yapılandırılmış sunucu yok", .addServerLabel: "Sunucu ekle",
         .addServerDesc: "Kendi VPS'nize bağlanın", .active: "Aktif", .about: "Hakkında", .version: "Sürüm",
+        .privacyPolicyTitle: "Gizlilik Politikası", .privacyPolicyDesc: "Verilerinizin nasıl işlendiği", .termsOfUseTitle: "Kullanım Koşulları", .termsOfUseDesc: "Uygulamayı kullanma kuralları",
         .setupProgress: "Kurulum ilerlemesi", .preparingGateway: "Ağ geçidi hazırlanıyor",
         .testingTunnel: "Tunnel test ediliyor", .profile: "Profil", .authentication: "Kimlik doğrulama",
         .passwordKeychain: "Şifre / Anahtar Zinciri", .ed25519Key: "Ed25519 anahtarı", .error: "Hata",
@@ -1054,6 +1070,7 @@ struct AppCopy {
         .advancedDesc: "Ustawienia zaawansowane", .locations: "Lokalizacje", .yourServer: "Twój serwer",
         .noServerConfigured: "Brak skonfigurowanego serwera", .addServerLabel: "Dodaj serwer",
         .addServerDesc: "Połącz się z własnym VPS", .active: "Aktywny", .about: "O aplikacji", .version: "Wersja",
+        .privacyPolicyTitle: "Polityka prywatności", .privacyPolicyDesc: "Jak przetwarzane są Twoje dane", .termsOfUseTitle: "Warunki Użytkowania", .termsOfUseDesc: "Zasady korzystania z aplikacji",
         .setupProgress: "Postęp konfiguracji", .preparingGateway: "Przygotowywanie bramki",
         .testingTunnel: "Testowanie tunelu", .profile: "Profil", .authentication: "Uwierzytelnianie",
         .passwordKeychain: "Hasło / Pęklarz kluczy", .ed25519Key: "Klucz Ed25519", .error: "Błąd",
@@ -1119,6 +1136,7 @@ struct AppCopy {
         .advancedDesc: "Geavanceerde instellingen", .locations: "Locaties", .yourServer: "Je server",
         .noServerConfigured: "Geen server geconfigureerd", .addServerLabel: "Server toevoegen",
         .addServerDesc: "Verbind met je eigen VPS", .active: "Actief", .about: "Over", .version: "Versie",
+        .privacyPolicyTitle: "Privacybeleid", .privacyPolicyDesc: "Hoe jouw gegevens worden behandeld", .termsOfUseTitle: "Gebruiksvoorwaarden", .termsOfUseDesc: "Regels voor app-gebruik",
         .setupProgress: "Installatievoortgang", .preparingGateway: "Gateway voorbereiden",
         .testingTunnel: "Tunnel testen", .profile: "Profiel", .authentication: "Authenticatie",
         .passwordKeychain: "Wachtwoord / Sleutelbos", .ed25519Key: "Ed25519 sleutel", .error: "Fout",
@@ -1183,6 +1201,7 @@ struct AppCopy {
         .locations: "Vị trí máy chủ", .yourServer: "Máy chủ của bạn", .noServerConfigured: "Chưa cấu hình máy chủ",
         .addServerLabel: "Thêm server", .addServerDesc: "Kết nối với VPS của bạn", .active: "Hoạt động",
         .about: "Giới thiệu", .version: "Phiên bản", .setupProgress: "Tiến trình thiết lập",
+        .privacyPolicyTitle: "Chính sách Bảo mật", .privacyPolicyDesc: "Dữ liệu của bạn được xử lý ra sao", .termsOfUseTitle: "Điều khoản Sử dụng", .termsOfUseDesc: "Quy tắc sử dụng ứng dụng",
         .preparingGateway: "Đang chuẩn bị cổng", .testingTunnel: "Đang kiểm tra đường hầm", .profile: "Hồ sơ",
         .authentication: "Xác thực", .passwordKeychain: "Mật khẩu / Chìa khóa", .ed25519Key: "Khóa Ed25519",
         .error: "Lỗi", .technicalDetails: "Chi tiết kỹ thuật", .diagnosticsTitle: "Chẩn đoán",
