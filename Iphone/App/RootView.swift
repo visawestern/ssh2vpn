@@ -568,6 +568,31 @@ struct ConnectView: View {
 
             Spacer()
 
+            // Buy Unlimited — only while not owned. Green purchase button with
+            // a cart icon, placed BEFORE the ad button, price shown honestly.
+            if !model.isUnlimited {
+                Button {
+                    model.showPaywall()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cart.fill")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("$5")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Color.sec50,
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.buyUnlimited, price: "$5"))
+            }
+
             // Rewarded ad refill — only when the user hasn't bought unlimited.
             if !model.isUnlimited {
                 Button { model.watchAd() } label: {
@@ -592,29 +617,6 @@ struct ConnectView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!model.canWatchAd)
-
-                // Buy Unlimited — shown only while not owned. Compact "$5"
-                // price chip so it fits beside the ad button on narrow screens.
-                Button {
-                    model.showPaywall()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "infinity")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("$5")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                    }
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        Color(red: 0.95, green: 0.62, blue: 0.18),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(model.copy.text(.buyUnlimited, price: "$5"))
             }
         }
         .padding(.horizontal, 14)
