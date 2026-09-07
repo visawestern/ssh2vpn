@@ -1647,7 +1647,7 @@ struct DiagnosticsView: View {
     /// user switches a preset while connected.
     private var freshTunnelDNS: String {
         let resolved = model.settings.resolvedDNSServers
-        return resolved.isEmpty ? "8.8.8.8 (default)" : resolved.joined(separator: ", ")
+        return resolved.isEmpty ? model.copy.text(.diagDefaultDNS) : resolved.joined(separator: ", ")
     }
     @State private var stopReason = ""
     @State private var lastError = ""
@@ -1676,20 +1676,20 @@ struct DiagnosticsView: View {
                 // connected-screen strip, so diagnostics and the main screen
                 // can never disagree.
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("LIVE")
+                    Text(model.copy.text(.diagLive))
                         .font(.openSans(13, weight: .semibold))
                         .foregroundStyle(Color.octGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    profileRow(label: "SSH connections", value: model.sshConnectionCount > 0 ? String(model.sshConnectionCount) : "—")
+                    profileRow(label: model.copy.text(.diagSSHConnections), value: model.sshConnectionCount > 0 ? String(model.sshConnectionCount) : "—")
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    profileRow(label: "Active flows", value: model.activeChannelCount > 0 ? String(model.activeChannelCount) : "—")
+                    profileRow(label: model.copy.text(.diagActiveFlows), value: model.activeChannelCount > 0 ? String(model.activeChannelCount) : "—")
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    profileRow(label: "Downloaded", value: fmtMB(model.tunnelDownBytes))
+                    profileRow(label: model.copy.text(.diagDownloaded), value: fmtMB(model.tunnelDownBytes))
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    profileRow(label: "Uploaded", value: fmtMB(model.tunnelUpBytes))
+                    profileRow(label: model.copy.text(.diagUploaded), value: fmtMB(model.tunnelUpBytes))
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.ping), value: model.serverPingMs.map { "\($0) ms" } ?? "—")
                 }
@@ -1715,10 +1715,12 @@ struct DiagnosticsView: View {
                     // Show the ACTUAL effective DNS of the last-started
                     // tunnel (extension-confirmed when polled), and the
                     // pending choice when a change waits for the next connect.
-                    profileRow(label: "DNS", value: dnsDiagnosticValue)
+                    profileRow(label: model.copy.text(.diagDNS), value: dnsDiagnosticValue)
                     if model.connection == .connected {
-                        profileRow(label: "Local rules",
-                                   value: "\(liveDNSRules) active · \(liveDNSBlocked) blocked")
+                        let active = Int(liveDNSRules) ?? 0
+                        let blocked = Int(liveDNSBlocked) ?? 0
+                        profileRow(label: model.copy.text(.dnsLocalRulesTitle),
+                                   value: String(format: model.copy.text(.diagLocalRulesLine), active, blocked))
                     }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
@@ -1734,11 +1736,11 @@ struct DiagnosticsView: View {
                         .padding(.bottom, 8)
 
                         if !stopReason.isEmpty {
-                            profileRow(label: "Stop reason", value: stopReason)
+                            profileRow(label: model.copy.text(.diagStopReason), value: stopReason)
                         }
                         if !lastError.isEmpty, lastError != "none" {
                             Divider().background(Color.octGray05).padding(.horizontal, 16)
-                            profileRow(label: "Last error", value: lastError)
+                            profileRow(label: model.copy.text(.diagLastError), value: lastError)
                         }
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
@@ -1748,15 +1750,15 @@ struct DiagnosticsView: View {
                 // tunnel still runs Y (rules apply on the next connection).
                 if !freshTunnelDNS.isEmpty, freshTunnelDNS != liveTunnelDNS, model.connection == .connected {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("DNS PENDING")
+                        Text(model.copy.text(.diagDNSPending))
                             .font(.openSans(13, weight: .semibold))
                             .foregroundStyle(Color.octGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
-                        profileRow(label: "Live now", value: liveTunnelDNS.isEmpty ? "—" : liveTunnelDNS)
+                        profileRow(label: model.copy.text(.diagLiveNow), value: liveTunnelDNS.isEmpty ? "—" : liveTunnelDNS)
                         Divider().background(Color.octGray05).padding(.horizontal, 16)
-                        profileRow(label: "On next connect", value: freshTunnelDNS)
+                        profileRow(label: model.copy.text(.diagOnNextConnect), value: freshTunnelDNS)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
@@ -1810,7 +1812,7 @@ struct DiagnosticsView: View {
             return liveTunnelDNS
         }
         let resolved = model.settings.resolvedDNSServers
-        return resolved.isEmpty ? "8.8.8.8 (default)" : resolved.joined(separator: ", ")
+        return resolved.isEmpty ? model.copy.text(.diagDefaultDNS) : resolved.joined(separator: ", ")
     }
 
         private func refreshExtensionStatus() async {

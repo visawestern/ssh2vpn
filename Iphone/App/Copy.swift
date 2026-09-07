@@ -30,6 +30,12 @@ enum CopyKey {
     case setupProgress, preparingGateway, testingTunnel
     case profile, authentication, passwordKeychain, ed25519Key
     case error, technicalDetails, diagnosticsTitle
+    // Diagnostics screen labels
+    case diagLive, diagSSHConnections, diagActiveFlows
+    case diagDownloaded, diagUploaded
+    case diagDNS, diagLocalRulesLine
+    case diagStopReason, diagLastError
+    case diagDNSPending, diagLiveNow, diagOnNextConnect, diagDefaultDNS
     // Server list / Map
     case noServer, setupFailed, selectedServer, ping, status, country, ip
     // Errors
@@ -138,6 +144,7 @@ struct AppCopy {
         .testingTunnel: "Testing tunnel", .profile: "Profile", .authentication: "Authentication",
         .passwordKeychain: "Password / Keychain", .ed25519Key: "Ed25519 key", .error: "Error",
         .technicalDetails: "Technical details", .diagnosticsTitle: "Diagnostics", .noServer: "No server",
+        .diagLive: "LIVE", .diagSSHConnections: "SSH connections", .diagActiveFlows: "Active flows", .diagDownloaded: "Downloaded", .diagUploaded: "Uploaded", .diagDNS: "DNS", .diagLocalRulesLine: "%d active · %d blocked", .diagStopReason: "Stop reason", .diagLastError: "Last error", .diagDNSPending: "DNS PENDING", .diagLiveNow: "Live now", .diagOnNextConnect: "On next connect", .diagDefaultDNS: "8.8.8.8 (default)",
         .setupFailed: "VPN setup failed", .selectedServer: "Selected Server", .ping: "Ping", .status: "Status",
         .country: "Country", .ip: "IP", .settings: "Settings", .sshConnectionFailed: "SSH connection failed",
         .sshHostKeyMismatch: "Host key mismatch", .sshAuthFailed: "Authentication failed",
@@ -245,6 +252,7 @@ struct AppCopy {
         .paywallDiscountSubtitle: "Разовая покупка. Выйдете — и предложение исчезнет.",
         .paywallBuyDiscount: "Получить безлимит",
         .paywallFullPriceFallback: "$5",
+        .diagnosticsTitle: "Диагностика", .diagLive: "В ЭФИРЕ", .diagSSHConnections: "SSH-соединения", .diagActiveFlows: "Активные потоки", .diagDownloaded: "Скачано", .diagUploaded: "Отправлено", .diagDNS: "DNS", .diagLocalRulesLine: "%d активных · %d заблокировано", .diagStopReason: "Причина остановки", .diagLastError: "Последняя ошибка", .diagDNSPending: "DNS ОЖИДАЕТ", .diagLiveNow: "Сейчас", .diagOnNextConnect: "При след. подключении", .diagDefaultDNS: "8.8.8.8 (по умолчанию)",
     ]
 
     // MARK: - Spanish
@@ -304,6 +312,7 @@ struct AppCopy {
         .testingTunnel: "Probando túnel", .profile: "Perfil", .authentication: "Autenticación",
         .passwordKeychain: "Contraseña / Llavero", .ed25519Key: "Clave Ed25519", .error: "Error",
         .technicalDetails: "Detalles técnicos", .diagnosticsTitle: "Diagnósticos", .noServer: "Sin servidor",
+        .diagLive: "EN VIVO", .diagSSHConnections: "Conexiones SSH", .diagActiveFlows: "Flujos activos", .diagDownloaded: "Descargado", .diagUploaded: "Subido", .diagDNS: "DNS", .diagLocalRulesLine: "%d activas · %d bloqueadas", .diagStopReason: "Motivo de parada", .diagLastError: "Último error", .diagDNSPending: "DNS PENDIENTE", .diagLiveNow: "Ahora", .diagOnNextConnect: "En próxima conexión", .diagDefaultDNS: "8.8.8.8 (predeterminado)",
         .setupFailed: "No se pudo configurar la VPN", .selectedServer: "Servidor seleccionado", .ping: "Ping",
         .status: "Estado", .country: "País", .ip: "IP", .settings: "Ajustes",
         .sshConnectionFailed: "Error de conexión SSH", .sshHostKeyMismatch: "Clave de host no coincide",
@@ -368,6 +377,7 @@ struct AppCopy {
         .testingTunnel: "Tunnel wird getestet", .profile: "Profil", .authentication: "Authentifizierung",
         .passwordKeychain: "Passwort / Schlüsselbund", .ed25519Key: "Ed25519-Schlüssel", .error: "Fehler",
         .technicalDetails: "Technische Details", .diagnosticsTitle: "Diagnose", .noServer: "Kein Server",
+        .diagLive: "LIVE", .diagSSHConnections: "SSH-Verbindungen", .diagActiveFlows: "Aktive Flows", .diagDownloaded: "Heruntergeladen", .diagUploaded: "Hochgeladen", .diagDNS: "DNS", .diagLocalRulesLine: "%d aktiv · %d blockiert", .diagStopReason: "Grund des Stopps", .diagLastError: "Letzter Fehler", .diagDNSPending: "DNS AUSSTEHEND", .diagLiveNow: "Jetzt aktiv", .diagOnNextConnect: "Beim nächsten Verbinden", .diagDefaultDNS: "8.8.8.8 (Standard)",
         .setupFailed: "VPN konnte nicht eingerichtet werden", .selectedServer: "Ausgewählter Server", .ping: "Ping",
         .status: "Status", .country: "Land", .ip: "IP", .settings: "Einstellungen",
         .sshConnectionFailed: "SSH-Verbindung fehlgeschlagen", .sshHostKeyMismatch: "Host-Key passt nicht",
@@ -426,6 +436,7 @@ struct AppCopy {
         .setupProgress: "セットアップの進行状況", .preparingGateway: "ゲートウェイの準備", .testingTunnel: "トンネルのテスト", .profile: "プロフィール",
         .authentication: "認証", .passwordKeychain: "パスワード / キーチェーン", .ed25519Key: "Ed25519鍵", .error: "エラー",
         .technicalDetails: "技術的な詳細", .diagnosticsTitle: "診断", .noServer: "サーバーなし", .setupFailed: "VPNの設定に失敗しました",
+        .diagLive: "ライブ", .diagSSHConnections: "SSH接続", .diagActiveFlows: "アクティブフロー", .diagDownloaded: "受信", .diagUploaded: "送信", .diagDNS: "DNS", .diagLocalRulesLine: "%d 件有効 · %d 件ブロック", .diagStopReason: "停止理由", .diagLastError: "最後のエラー", .diagDNSPending: "DNS 保留中", .diagLiveNow: "現在", .diagOnNextConnect: "次回接続時", .diagDefaultDNS: "8.8.8.8（デフォルト）",
         .selectedServer: "選択されたサーバー", .ping: "Ping", .status: "ステータス", .country: "国", .ip: "IP", .settings: "設定",
         .sshConnectionFailed: "SSH接続に失敗", .sshHostKeyMismatch: "ホストキーが一致しません", .sshAuthFailed: "認証に失敗",
         .sshTimeout: "接続がタイムアウトしました", .unknownError: "不明なエラー"
@@ -480,6 +491,7 @@ struct AppCopy {
         .active: "已启用", .about: "关于", .version: "版本", .setupProgress: "设置进度", .preparingGateway: "准备网关",
         .testingTunnel: "测试隧道", .profile: "配置文件", .authentication: "认证", .passwordKeychain: "密码 / 钥匙串",
         .ed25519Key: "Ed25519 密钥", .error: "错误", .technicalDetails: "技术详情", .diagnosticsTitle: "诊断", .noServer: "没有服务器",
+        .diagLive: "实时", .diagSSHConnections: "SSH 连接", .diagActiveFlows: "活动流", .diagDownloaded: "已下载", .diagUploaded: "已上传", .diagDNS: "DNS", .diagLocalRulesLine: "%d 条生效 · %d 条拦截", .diagStopReason: "停止原因", .diagLastError: "最近错误", .diagDNSPending: "DNS 待生效", .diagLiveNow: "当前", .diagOnNextConnect: "下次连接时", .diagDefaultDNS: "8.8.8.8（默认）",
         .setupFailed: "VPN 设置失败", .selectedServer: "选定的服务器", .ping: "Ping", .status: "状态", .country: "国家", .ip: "IP",
         .settings: "设置", .sshConnectionFailed: "SSH 连接失败", .sshHostKeyMismatch: "主机密钥不匹配", .sshAuthFailed: "认证失败",
         .sshTimeout: "连接超时", .unknownError: "未知错误"
@@ -542,6 +554,7 @@ struct AppCopy {
         .testingTunnel: "Test du tunnel", .profile: "Profil", .authentication: "Authentification",
         .passwordKeychain: "Mot de passe / Trousseau", .ed25519Key: "Clé Ed25519", .error: "Erreur",
         .technicalDetails: "Détails techniques", .diagnosticsTitle: "Diagnostics", .noServer: "Aucun serveur",
+        .diagLive: "EN DIRECT", .diagSSHConnections: "Connexions SSH", .diagActiveFlows: "Flux actifs", .diagDownloaded: "Téléchargé", .diagUploaded: "Envoyé", .diagDNS: "DNS", .diagLocalRulesLine: "%d actives · %d bloquées", .diagStopReason: "Motif d'arrêt", .diagLastError: "Dernière erreur", .diagDNSPending: "DNS EN ATTENTE", .diagLiveNow: "Actuel", .diagOnNextConnect: "À la prochaine connexion", .diagDefaultDNS: "8.8.8.8 (par défaut)",
         .setupFailed: "Échec de la configuration VPN", .selectedServer: "Serveur sélectionné", .ping: "Ping",
         .status: "Statut", .country: "Pays", .ip: "IP", .settings: "Paramètres",
         .sshConnectionFailed: "Échec de la connexion SSH", .sshHostKeyMismatch: "Clé d'hôte ne correspond pas",
@@ -606,6 +619,7 @@ struct AppCopy {
         .testingTunnel: "Test tunnel", .profile: "Profilo", .authentication: "Autenticazione",
         .passwordKeychain: "Password / Portachiavi", .ed25519Key: "Chiave Ed25519", .error: "Errore",
         .technicalDetails: "Dettagli tecnici", .diagnosticsTitle: "Diagnostica", .noServer: "Nessun server",
+        .diagLive: "IN TEMPO REALE", .diagSSHConnections: "Connessioni SSH", .diagActiveFlows: "Flussi attivi", .diagDownloaded: "Scaricato", .diagUploaded: "Inviato", .diagDNS: "DNS", .diagLocalRulesLine: "%d attive · %d bloccate", .diagStopReason: "Motivo dell'arresto", .diagLastError: "Ultimo errore", .diagDNSPending: "DNS IN ATTESA", .diagLiveNow: "Ora", .diagOnNextConnect: "Alla prossima connessione", .diagDefaultDNS: "8.8.8.8 (predefinito)",
         .setupFailed: "Configurazione VPN fallita", .selectedServer: "Server selezionato", .ping: "Ping",
         .status: "Stato", .country: "Paese", .ip: "IP", .settings: "Impostazioni",
         .sshConnectionFailed: "Connessione SSH fallita", .sshHostKeyMismatch: "Chiave host non corrisponde",
@@ -670,6 +684,7 @@ struct AppCopy {
         .testingTunnel: "Testando túnel", .profile: "Perfil", .authentication: "Autenticação",
         .passwordKeychain: "Senha / Chaveiro", .ed25519Key: "Chave Ed25519", .error: "Erro",
         .technicalDetails: "Detalhes técnicos", .diagnosticsTitle: "Diagnósticos", .noServer: "Sem servidor",
+        .diagLive: "AO VIVO", .diagSSHConnections: "Conexões SSH", .diagActiveFlows: "Fluxos ativos", .diagDownloaded: "Baixado", .diagUploaded: "Enviado", .diagDNS: "DNS", .diagLocalRulesLine: "%d ativas · %d bloqueadas", .diagStopReason: "Motivo da parada", .diagLastError: "Último erro", .diagDNSPending: "DNS PENDENTE", .diagLiveNow: "Agora", .diagOnNextConnect: "Na próxima conexão", .diagDefaultDNS: "8.8.8.8 (padrão)",
         .setupFailed: "Falha na configuração da VPN", .selectedServer: "Servidor selecionado", .ping: "Ping",
         .status: "Status", .country: "País", .ip: "IP", .settings: "Configurações",
         .sshConnectionFailed: "Falha na conexão SSH", .sshHostKeyMismatch: "Chave de host não corresponde",
@@ -728,6 +743,7 @@ struct AppCopy {
         .preparingGateway: "게이트웨이 준비 중", .testingTunnel: "터널 테스트 중", .profile: "프로필", .authentication: "인증",
         .passwordKeychain: "비밀번호 / 키체인", .ed25519Key: "Ed25519 키", .error: "오류", .technicalDetails: "기술적 세부사항",
         .diagnosticsTitle: "진단", .noServer: "서버 없음", .setupFailed: "VPN 설정 실패", .selectedServer: "선택된 서버", .ping: "Ping",
+        .diagLive: "라이브", .diagSSHConnections: "SSH 연결", .diagActiveFlows: "활성 흐름", .diagDownloaded: "다운로드", .diagUploaded: "업로드", .diagDNS: "DNS", .diagLocalRulesLine: "%d개 활성 · %d개 차단", .diagStopReason: "중단 이유", .diagLastError: "마지막 오류", .diagDNSPending: "DNS 대기 중", .diagLiveNow: "현재", .diagOnNextConnect: "다음 연결 시", .diagDefaultDNS: "8.8.8.8 (기본)",
         .status: "상태", .country: "국가", .ip: "IP", .settings: "설정", .sshConnectionFailed: "SSH 연결 실패",
         .sshHostKeyMismatch: "호스트 키 불일치", .sshAuthFailed: "인증 실패", .sshTimeout: "연결 시간 초과", .unknownError: "알 수 없는 오류"
     ]
@@ -787,6 +803,7 @@ struct AppCopy {
         .testingTunnel: "اختبار النفق", .profile: "الملف الشخصي", .authentication: "المصادقة",
         .passwordKeychain: "كلمة المرور / سلسلة المفاتيح", .ed25519Key: "مفتاح Ed25519", .error: "خطأ",
         .technicalDetails: "تفاصيل تقنية", .diagnosticsTitle: "التشخيص", .noServer: "لا يوجد خادم",
+        .diagLive: "مباشر", .diagSSHConnections: "اتصالات SSH", .diagActiveFlows: "التدفقات النشطة", .diagDownloaded: "تم التنزيل", .diagUploaded: "تم الإرسال", .diagDNS: "DNS", .diagLocalRulesLine: "%d نشطة · %d محظورة", .diagStopReason: "سبب التوقف", .diagLastError: "آخر خطأ", .diagDNSPending: "DNS قيد الانتظار", .diagLiveNow: "الآن", .diagOnNextConnect: "عند الاتصال التالي", .diagDefaultDNS: "8.8.8.8 (افتراضي)",
         .setupFailed: "فشل إعداد VPN", .selectedServer: "الخادم المحدد", .ping: "Ping", .status: "الحالة",
         .country: "البلد", .ip: "IP", .settings: "الإعدادات", .sshConnectionFailed: "فشل اتصال SSH",
         .sshHostKeyMismatch: "مفتاح المضيف لا يتطابق", .sshAuthFailed: "فشلت المصادقة",
@@ -849,6 +866,7 @@ struct AppCopy {
         .preparingGateway: "गेटवे तैयार कर रहा है", .testingTunnel: "टनल का परीक्षण", .profile: "प्रोफ़ाइल",
         .authentication: "प्रमाणीकरण", .passwordKeychain: "पासवर्ड / कीचेन", .ed25519Key: "Ed25519 की", .error: "त्रुटि",
         .technicalDetails: "तकनीकी विवरण", .diagnosticsTitle: "डायग्नोस्टिक्स", .noServer: "कोई सर्वर नहीं",
+        .diagLive: "लाइव", .diagSSHConnections: "SSH कनेक्शन", .diagActiveFlows: "सक्रिय फ़्लो", .diagDownloaded: "डाउनलोड", .diagUploaded: "अपलोड", .diagDNS: "DNS", .diagLocalRulesLine: "%d सक्रिय · %d अवरुद्ध", .diagStopReason: "रुकने का कारण", .diagLastError: "अंतिम त्रुटि", .diagDNSPending: "DNS प्रतीक्षित", .diagLiveNow: "अभी", .diagOnNextConnect: "अगले कनेक्शन पर", .diagDefaultDNS: "8.8.8.8 (डिफ़ॉल्ट)",
         .setupFailed: "VPN सेटअप विफल", .selectedServer: "चयनित सर्वर", .ping: "Ping", .status: "स्थिति",
         .country: "देश", .ip: "IP", .settings: "सेटिंग्स", .sshConnectionFailed: "SSH कनेक्शन विफल",
         .sshHostKeyMismatch: "होस्ट की मेल नहीं खाता", .sshAuthFailed: "प्रमाणीकरण विफल",
@@ -911,6 +929,7 @@ struct AppCopy {
         .preparingGateway: "กำลังเตรียมเกตเวย์", .testingTunnel: "กำลังทดสอบอุโมงค์", .profile: "โปรไฟล์",
         .authentication: "การยืนยันตัวตน", .passwordKeychain: "รหัสผ่าน / คลังกุญแจ", .ed25519Key: "คีย์ Ed25519",
         .error: "ข้อผิดพลาด", .technicalDetails: "รายละเอียดทางเทคนิค", .diagnosticsTitle: "การวินิจฉัย",
+        .diagLive: "สด", .diagSSHConnections: "การเชื่อมต่อ SSH", .diagActiveFlows: "โฟลว์ที่ใช้งาน", .diagDownloaded: "ดาวน์โหลด", .diagUploaded: "อัปโหลด", .diagDNS: "DNS", .diagLocalRulesLine: "%d ใช้งาน · %d บล็อก", .diagStopReason: "เหตุผลที่หยุด", .diagLastError: "ข้อผิดพลาดล่าสุด", .diagDNSPending: "DNS รอดำเนินการ", .diagLiveNow: "ตอนนี้", .diagOnNextConnect: "การเชื่อมต่อครั้งถัดไป", .diagDefaultDNS: "8.8.8.8 (ค่าเริ่มต้น)",
         .noServer: "ไม่มีเซิร์ฟเวอร์", .setupFailed: "การตั้งค่า VPN ล้มเหลว", .selectedServer: "เซิร์ฟเวอร์ที่เลือก",
         .ping: "Ping", .status: "สถานะ", .country: "ประเทศ", .ip: "IP", .settings: "ตั้งค่า",
         .sshConnectionFailed: "การเชื่อมต่อ SSH ล้มเหลว", .sshHostKeyMismatch: "คีย์โฮสต์ไม่ตรงกัน",
@@ -975,6 +994,7 @@ struct AppCopy {
         .testingTunnel: "Tunnel test ediliyor", .profile: "Profil", .authentication: "Kimlik doğrulama",
         .passwordKeychain: "Şifre / Anahtar Zinciri", .ed25519Key: "Ed25519 anahtarı", .error: "Hata",
         .technicalDetails: "Teknik ayrıntılar", .diagnosticsTitle: "Tanılama", .noServer: "Sunucu yok",
+        .diagLive: "CANLI", .diagSSHConnections: "SSH bağlantıları", .diagActiveFlows: "Etkin akışlar", .diagDownloaded: "İndirilen", .diagUploaded: "Gönderilen", .diagDNS: "DNS", .diagLocalRulesLine: "%d etkin · %d engelli", .diagStopReason: "Durma nedeni", .diagLastError: "Son hata", .diagDNSPending: "DNS BEKLİYOR", .diagLiveNow: "Şu an", .diagOnNextConnect: "Sonraki bağlantıda", .diagDefaultDNS: "8.8.8.8 (varsayılan)",
         .setupFailed: "VPN kurulumu başarısız", .selectedServer: "Seçilen sunucu", .ping: "Ping", .status: "Durum",
         .country: "Ülke", .ip: "IP", .settings: "Ayarlar", .sshConnectionFailed: "SSH bağlantısı başarısız",
         .sshHostKeyMismatch: "Ana bilgisayar anahtarı eşleşmiyor", .sshAuthFailed: "Kimlik doğrulama başarısız",
@@ -1038,6 +1058,7 @@ struct AppCopy {
         .testingTunnel: "Testowanie tunelu", .profile: "Profil", .authentication: "Uwierzytelnianie",
         .passwordKeychain: "Hasło / Pęklarz kluczy", .ed25519Key: "Klucz Ed25519", .error: "Błąd",
         .technicalDetails: "Szczegóły techniczne", .diagnosticsTitle: "Diagnostyka", .noServer: "Brak serwera",
+        .diagLive: "NA ŻYWO", .diagSSHConnections: "Połączenia SSH", .diagActiveFlows: "Aktywne przepływy", .diagDownloaded: "Pobrano", .diagUploaded: "Wysłano", .diagDNS: "DNS", .diagLocalRulesLine: "%d aktywne · %d zablokowane", .diagStopReason: "Powód zatrzymania", .diagLastError: "Ostatni błąd", .diagDNSPending: "DNS OCZEKUJE", .diagLiveNow: "Teraz", .diagOnNextConnect: "Przy następnym połączeniu", .diagDefaultDNS: "8.8.8.8 (domyślny)",
         .setupFailed: "Konfiguracja VPN nie powiodła się", .selectedServer: "Wybrany serwer", .ping: "Ping",
         .status: "Status", .country: "Kraj", .ip: "IP", .settings: "Ustawienia",
         .sshConnectionFailed: "Połączenie SSH nie powiodło się", .sshHostKeyMismatch: "Klucz hosta nie pasuje",
@@ -1102,6 +1123,7 @@ struct AppCopy {
         .testingTunnel: "Tunnel testen", .profile: "Profiel", .authentication: "Authenticatie",
         .passwordKeychain: "Wachtwoord / Sleutelbos", .ed25519Key: "Ed25519 sleutel", .error: "Fout",
         .technicalDetails: "Technische details", .diagnosticsTitle: "Diagnostiek", .noServer: "Geen server",
+        .diagLive: "LIVE", .diagSSHConnections: "SSH-verbindingen", .diagActiveFlows: "Actieve flows", .diagDownloaded: "Gedownload", .diagUploaded: "Geüpload", .diagDNS: "DNS", .diagLocalRulesLine: "%d actief · %d geblokkeerd", .diagStopReason: "Stopreden", .diagLastError: "Laatste fout", .diagDNSPending: "DNS IN AFWACHTING", .diagLiveNow: "Nu live", .diagOnNextConnect: "Bij volgende verbinding", .diagDefaultDNS: "8.8.8.8 (standaard)",
         .setupFailed: "VPN-configuratie mislukt", .selectedServer: "Geselecteerde server", .ping: "Ping",
         .status: "Status", .country: "Land", .ip: "IP", .settings: "Instellingen",
         .sshConnectionFailed: "SSH-verbinding mislukt", .sshHostKeyMismatch: "Hostsleutel komt niet overeen",
@@ -1164,6 +1186,7 @@ struct AppCopy {
         .preparingGateway: "Đang chuẩn bị cổng", .testingTunnel: "Đang kiểm tra đường hầm", .profile: "Hồ sơ",
         .authentication: "Xác thực", .passwordKeychain: "Mật khẩu / Chìa khóa", .ed25519Key: "Khóa Ed25519",
         .error: "Lỗi", .technicalDetails: "Chi tiết kỹ thuật", .diagnosticsTitle: "Chẩn đoán",
+        .diagLive: "TRỰC TIẾP", .diagSSHConnections: "Kết nối SSH", .diagActiveFlows: "Luồng đang hoạt động", .diagDownloaded: "Đã tải xuống", .diagUploaded: "Đã tải lên", .diagDNS: "DNS", .diagLocalRulesLine: "%d hiệu lực · %d chặn", .diagStopReason: "Lý do dừng", .diagLastError: "Lỗi gần nhất", .diagDNSPending: "DNS CHỜ ÁP DỤNG", .diagLiveNow: "Hiện tại", .diagOnNextConnect: "Kết nối lần sau", .diagDefaultDNS: "8.8.8.8 (mặc định)",
         .noServer: "Không có server", .setupFailed: "Thiết lập VPN thất bại", .selectedServer: "Server đã chọn",
         .ping: "Ping", .status: "Trạng thái", .country: "Quốc gia", .ip: "IP", .settings: "Cài đặt",
         .sshConnectionFailed: "Kết nối SSH thất bại", .sshHostKeyMismatch: "Khóa host không khớp",
