@@ -2,7 +2,6 @@ import Foundation
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case english = "en"
-    case russian = "ru"
     case spanish = "es"
     case german = "de"
     case french = "fr"
@@ -18,6 +17,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case polish = "pl"
     case dutch = "nl"
     case vietnamese = "vi"
+    // Russian is last on purpose: the app is aimed at an international
+    // audience first (owner's decision, Sep 2026).
+    case russian = "ru"
 
     var id: String { rawValue }
 

@@ -596,8 +596,35 @@ function section(id, n, icon, title, body){
   return '<section class="section" id="'+id+'"><h2><span class="item" style="background:rgba(64,115,217,.12);color:'+(SEC_ICONS[icon]||"#4073D9")+'">'+itemSVG(icon)+'</span>'+title+'</h2>'+body+'</section>';
 }
 function mockRow(m){ return '<div class="shots">'+m+'</div>'; }
+// Mock phone-screen strings per language (SVG text labels).
+// Technical labels (STATUS, SESSION, timers, SSH, PING, console lines) stay as-is.
+const MOCK_TEXT = {
+  "en": {"UNPROTECTED": "UNPROTECTED", "PROTECTED": "PROTECTED", "FREE TIME": "FREE TIME", "+3h AD": "+3h AD", "Tap to connect": "Tap to connect", "Tap to disconnect": "Tap to disconnect", "UNLIMITED": "UNLIMITED", "No ads · No limits · Forever": "No ads · No limits · Forever", "IDLE · 0 B/s": "IDLE · 0 B/s"},
+  "ru": {"UNPROTECTED": "НЕ ЗАЩИЩЕНО", "PROTECTED": "ЗАЩИЩЕНО", "FREE TIME": "БЕСПЛАТНОЕ ВРЕМЯ", "+3h AD": "+3Ч РЕКЛАМА", "Tap to connect": "Нажмите для подключения", "Tap to disconnect": "Нажмите для отключения", "UNLIMITED": "БЕЗЛИМИТ", "No ads · No limits · Forever": "Без рекламы · Без лимитов · Навсегда", "IDLE · 0 B/s": "ПРОСТОЙ · 0 Б/с"},
+  "es": {"UNPROTECTED": "SIN PROTECCIÓN", "PROTECTED": "PROTEGIDO", "FREE TIME": "TIEMPO GRATIS", "+3h AD": "+3H ANUNCIO", "Tap to connect": "Toca para conectar", "Tap to disconnect": "Toca para desconectar", "UNLIMITED": "ILIMITADO", "No ads · No limits · Forever": "Sin anuncios · Sin límites · Para siempre", "IDLE · 0 B/s": "INACTIVO · 0 B/s"},
+  "de": {"UNPROTECTED": "UNGESCHÜTZT", "PROTECTED": "GESCHÜTZT", "FREE TIME": "KOSTENLOSE ZEIT", "+3h AD": "+3 STD. WERBUNG", "Tap to connect": "Zum Verbinden tippen", "Tap to disconnect": "Zum Trennen tippen", "UNLIMITED": "UNBEGRENZT", "No ads · No limits · Forever": "Keine Werbung · Keine Limits · Für immer", "IDLE · 0 B/s": "LEERLAUF · 0 B/s"},
+  "ja": {"UNPROTECTED": "未保護", "PROTECTED": "保護済み", "FREE TIME": "無料時間", "+3h AD": "+3時間 広告", "Tap to connect": "タップで接続", "Tap to disconnect": "タップで切断", "UNLIMITED": "無制限", "No ads · No limits · Forever": "広告なし · 制限なし · 永久に", "IDLE · 0 B/s": "待機中 · 0 B/s"},
+  "zh": {"UNPROTECTED": "未受保护", "PROTECTED": "已保护", "FREE TIME": "免费时间", "+3h AD": "+3小时 广告", "Tap to connect": "点按以连接", "Tap to disconnect": "点按以断开", "UNLIMITED": "不限量", "No ads · No limits · Forever": "无广告 · 无限制 · 永久", "IDLE · 0 B/s": "空闲 · 0 B/s"},
+  "fr": {"UNPROTECTED": "NON PROTÉGÉ", "PROTECTED": "PROTÉGÉ", "FREE TIME": "TEMPS GRATUIT", "+3h AD": "+3H PUB", "Tap to connect": "Touchez pour connecter", "Tap to disconnect": "Touchez pour déconnecter", "UNLIMITED": "ILLIMITÉ", "No ads · No limits · Forever": "Sans pub · Sans limites · Pour toujours", "IDLE · 0 B/s": "VEILLE · 0 B/s"},
+  "it": {"UNPROTECTED": "NON PROTETTO", "PROTECTED": "PROTETTO", "FREE TIME": "TEMPO GRATIS", "+3h AD": "+3H PUB", "Tap to connect": "Tocca per connettere", "Tap to disconnect": "Tocca per disconnettere", "UNLIMITED": "ILLIMITATO", "No ads · No limits · Forever": "Niente pubblicità · Nessun limite · Per sempre", "IDLE · 0 B/s": "INATTIVO · 0 B/s"},
+  "pt": {"UNPROTECTED": "SEM PROTEÇÃO", "PROTECTED": "PROTEGIDO", "FREE TIME": "TEMPO GRÁTIS", "+3h AD": "+3H ANÚNCIO", "Tap to connect": "Toque para conectar", "Tap to disconnect": "Toque para desconectar", "UNLIMITED": "ILIMITADO", "No ads · No limits · Forever": "Sem anúncios · Sem limites · Para sempre", "IDLE · 0 B/s": "OCIOSO · 0 B/s"},
+  "ko": {"UNPROTECTED": "보호 안 됨", "PROTECTED": "보호됨", "FREE TIME": "무료 시간", "+3h AD": "+3시간 광고", "Tap to connect": "탭하여 연결", "Tap to disconnect": "탭하여 연결 해제", "UNLIMITED": "무제한", "No ads · No limits · Forever": "광고 없음 · 제한 없음 · 영원히", "IDLE · 0 B/s": "대기 중 · 0 B/s"},
+  "ar": {"UNPROTECTED": "غير محمي", "PROTECTED": "محمي", "FREE TIME": "وقت مجاني", "+3h AD": "+3 ساعات إعلان", "Tap to connect": "انقر للاتصال", "Tap to disconnect": "انقر لقطع الاتصال", "UNLIMITED": "غير محدود", "No ads · No limits · Forever": "بلا إعلانات · بلا حدود · للأبد", "IDLE · 0 B/s": "خامل · 0 B/s"},
+  "hi": {"UNPROTECTED": "असुरक्षित", "PROTECTED": "सुरक्षित", "FREE TIME": "मुफ़्त समय", "+3h AD": "+3 घंटे विज्ञापन", "Tap to connect": "जोड़ने के लिए टैप करें", "Tap to disconnect": "डिस्कनेक्ट के लिए टैप करें", "UNLIMITED": "असीमित", "No ads · No limits · Forever": "कोई विज्ञापन नहीं · कोई सीमा नहीं · हमेशा", "IDLE · 0 B/s": "निष्क्रिय · 0 B/s"},
+  "th": {"UNPROTECTED": "ไม่ได้รับการป้องกัน", "PROTECTED": "ได้รับการป้องกัน", "FREE TIME": "เวลาฟรี", "+3h AD": "+3 ชม. โฆษณา", "Tap to connect": "แตะเพื่อเชื่อมต่อ", "Tap to disconnect": "แตะเพื่อยกเลิกการเชื่อมต่อ", "UNLIMITED": "ไม่จำกัด", "No ads · No limits · Forever": "ไม่มีโฆษณา · ไม่จำกัด · ตลอดไป", "IDLE · 0 B/s": "ว่าง · 0 B/s"},
+  "tr": {"UNPROTECTED": "KORUNMUYOR", "PROTECTED": "KORUNUYOR", "FREE TIME": "ÜCRETSİZ SÜRE", "+3h AD": "+3 SAAT REKLAM", "Tap to connect": "Bağlanmak için dokunun", "Tap to disconnect": "Bağlantıyı kesmek için dokunun", "UNLIMITED": "SINIRSIZ", "No ads · No limits · Forever": "Reklam yok · Limit yok · Sonsuza dek", "IDLE · 0 B/s": "BOŞTA · 0 B/s"},
+  "pl": {"UNPROTECTED": "NIE CHRONIONE", "PROTECTED": "CHRONIONE", "FREE TIME": "DARMOWY CZAS", "+3h AD": "+3G REKLAMA", "Tap to connect": "Dotknij, aby połączyć", "Tap to disconnect": "Dotknij, aby rozłączyć", "UNLIMITED": "BEZ LIMITU", "No ads · No limits · Forever": "Bez reklam · Bez limitów · Na zawsze", "IDLE · 0 B/s": "BEZCZYNNE · 0 B/s"},
+  "nl": {"UNPROTECTED": "NIET BESCHERMD", "PROTECTED": "BESCHERMD", "FREE TIME": "GRATIS TIJD", "+3h AD": "+3U ADVERTENTIE", "Tap to connect": "Tik om te verbinden", "Tap to disconnect": "Tik om te verbreken", "UNLIMITED": "ONBEPERKT", "No ads · No limits · Forever": "Geen advertenties · Geen limieten · Voor altijd", "IDLE · 0 B/s": "INACTIEF · 0 B/s"},
+  "vi": {"UNPROTECTED": "CHƯA ĐƯỢC BẢO VỆ", "PROTECTED": "ĐÃ BẢO VỆ", "FREE TIME": "THỜI GIAN MIỄN PHÍ", "+3h AD": "+3 GIỜ QUẢNG CÁO", "Tap to connect": "Chạm để kết nối", "Tap to disconnect": "Chạm để ngắt kết nối", "UNLIMITED": "KHÔNG GIỚI HẠN", "No ads · No limits · Forever": "Không quảng cáo · Không giới hạn · Mãi mãi", "IDLE · 0 B/s": "RẢNH · 0 B/s"},
+};
+function locMock(kind){
+  const t = MOCK_TEXT[cur] || MOCK_TEXT.en || {};
+  let svg = MOCKS[kind] || '';
+  for (const k in t) { svg = svg.split('>'+k+'</text>').join('>'+t[k]+'</text>'); }
+  return svg;
+}
 function mock(kind, cap){
-  return '<figure class="shot"><div class="device">'+MOCKS[kind]+'</div>'+(cap?'<figcaption>'+cap+'</figcaption>':'')+'</figure>';
+  return '<figure class="shot"><div class="device">'+locMock(kind)+'</div>'+(cap?'<figcaption>'+cap+'</figcaption>':'')+'</figure>';
 }
 
 function spy(){
