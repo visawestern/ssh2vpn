@@ -88,7 +88,7 @@ function apply(){
   for (const k of ORDER) {
     if (typeof T[k] !== "object") continue;
     const o = document.createElement("option");
-    o.value = k; o.textContent = (FLAGS[k]||"") + " " + NAMES[k];
+    o.value = k; o.textContent = NAMES[k];
     sel.appendChild(o);
   }
   sel.value = cur;
