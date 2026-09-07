@@ -307,99 +307,25 @@ final class AppModel: ObservableObject {
 
     init() {
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
+            // Observer runs on queue: .main, so this closure is always on the
+            // main actor in practice — assert it and delegate all state work.
             guard let connection = note.object as? NEVPNConnection else { return }
-            // Ignore chatter from stale/foreign VPN profiles: only our
-            // manager's connection may drive UI state and diagnostics.
-            if let self, !self.vpn.owns(connection) { return }
-            // Pre-invoke stale filter: nothing of ours is running yet, so a
-            // disconnect here is definitionally stale (prefs churn re-posting
-            // DISCONNECTED) — accepting it would clobber a fresh .connecting
-            // and orphan the whole attempt. Real failures always arrive AFTER
-            // startVPNTunnel was invoked, when the flag is set.
-            if connection.status == .disconnected || connection.status == .disconnecting {
-                if let self, !self.vpn.didInvokeStart { return }
-            }
-            // Collapse identical bursts (system double-posts) in the log.
-            // State below still updates, so a repeated status is harmless.
-            let now = Date()
-            if let self, !TunnelLogDedupe.shouldLog(current: connection.status, last: self.lastRawStatus, lastAt: self.lastRawAt, now: now) {
-                return
-            }
-            self?.lastRawStatus = connection.status
-            self?.lastRawAt = now
-            switch connection.status {
-            case .connecting:
-                self?.connection = .connecting
-                ConsoleLogStore.shared.log(level: .ssh, tag: "TUNNEL", message: "PacketTunnel state -> CONNECTING...")
-            case .reasserting:
-                self?.connection = .connecting
-                ConsoleLogStore.shared.log(level: .warning, tag: "TUNNEL", message: "PacketTunnel state -> REASSERTING")
-            case .connected:
-                _ = self?.automation.markConnected()
-                self?.connection = .connected
-                self?.userIntentConnected = true
-                self?.killSwitchAttempts = 0
-                self?.startStatsPolling()
-                self?.attemptStartedAt = nil
-                self?.stallRestartArmed = false
-                self?.lastStallRead = nil
-                self?.stallFrozenCycles = 0
-                self?.stopPhasePolling()
-                ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
-                self?.logExtensionInventory()
-                self?.schedulePostConnectCheck()
-            case .disconnecting:
-                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
-            case .disconnected:
-                if let self, self.stallRestartArmed {
-                    // Expected goodbye from the old tunnel during a stall
-                    // restart; the fresh attempt is already in flight. Consume
-                    // the flag and leave .connecting alone.
-                    self.stallRestartArmed = false
-                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (stale drop from stall restart, new attempt in flight)")
-                } else if let self, self.connection == .connecting, self.isEarlyDeath() {
-                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (early, attempt in flight — diagnosing)")
-                    self.diagnoseEarlyDeathAndMaybeRetry()
-                } else {
-                    self?.connection = .disconnected
-                    self?.stopPhasePolling()
-                    self?.stopStatsPolling()
-                    self?.attemptStartedAt = nil
-                    ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
-                    self?.fetchTunnelDiagnostics()
-                    self?.scheduleZombieTunnelCheck()
-                    // Kill switch (Advanced settings): the tunnel died on its
-                    // own while the user wanted it ON — redial automatically
-                    // with exponential backoff instead of silently dropping
-                    // the phone onto the raw network.
-                    if let self {
-                        if self.userIntentConnected, self.settings.killSwitch {
-                            self.scheduleKillSwitchReconnect()
-                        } else {
-                            self.userIntentConnected = false
-                        }
-                    }
-                }
-            case .invalid:
-                self?.connection = .disconnected
-                self?.stopPhasePolling()
-                self?.attemptStartedAt = nil
-                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION — removing broken profile, tap connect to recreate")
-                self?.repairInvalidProfile()
-            @unknown default:
-                self?.connection = .failed("Unknown VPN state")
-                self?.stopPhasePolling()
-                ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> UNKNOWN")
+            MainActor.assumeIsolated {
+                self?.handleVPNStatusChange(connection)
             }
         }
         ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v1.0.0 Cyber Terminal Logger Initialized")
         // Re-apply the idle-lock whenever the app enters the foreground so the
         // screen stays on for the whole time the user is inside the app.
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.updateIdleTimer()
+            MainActor.assumeIsolated {
+                self?.updateIdleTimer()
+            }
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.updateIdleTimer()
+            MainActor.assumeIsolated {
+                self?.updateIdleTimer()
+            }
         }
         refreshServerMetadata()
         // Load the local server list on launch (instant, no extension needed).
@@ -421,6 +347,93 @@ final class AppModel: ObservableObject {
             let owned = await self?.store.refreshEntitlementClearingIfRevoked() ?? false
             self?.reloadQuota()
             _ = owned
+        }
+    }
+
+    /// Main-actor body of the NEVPNStatusDidChange handler. The observer
+    /// closure (queue: .main) hops here via MainActor.assumeIsolated, so all
+    /// model state mutations stay on the main actor without Sendable dance.
+    private func handleVPNStatusChange(_ connection: NEVPNConnection) {
+        // Ignore chatter from stale/foreign VPN profiles: only our
+        // manager's connection may drive UI state and diagnostics.
+        if !vpn.owns(connection) { return }
+        // Pre-invoke stale filter: nothing of ours is running yet, so a
+        // disconnect here is definitionally stale (prefs churn re-posting
+        // DISCONNECTED) — accepting it would clobber a fresh .connecting
+        // and orphan the whole attempt. Real failures always arrive AFTER
+        // startVPNTunnel was invoked, when the flag is set.
+        if connection.status == .disconnected || connection.status == .disconnecting {
+            if !vpn.didInvokeStart { return }
+        }
+        // Collapse identical bursts (system double-posts) in the log.
+        // State below still updates, so a repeated status is harmless.
+        let now = Date()
+        if !TunnelLogDedupe.shouldLog(current: connection.status, last: lastRawStatus, lastAt: lastRawAt, now: now) {
+            return
+        }
+        lastRawStatus = connection.status
+        lastRawAt = now
+        switch connection.status {
+        case .connecting:
+            self.connection = .connecting
+            ConsoleLogStore.shared.log(level: .ssh, tag: "TUNNEL", message: "PacketTunnel state -> CONNECTING...")
+        case .reasserting:
+            self.connection = .connecting
+            ConsoleLogStore.shared.log(level: .warning, tag: "TUNNEL", message: "PacketTunnel state -> REASSERTING")
+        case .connected:
+            _ = automation.markConnected()
+            self.connection = .connected
+            userIntentConnected = true
+            killSwitchAttempts = 0
+            startStatsPolling()
+            attemptStartedAt = nil
+            stallRestartArmed = false
+            lastStallRead = nil
+            stallFrozenCycles = 0
+            stopPhasePolling()
+            ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
+            logExtensionInventory()
+            schedulePostConnectCheck()
+        case .disconnecting:
+            ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
+        case .disconnected:
+            if stallRestartArmed {
+                // Expected goodbye from the old tunnel during a stall
+                // restart; the fresh attempt is already in flight. Consume
+                // the flag and leave .connecting alone.
+                stallRestartArmed = false
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (stale drop from stall restart, new attempt in flight)")
+            } else if self.connection == .connecting, isEarlyDeath() {
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED (early, attempt in flight — diagnosing)")
+                diagnoseEarlyDeathAndMaybeRetry()
+            } else {
+                self.connection = .disconnected
+                stopPhasePolling()
+                stopStatsPolling()
+                attemptStartedAt = nil
+                ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTED")
+                fetchTunnelDiagnostics()
+                scheduleZombieTunnelCheck()
+                // Kill switch (Advanced settings): the tunnel died on its
+                // own while the user wanted it ON — redial automatically
+                // with exponential backoff instead of silently dropping
+                // the phone onto the raw network.
+                if userIntentConnected, settings.killSwitch {
+                    scheduleKillSwitchReconnect()
+                } else {
+                    userIntentConnected = false
+                }
+            }
+        case .invalid:
+            self.connection = .disconnected
+            stopPhasePolling()
+            attemptStartedAt = nil
+            ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION — removing broken profile, tap connect to recreate")
+            repairInvalidProfile()
+        @unknown default:
+            self.connection = .failed("Unknown VPN state")
+            stopPhasePolling()
+            ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> UNKNOWN")
         }
     }
 
@@ -1154,10 +1167,14 @@ final class AppModel: ObservableObject {
         }
         guard displayTimer == nil else { return }
         displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.tickConnectionTimer()
-            if self.connection != .connected && !self.consoleGraceActive {
-                self.stopDisplayTimer()
+            // Timer runs on the main run loop: assert the main actor, then
+            // do the model tick entirely on it.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.tickConnectionTimer()
+                if self.connection != .connected && !self.consoleGraceActive {
+                    self.stopDisplayTimer()
+                }
             }
         }
     }
@@ -1563,38 +1580,56 @@ private final class VPNController {
             // same save as the rest of the profile so it can never desync.
             Self.applyOnDemandRules(to: manager, enabled: onDemandEnabled)
 
+            // The save callback is @Sendable: expose the non-Sendable locals
+            // as unsafe-sendable shadows here (single main-actor Task inside
+            // is their only consumer) so the closure captures only the safe
+            // shadows.
+            nonisolated(unsafe) let sendableCompletion = completion
+            nonisolated(unsafe) let sendableManager = manager
             manager.saveToPreferences { [weak self] saveError in
-                guard let self else { return }
-                // Save failed (typically: system VPN-consent dialog still
-                // pending on first install) — wait for creation instead of
-                // failing the attempt outright. See waitForProfileCreation.
-                if saveError != nil {
-                    self.pendingCreationCompletion = completion
-                    self.waitForProfileCreation(epoch: epoch, saveError: saveError, budget: RetryBudget())
-                    return
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Save failed (typically: system VPN-consent dialog still
+                    // pending on first install) — wait for creation instead of
+                    // failing the attempt outright. See waitForProfileCreation.
+                    if saveError != nil {
+                        self.pendingCreationCompletion = sendableCompletion
+                        self.waitForProfileCreation(epoch: epoch, saveError: saveError, budget: RetryBudget())
+                        return
+                    }
+                    // CRITICAL FIX (matches VPNConnectionCoordinator): reload
+                    // preferences after save and before start. Without this the
+                    // manager's in-memory state can be out of sync with the network
+                    // extension, producing NEVPNErrorDomain Code=1.
+                    self.reloadAndStart(manager: sendableManager, completion: sendableCompletion)
                 }
-                // CRITICAL FIX (matches VPNConnectionCoordinator): reload
-                // preferences after save and before start. Without this the
-                // manager's in-memory state can be out of sync with the network
-                // extension, producing NEVPNErrorDomain Code=1.
-                self.reloadAndStart(manager: manager, completion: completion)
             }
         }
     }
 
     /// Reloads preferences after a save (keeps the manager in sync with the
     /// network extension — otherwise NEVPNErrorDomain Code=1) and starts.
-    /// Nonisolated: touches only its arguments, so unchecked system callbacks
-    /// can use it without dragging non-Sendable values across isolation.
-    private nonisolated func reloadAndStart(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+    /// MainActor: owns didInvokeStart; the completion callback hops back to
+    /// the main actor before firing so no non-Sendable value crosses
+    /// isolation domains.
+    private func reloadAndStart(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+        nonisolated(unsafe) let sendableCompletion = completion
+        nonisolated(unsafe) let sendableManager = manager
         manager.loadFromPreferences { [weak self] reloadError in
-            guard reloadError == nil else { completion(reloadError); return }
-            self?.didInvokeStart = true
-            do {
-                try manager.connection.startVPNTunnel()
-                completion(nil)
-            } catch {
-                completion(error)
+            // Single main-actor Task is the only consumer of the shadows.
+            Task { @MainActor in
+                guard let self else {
+                    sendableCompletion(reloadError)
+                    return
+                }
+                guard reloadError == nil else { sendableCompletion(reloadError); return }
+                self.didInvokeStart = true
+                do {
+                    try sendableManager.connection.startVPNTunnel()
+                    sendableCompletion(nil)
+                } catch {
+                    sendableCompletion(error)
+                }
             }
         }
     }
@@ -1631,14 +1666,20 @@ private final class VPNController {
             guard let completion = self.pendingCreationCompletion else { return }
             self.pendingCreationCompletion = nil
             guard let manager = self.manager else { completion(saveError); return }
-            let budgetForRetry = budget
+            // RetryBudget is a Sendable value type — a plain copy is enough.
+            let sendableBudget = budget
+            nonisolated(unsafe) let sendableCompletion = completion
+            nonisolated(unsafe) let sendableManager = manager
             manager.saveToPreferences { [weak self] retryError in
-                guard let self, self.startEpoch == epoch else { return }
-                if retryError == nil {
-                    ConsoleLogStore.shared.log(level: .success, tag: "VPN", message: "VPN profile created after waiting")
-                    self.reloadAndStart(manager: manager, completion: completion)
-                } else {
-                    self.waitForProfileCreation(epoch: epoch, saveError: retryError, budget: budgetForRetry)
+                // Non-main callback: hop back before touching controller state.
+                Task { @MainActor in
+                    guard let self, self.startEpoch == epoch else { return }
+                    if retryError == nil {
+                        ConsoleLogStore.shared.log(level: .success, tag: "VPN", message: "VPN profile created after waiting")
+                        self.reloadAndStart(manager: sendableManager, completion: sendableCompletion)
+                    } else {
+                        self.waitForProfileCreation(epoch: epoch, saveError: retryError, budget: sendableBudget)
+                    }
                 }
             }
         }
@@ -1646,8 +1687,7 @@ private final class VPNController {
 
     /// Starts the tunnel on an already-configured manager (reuse path — the
     /// stored configuration already matches, so no save is needed).
-    /// Nonisolated: touches only its arguments (see reloadAndStart).
-    private nonisolated func startTunnelNow(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
+    private func startTunnelNow(manager: NETunnelProviderManager, completion: @escaping (Error?) -> Void) {
         didInvokeStart = true
         do {
             try manager.connection.startVPNTunnel()
@@ -1662,26 +1702,35 @@ private final class VPNController {
     /// recreates the profile from scratch. Used when the system reports
     /// INVALID CONFIGURATION — a wedged profile never heals itself.
     func removeAllProfiles(completion: @escaping () -> Void) {
+        nonisolated(unsafe) let sendableCompletion = completion
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, _ in
-            guard let self else { completion(); return }
-            let mine = (managers ?? []).filter {
-                ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.providerBundleIdentifier
-            }
-            guard !mine.isEmpty else {
-                self.manager = nil
-                self.knownConnection = nil
-                completion()
-                return
-            }
-            let group = DispatchGroup()
-            for m in mine {
-                group.enter()
-                m.removeFromPreferences { _ in group.leave() }
-            }
-            group.notify(queue: .main) { [weak self] in
-                self?.manager = nil
-                self?.knownConnection = nil
-                completion()
+            // Non-main system callback: hop to the main actor (owner of
+            // manager/knownConnection) before mutating controller state.
+            nonisolated(unsafe) let sendableManagers = managers
+            Task { @MainActor in
+                guard let self else { sendableCompletion(); return }
+                let mine = (sendableManagers ?? []).filter {
+                    ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.providerBundleIdentifier
+                }
+                guard !mine.isEmpty else {
+                    self.manager = nil
+                    self.knownConnection = nil
+                    sendableCompletion()
+                    return
+                }
+                let group = DispatchGroup()
+                for m in mine {
+                    group.enter()
+                    m.removeFromPreferences { _ in group.leave() }
+                }
+                group.notify(queue: .main) { [weak self] in
+                    nonisolated(unsafe) let completion = sendableCompletion
+                    Task { @MainActor in
+                        self?.manager = nil
+                        self?.knownConnection = nil
+                        completion()
+                    }
+                }
             }
         }
     }
@@ -1706,53 +1755,56 @@ private final class VPNController {
     /// profiles that were created by earlier versions are removed so we never
     /// end up with several identical VPN profiles.
     private func resolveManager(completion: @escaping (Error?) -> Void) {
+        nonisolated(unsafe) let sendableCompletion = completion
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
-            guard let self = self else { return }
-            if error != nil {
-                // A transient load error shouldn't block a first-time create.
-                self.manager = NETunnelProviderManager()
+            // Non-main system callback: hop to the main actor before
+            // mutating controller state (manager/knownConnection/flags).
+            nonisolated(unsafe) let sendableManagers = managers
+            Task { @MainActor in
+                guard let self = self else { return }
+                if error != nil {
+                    // A transient load error shouldn't block a first-time create.
+                    self.manager = NETunnelProviderManager()
+                    self.knownConnection = self.manager?.connection
+                    sendableCompletion(nil)
+                    return
+                }
+                let isAppProfile: (NETunnelProviderManager) -> Bool = { m in
+                    (m.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.providerBundleIdentifier
+                }
+                let existing = sendableManagers?.first(where: isAppProfile)
+                if let existing {
+                    self.manager = existing
+                } else {
+                    self.manager = NETunnelProviderManager()
+                }
                 self.knownConnection = self.manager?.connection
-                completion(nil)
-                return
-            }
-            let isAppProfile: (NETunnelProviderManager) -> Bool = { m in
-                (m.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == self.providerBundleIdentifier
-            }
-            let existing = managers?.first(where: isAppProfile)
-            if let existing {
-                self.manager = existing
-            } else {
-                self.manager = NETunnelProviderManager()
-            }
-            self.knownConnection = self.manager?.connection
-            // One-time migration (runs exactly once ever, never on every
-            // connect): legacy profiles from the com.sshtunnel era can never
-            // connect again (extension bundle id changed) but still post
-            // status notifications. Remove them a single time.
-            if !Self.legacyCleanupDone {
-                Self.legacyCleanupDone = true
-                let stale = (managers ?? []).filter {
-                    TunnelOwnership.isStaleLegacy(bundleID: ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier)
-                }
-                for s in stale {
-                    s.removeFromPreferences { _ in }
-                }
-                if !stale.isEmpty {
-                    let count = stale.count
-                    Task { @MainActor in
-                        ConsoleLogStore.shared.log(level: .warning, tag: "VPN", message: "Removed \(count) stale com.sshtunnel VPN profile(s) (one-time migration)")
+                // One-time migration (runs exactly once ever, never on every
+                // connect): legacy profiles from the com.sshtunnel era can never
+                // connect again (extension bundle id changed) but still post
+                // status notifications. Remove them a single time.
+                if !Self.legacyCleanupDone {
+                    Self.legacyCleanupDone = true
+                    let stale = (sendableManagers ?? []).filter {
+                        TunnelOwnership.isStaleLegacy(bundleID: ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier)
+                    }
+                    for s in stale {
+                        s.removeFromPreferences { _ in }
+                    }
+                    if !stale.isEmpty {
+                        ConsoleLogStore.shared.log(level: .warning, tag: "VPN", message: "Removed \(stale.count) stale com.sshtunnel VPN profile(s) (one-time migration)")
                     }
                 }
-            }
-            // Delete any leftover duplicates (beyond the first) so the system
-            // settings don't accumulate identical app profiles.
-            if let managers {
-                let dupes = managers.filter(isAppProfile)
-                for dupe in dupes.dropFirst() {
-                    dupe.removeFromPreferences { _ in }
+                // Delete any leftover duplicates (beyond the first) so the system
+                // settings don't accumulate identical app profiles.
+                if let sendableManagers {
+                    let dupes = sendableManagers.filter(isAppProfile)
+                    for dupe in dupes.dropFirst() {
+                        dupe.removeFromPreferences { _ in }
+                    }
                 }
+                sendableCompletion(nil)
             }
-            completion(nil)
         }
     }
 
