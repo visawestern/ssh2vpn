@@ -593,17 +593,19 @@ struct ConnectView: View {
                 .buttonStyle(.plain)
                 .disabled(!model.canWatchAd)
 
-                // Buy Unlimited — shown only while not owned.
+                // Buy Unlimited — shown only while not owned. Compact "$5"
+                // price chip so it fits beside the ad button on narrow screens.
                 Button {
                     model.showPaywall()
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Image(systemName: "infinity")
                             .font(.system(size: 11, weight: .bold))
-                        Text(model.copy.text(.buyUnlimited, price: "$5"))
-                            .font(.openSans(12, weight: .semibold))
+                        Text("$5")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
                     }
                     .foregroundStyle(.white)
+                    .lineLimit(1)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
@@ -612,6 +614,7 @@ struct ConnectView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.buyUnlimited, price: "$5"))
             }
         }
         .padding(.horizontal, 14)
