@@ -1464,6 +1464,14 @@ struct DiagnosticsView: View {
     @State private var showTechnicalDetails = false
     /// Live status snapshot pulled on appear + on every 2s while visible.
     @State private var phase = ""
+    @State private var liveTunnelDNS = ""
+    /// What DNS will become at the NEXT connection (set in the app,
+    /// unapplied until reconnect). Different from liveTunnelDNS when the
+    /// user switches a preset while connected.
+    private var freshTunnelDNS: String {
+        let resolved = model.settings.resolvedDNSServers
+        return resolved.isEmpty ? "8.8.8.8 (default)" : resolved.joined(separator: ", ")
+    }
     @State private var stopReason = ""
     @State private var lastError = ""
     @State private var pollTask: Task<Void, Never>?
@@ -1527,7 +1535,10 @@ struct DiagnosticsView: View {
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.authentication), value: model.profile.privateKey.isEmpty ? model.copy.text(.passwordKeychain) : model.copy.text(.ed25519Key))
                     Divider().background(Color.octGray05).padding(.horizontal, 16)
-                    profileRow(label: "DNS", value: model.settings.useCustomDNS && !model.settings.validatedDNSServers.isEmpty ? model.settings.validatedDNSServers.joined(separator: ", ") : "8.8.8.8 (default)")
+                    // Show the ACTUAL effective DNS of the last-started
+                    // tunnel (extension-confirmed when polled), and the
+                    // pending choice when a change waits for the next connect.
+                    profileRow(label: "DNS", value: dnsDiagnosticValue)
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -1548,6 +1559,23 @@ struct DiagnosticsView: View {
                             Divider().background(Color.octGray05).padding(.horizontal, 16)
                             profileRow(label: "Last error", value: lastError)
                         }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
+
+                // DNS pending-change note: user picked X while the live
+                // tunnel still runs Y (rules apply on the next connection).
+                if !freshTunnelDNS.isEmpty, freshTunnelDNS != liveTunnelDNS, model.connection == .connected {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("DNS PENDING")
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+                        profileRow(label: "Live now", value: liveTunnelDNS.isEmpty ? "—" : liveTunnelDNS)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        profileRow(label: "On next connect", value: freshTunnelDNS)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
@@ -1594,11 +1622,22 @@ struct DiagnosticsView: View {
         .onDisappear { pollTask?.cancel() }
     }
 
-    private func refreshExtensionStatus() async {
+    /// "current, human" DNS row: live-tunnel value when connected (pulled
+    /// from the extension's status), otherwise the newly configured choice.
+    private var dnsDiagnosticValue: String {
+        if model.connection == .connected && !liveTunnelDNS.isEmpty {
+            return liveTunnelDNS
+        }
+        let resolved = model.settings.resolvedDNSServers
+        return resolved.isEmpty ? "8.8.8.8 (default)" : resolved.joined(separator: ", ")
+    }
+
+        private func refreshExtensionStatus() async {
         let status = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .status, timeout: 2)
         guard !Task.isCancelled else { return }
         phase = status["phase"] ?? ""
         stopReason = status["stopReason"] ?? ""
+        liveTunnelDNS = status["dns"] ?? ""
         let errRsp = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .lastError, timeout: 2)
         if !Task.isCancelled { lastError = errRsp["error"] ?? "none" }
     }

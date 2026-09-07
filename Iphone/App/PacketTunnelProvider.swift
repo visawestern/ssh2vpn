@@ -69,7 +69,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                  "upBytes": "\((self?.transport as? RelayTransport)?.byteTotals().up ?? 0)",
                  "downBytes": "\((self?.transport as? RelayTransport)?.byteTotals().down ?? 0)",
                  "proto": self?.packetLoop?.protoSummary ?? "none",
-                 "lastReadAgo": lastReadAgo]
+                 "lastReadAgo": lastReadAgo,
+                // Effective DNS upstream for the live tunnel — Diagnostics can
+                // now show the REAL resolver rather than reading the app's
+                // settings copy.
+             "dns": (self?.transport as? RelayTransport).map { $0.dnsUpstreamForStatus } ?? "8.8.8.8"]
             },
             errorProvider: { [weak self] in
                 ["error": self?.lastRuntimeError ?? "none"]
@@ -1050,6 +1054,8 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     func sshConnectionCount() -> Int { pool.connectionCount }
     func activeChannelCount() -> Int { pool.snapshotInFlight().reduce(0, +) }
     func byteTotals() -> (up: Int, down: Int) { (stateMachine.totalUpBytes, stateMachine.totalDownBytes) }
+    /// Effective upstream DNS the live tunnel is using (shown on Diagnostics).
+    var dnsUpstreamForStatus: String { dnsUpstream }
     /// Dropped-packet ledger for the 30s journal (reset each sweep): QUIC and
     /// other non-DNS UDP would spam per-packet, so they aggregate here.
     private var droppedUDPNonDNS = 0
