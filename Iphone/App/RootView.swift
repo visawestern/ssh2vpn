@@ -678,14 +678,19 @@ struct WorldMapView: View {
     @EnvironmentObject private var model: AppModel
     @State private var isPulsing = false
 
-    /// Geographic coordinates -> normalized [0...1] map position, clamped to
-    /// the frame so geo data can never push a dot off the map. Recomputed
-    /// from the LIVE map size on every relayout, so rotating the device
-    /// re-projects every server dot onto the new map dimensions.
+    /// Geographic coordinates -> on-screen map position. The asset's drawn
+    /// map occupies a content box inside its 1920x954 canvas (transparent
+    /// margins around it), so the lat/lon is projected onto that measured
+    /// content box and then mapped onto the live map frame — recalculated
+    /// from the current map size on every relayout (rotation included).
     private static func mapPosition(lon: Double, lat: Double, mapWidth: CGFloat, mapHeight: CGFloat) -> CGPoint {
+        let canvasW = 1920.0, canvasH = 954.0
+        let contentX = 6.0, contentY = 18.0, contentW = 1814.0, contentH = 880.0
         let lonNorm = min(max((lon + 180.0) / 360.0, 0.0), 1.0)
         let latNorm = min(max((90.0 - lat) / 180.0, 0.0), 1.0)
-        return CGPoint(x: lonNorm * mapWidth, y: latNorm * mapHeight)
+        let x = (contentX + lonNorm * contentW) / canvasW * mapWidth
+        let y = (contentY + latNorm * contentH) / canvasH * mapHeight
+        return CGPoint(x: x, y: y)
     }
 
     var body: some View {
