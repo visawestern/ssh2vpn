@@ -228,10 +228,14 @@ struct ConnectView: View {
 
                 Spacer(minLength: 8)
 
-                // Free-time quota + rewarded-ad refill (stub ad for now)
-                quotaBar
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, vSize == .compact ? 6 : 10)
+                // Free-time quota + rewarded-ad refill (stub ad for now).
+                // The whole card is hidden once Unlimited is owned — the
+                // entitlement is re-checked on every app launch.
+                if !model.isUnlimited {
+                    quotaBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, vSize == .compact ? 6 : 10)
+                }
 
                 // Selected Location Card
                 selectedLocationCard
@@ -551,17 +555,15 @@ struct ConnectView: View {
 
     private var quotaBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.isUnlimited ? "infinity" : "hourglass")
+            Image(systemName: "hourglass")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(model.isUnlimited ? Color.sec50 : (model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25)))
+                .foregroundStyle(model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(model.isUnlimited
-                     ? model.copy.text(.unlimitedBadge)
-                     : model.copy.text(.freeTimeLeft))
+                Text(model.copy.text(.freeTimeLeft))
                     .font(.openSans(10, weight: .semibold))
                     .foregroundStyle(Color.octGray40)
-                Text(model.isUnlimited ? "∞" : formatTime(model.remainingQuotaSeconds))
+                Text(formatTime(model.remainingQuotaSeconds))
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Color.octGray100)
             }
@@ -570,57 +572,53 @@ struct ConnectView: View {
 
             // Buy (unlimited) — icon-only, no label, next to the ad button so
             // all monetization lives in this one row. Spinner while a purchase
-            // is in flight (StoreKit sandbox can hang). Hidden once owned.
-            if !model.isUnlimited {
-                Button {
-                    model.showPaywall()
-                } label: {
-                    Group {
-                        if model.store.isPurchasing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "bag.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
+            // is in flight (StoreKit sandbox can hang).
+            Button {
+                model.showPaywall()
+            } label: {
+                Group {
+                    if model.store.isPurchasing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "bag.fill")
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(Color.prim50)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(Color.prim50.opacity(0.12))
-                    )
                 }
-                .buttonStyle(HeaderIconButtonStyle())
-                .accessibilityLabel(model.copy.text(.buyUnlimited))
-                .disabled(model.store.isPurchasing)
+                .foregroundStyle(Color.prim50)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(Color.prim50.opacity(0.12))
+                )
             }
+            .buttonStyle(HeaderIconButtonStyle())
+            .accessibilityLabel(model.copy.text(.buyUnlimited))
+            .disabled(model.store.isPurchasing)
 
-            // Rewarded ad refill — only when the user hasn't bought unlimited.
-            if !model.isUnlimited {
-                Button { model.watchAd() } label: {
-                    HStack(spacing: 5) {
-                        if model.adPlaying {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "play.rectangle.fill")
-                                .font(.system(size: 12))
-                        }
-                        Text(model.adPlaying ? "…" : adButtonText)
-                            .font(.openSans(12, weight: .semibold))
+            // Rewarded ad refill.
+            Button { model.watchAd() } label: {
+                HStack(spacing: 5) {
+                    if model.adPlaying {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 12))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        (model.canWatchAd ? Color.sec50 : Color.octGray40),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
+                    Text(model.adPlaying ? "…" : adButtonText)
+                        .font(.openSans(12, weight: .semibold))
                 }
-                .buttonStyle(.plain)
-                .disabled(!model.canWatchAd)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    (model.canWatchAd ? Color.sec50 : Color.octGray40),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
             }
+            .buttonStyle(.plain)
+            .disabled(!model.canWatchAd)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -1140,66 +1138,37 @@ struct SettingsViewNew: View {
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 8)
                         } else {
-                            HStack(spacing: 14) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(model.copy.text(.buyUnlimitedPrice, price: "$5"))
-                                        .font(.openSans(15, weight: .bold))
-                                        .foregroundStyle(Color.octGray100)
-                                    Text(model.copy.text(.buyUnlimitedDesc))
-                                        .font(.openSans(12))
-                                        .foregroundStyle(Color.octGray60)
-                                        .lineLimit(2)
-                                }
-                                Spacer()
-                                Button(action: { model.showPaywall() }) {
-                                    HStack(spacing: 6) {
-                                        if model.store.isPurchasing {
-                                            ProgressView().scaleEffect(0.7)
-                                        } else {
-                                            Image(systemName: "infinity")
-                                                .font(.system(size: 12))
-                                        }
-                                        Text(model.store.isPurchasing
-                                             ? model.copy.text(.purchasing)
-                                             : model.copy.text(.buyUnlimited, price: "$5"))
-                                            .font(.openSans(12, weight: .semibold))
+                            // Buy button — price ($5) shown right in the button;
+                            // no separate price line, no rewarded-ad button here.
+                            Button(action: { model.showPaywall() }) {
+                                HStack(spacing: 6) {
+                                    if model.store.isPurchasing {
+                                        ProgressView().scaleEffect(0.7)
+                                    } else {
+                                        Image(systemName: "infinity")
+                                            .font(.system(size: 12))
                                     }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 9)
-                                    .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(model.store.isPurchasing)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
-
-                            // Free-time earned via rewarded ad — lives here
-                            // now that the main screen has no quota bar.
-                            Button { model.watchAd() } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: model.adPlaying ? "hourglass" : "play.rectangle.fill")
-                                        .font(.system(size: 13, weight: .semibold))
-                                    Text(model.adPlaying ? "…" : settingsAdButtonText)
+                                    Text(model.store.isPurchasing
+                                         ? model.copy.text(.purchasing)
+                                         : model.copy.text(.buyUnlimited, price: "$5"))
                                         .font(.openSans(12, weight: .semibold))
-                                    Spacer()
-                                    if !model.adPlaying {
-                                        Text(formatTime(model.remainingQuotaSeconds))
-                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                            .foregroundStyle(Color.octGray60)
-                                    }
                                 }
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background((model.canWatchAd ? Color.sec50 : Color.octGray40),
-                                            in: RoundedRectangle(cornerRadius: 12))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
                             }
                             .buttonStyle(.plain)
-                            .disabled(!model.canWatchAd)
+                            .disabled(model.store.isPurchasing)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 8)
+
+                            Text(model.copy.text(.buyUnlimitedDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                                .lineLimit(2)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
 
                             // Restore for past buyers.
                             Button {
@@ -1303,15 +1272,6 @@ struct SettingsViewNew: View {
         .padding(14)
         .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
         .contentShape(.rect)
-    }
-
-    /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
-    /// when the 12h bank is full.
-    private var settingsAdButtonText: String {
-        if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
-        let s = Int(model.adCooldownRemaining)
-        if s > 0 { return "\(Int((s + 59) / 60))m" }
-        return "MAX"
     }
 }
 
