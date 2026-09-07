@@ -1109,11 +1109,23 @@ final class AppModel: ObservableObject {
             ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
                 message: "local rule added: \(normalized)\(includeSubdomains ? " (+subdomains)" : "") -> \(kind == .block ? "0.0.0.0" : ip)")
         }
+        pushDNSRulesLive()
         return nil
     }
 
     func removeDNSRule(id: UUID) {
         settings.dnsRules.removeAll { $0.id == id }
+        pushDNSRulesLive()
+    }
+
+    /// If the tunnel is running, hand the new ruleset to the extension now so
+    /// a block/override applies immediately (no reconnect needed). This was
+    /// the long-standing gap: rules only took effect on the next connect, the
+    /// browser kept loading before that.
+    @MainActor
+    private func pushDNSRulesLive() {
+        guard connection == .connected else { return }
+        VPNExtensionAPI.pushDNSRules(settings.dnsRules, to: vpn.diagnosticManager())
     }
 
     // MARK: - Live tunnel stats + ad quota
@@ -1615,6 +1627,7 @@ enum VPNExtensionAPI {
         case serverDelete = "serverDelete"
         case serverSelect = "serverSelect"
         case logs = "logs"
+        case dnsRulesSet = "dnsRulesSet"
     }
 
     /// Sends a command (plus optional args) to the extension and returns its
@@ -1648,6 +1661,18 @@ enum VPNExtensionAPI {
                     continuation.resume(returning: [:])
                 }
             }
+        }
+    }
+
+    /// Pushes the current local DNS rules to the extension so they take
+    /// effect immediately, without waiting for the next reconnect. Safe to
+    /// call only while the tunnel is connected (it no-ops otherwise).
+    @MainActor
+    static func pushDNSRules(_ rules: [DNSBlocklistEntry], to manager: NETunnelProviderManager?) {
+        let list = DNSBlocklistEntry.encodeList(rules)
+        let args: [String: Any] = ["rules": list]
+        Task {
+            _ = await call(from: manager, cmd: .dnsRulesSet, args: args)
         }
     }
 

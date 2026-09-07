@@ -48,7 +48,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     // The pure dispatch logic lives in TunnelAppMessageRouter (VPNCore) and is
     // unit-tested there. This override just bridges the system callback to it.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        let router = TunnelAppMessageRouter(
+        var router = TunnelAppMessageRouter(
             serverStore: serverStore,
             statusProvider: { [weak self] in
                 let lastReadAgo: String
@@ -73,13 +73,23 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 // Effective DNS upstream for the live tunnel — Diagnostics can
                 // now show the REAL resolver rather than reading the app's
                 // settings copy.
-             "dns": (self?.transport as? RelayTransport).map { $0.dnsUpstreamForStatus } ?? "8.8.8.8"]
+             "dns": (self?.transport as? RelayTransport).map { $0.dnsUpstreamForStatus } ?? "8.8.8.8",
+                // Live local-filter state so Diagnostics (and the user) can
+                // confirm a ruleset is ACTIVE even when no query is in-flight.
+             "dnsRules": "\((self?.transport as? RelayTransport).map { $0.dnsFilterStatus.rules } ?? 0)",
+             "dnsBlocked": "\((self?.transport as? RelayTransport).map { $0.dnsFilterStatus.blocked } ?? 0)",
+             "dnsCacheHits": "\((self?.transport as? RelayTransport).map { $0.dnsFilterStatus.cacheHits } ?? 0)"]
             },
             errorProvider: { [weak self] in
                 ["error": self?.lastRuntimeError ?? "none"]
             },
             logProvider: { ConsoleLogStore.shared.entries }
         )
+        // Hot path: while the tunnel runs, the app can swap local DNS rules
+        // live (dnsRulesSet) without a reconnect.
+        router.onDNSRulesChange = { [weak self] rules in
+            self?.applyDNSRulesFromApp(rules)
+        }
         completionHandler?(router.handle(messageData))
     }
 
@@ -429,6 +439,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                           userInfo: [NSLocalizedDescriptionKey: "connection start cancelled by user"])
         completeStart(err, completionHandler: completionHandler)
         return true
+    }
+
+    /// Applies a fresh rules list from the app over the live transport.
+    private func applyDNSRulesFromApp(_ rules: [DNSBlocklistEntry]) {
+        guard let relay = transport as? RelayTransport else { return }
+        relay.applyDNSRules(rules)
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
@@ -1054,8 +1070,25 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     func sshConnectionCount() -> Int { pool.connectionCount }
     func activeChannelCount() -> Int { pool.snapshotInFlight().reduce(0, +) }
     func byteTotals() -> (up: Int, down: Int) { (stateMachine.totalUpBytes, stateMachine.totalDownBytes) }
+
+    /// Local filter snapshot for Diagnostics while the tunnel is live.
+    var dnsFilterStatus: (rules: Int, blocked: Int, cacheHits: Int) {
+        (localFilter.exactBlocks.count + localFilter.subtreeBlocks.count
+            + localFilter.exactOverrides.count + localFilter.subtreeOverrides.count,
+         dnsBlockedCount, dnsCacheHits)
+    }
     /// Effective upstream DNS the live tunnel is using (shown on Diagnostics).
     var dnsUpstreamForStatus: String { dnsUpstream }
+
+    /// Hot swap of the local ruleset while the tunnel runs (the app sends
+    /// dnsRulesSet over the message channel). The relay queue barrier keeps
+    /// this from racing a packet currently in flight.
+    func applyDNSRules(_ rules: [DNSBlocklistEntry]) {
+        relayQueue.async {
+            self.localFilter = LocalDNSFilter(entries: rules)
+            elog(.info, "DNSFILTER", "rules updated live: \(rules.count) entr(ies) — active now, no reconnect needed")
+        }
+    }
     /// Dropped-packet ledger for the 30s journal (reset each sweep): QUIC and
     /// other non-DNS UDP would spam per-packet, so they aggregate here.
     private var droppedUDPNonDNS = 0

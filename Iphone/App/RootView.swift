@@ -1465,6 +1465,8 @@ struct DiagnosticsView: View {
     /// Live status snapshot pulled on appear + on every 2s while visible.
     @State private var phase = ""
     @State private var liveTunnelDNS = ""
+    @State private var liveDNSRules = "0"
+    @State private var liveDNSBlocked = "0"
     /// What DNS will become at the NEXT connection (set in the app,
     /// unapplied until reconnect). Different from liveTunnelDNS when the
     /// user switches a preset while connected.
@@ -1539,6 +1541,10 @@ struct DiagnosticsView: View {
                     // tunnel (extension-confirmed when polled), and the
                     // pending choice when a change waits for the next connect.
                     profileRow(label: "DNS", value: dnsDiagnosticValue)
+                    if model.connection == .connected {
+                        profileRow(label: "Local rules",
+                                   value: "\(liveDNSRules) active · \(liveDNSBlocked) blocked")
+                    }
                 }
                 .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -1638,6 +1644,8 @@ struct DiagnosticsView: View {
         phase = status["phase"] ?? ""
         stopReason = status["stopReason"] ?? ""
         liveTunnelDNS = status["dns"] ?? ""
+        liveDNSRules = status["dnsRules"] ?? "0"
+        liveDNSBlocked = status["dnsBlocked"] ?? "0"
         let errRsp = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .lastError, timeout: 2)
         if !Task.isCancelled { lastError = errRsp["error"] ?? "none" }
     }

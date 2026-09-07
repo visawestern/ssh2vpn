@@ -14,6 +14,8 @@ public struct TunnelAppMessageRouter {
     public var statusProvider: () -> [String: String]
     public var errorProvider: () -> [String: String]
     public var logProvider: () -> [ConsoleLogEntry]
+    /// Called when the app pushes a fresh dnsRules list live (dnsRulesSet).
+    public var onDNSRulesChange: ([DNSBlocklistEntry]) -> Void = { _ in }
 
     public init(
         serverStore: TunnelServerStore,
@@ -81,6 +83,14 @@ public struct TunnelAppMessageRouter {
             return handleServerDelete(args: args)
         case "serverSelect":
             return handleServerSelect(args: args)
+        /// Encryption-free hot-path call from the APP while connected: the new
+        /// local rules list (block/override/scope) applied to the running
+        /// tunnel now without waiting for the next connect. "Nothing" for a
+        /// given domain goes upstream once this lands.
+        case "dnsRulesSet":
+            let rules: [DNSBlocklistEntry] = (args?["rules"] as? String).map { DNSBlocklistEntry.decodeList(from: $0) } ?? []
+            onDNSRulesChange(rules)
+            return Response(ok: true, data: ["count": "\(rules.count)"])
         case "logs":
             return handleLogs(args: args)
         default:
