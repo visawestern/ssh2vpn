@@ -86,6 +86,7 @@
 		A20000010000000000000040 /* ServerMetadataResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMetadataResolver.swift; sourceTree = "<group>"; };
 		A20000010000000000000041 /* HackerConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HackerConsoleSidebarView.swift; sourceTree = "<group>"; };
 		A20000010000000000000042 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
+		A20000010000000000000050 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
 		C40000010000000000000001 /* gateway.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ../Gateway/gateway.py; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -130,6 +131,7 @@
 				A20000010000000000000040 /* ServerMetadataResolver.swift */,
 				A20000010000000000000041 /* HackerConsoleSidebarView.swift */,
 				A20000010000000000000042 /* StoreManager.swift */,
+				A20000010000000000000050 /* StoreKitConfig.storekit */,
 				A20000010000000000000005 /* Info.plist */,
 				A20000010000000000000009 /* SSH2VPN.entitlements */,
 				A20000010000000000000011 /* Copy.swift */,

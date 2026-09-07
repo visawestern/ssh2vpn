@@ -1,0 +1,38 @@
+{
+  "identifier" : "SSH2VPN StoreKit Config",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "d3c586c3-6e13-4cb6-b0a6-1784cdc6ad29",
+      "localizations" : [
+        {
+          "description" : "One-time purchase — removes ads and time limits forever.",
+          "displayName" : "Unlimited",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Разовая покупка — убирает рекламу и ограничения по времени навсегда.",
+          "displayName" : "Безлимит",
+          "locale" : "ru_RU"
+        }
+      ],
+      "productID" : "com.sshtunnel.unlimited",
+      "referenceName" : "Unlimited",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
