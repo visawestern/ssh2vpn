@@ -29,7 +29,11 @@ final class VPSSupplierTests: XCTestCase {
     func testEveryPartnerEntryHasNonEmptyDisplayFields() {
         for s in VPSSupplierCatalog.all where s.kind == .partner {
             XCTAssertFalse(s.name.isEmpty, "\(s.id): empty name")
+            // Price is a bare amount ("$4"); the "/mo" wording lives in the
+            // localized vpsPriceFrom/vpsSub* copy templates.
             XCTAssertFalse(s.price.isEmpty, "\(s.id): empty price")
+            XCTAssertFalse(s.price.contains("/"), "\(s.id): price must be a bare amount, got \(s.price)")
+            XCTAssertTrue(s.subtitle.hasPrefix("vpsSub"), "\(s.id): subtitle must be a vpsSub* copy key")
         }
     }
 

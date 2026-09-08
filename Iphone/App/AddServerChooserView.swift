@@ -173,12 +173,12 @@ private struct PartnerCard: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    Text(supplier.subtitle)
+                    Text(subtitleText)
                         .font(.openSans(12))
                         .foregroundStyle(Color.octGray60)
                         .lineLimit(1)
                     HStack(spacing: 6) {
-                        Text(supplier.price)
+                        Text(model.copy.text(.vpsPriceFrom, price: supplier.price))
                             .font(.openSans(12, weight: .medium))
                             .foregroundStyle(Color.sec50)
                         if let bonus = bonusText {
@@ -216,6 +216,22 @@ private struct PartnerCard: View {
         case "hostinger": return model.copy.text(.vpsBonusHostinger)
         default: return nil
         }
+    }
+
+    /// Catalog subtitles are per-supplier copy keys ({price} template inside).
+    private var subtitleText: String {
+        let key: CopyKey
+        switch supplier.id {
+        case "digitalocean": key = .vpsSubDigitalOcean
+        case "vultr": key = .vpsSubVultr
+        case "hostinger": key = .vpsSubHostinger
+        case "contabo": key = .vpsSubContabo
+        case "linode": key = .vpsSubLinode
+        case "interserver": key = .vpsSubInterServer
+        case "cloudways": key = .vpsSubCloudways
+        default: return supplier.subtitle
+        }
+        return model.copy.text(key, price: supplier.price)
     }
 }
 
