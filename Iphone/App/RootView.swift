@@ -168,6 +168,9 @@ struct OctohideTabBar: View {
 struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showAddServer = false
+    /// Destination after the chooser dialog: manual form or paste-import.
+    @State private var showManualEntry = false
+    @State private var showCredentialImport = false
     @State private var showLocationsSheet = false
     @State private var showDocsSheet = false
     /// Post-tap cooldown: the power button stays disabled for a fixed window
@@ -262,9 +265,20 @@ struct ConnectView: View {
             }
         }
         .sheet(isPresented: $showAddServer) {
+            AddServerChooserView(
+                onOwnServer: { showManualEntry = true },
+                onImportCredentials: { showCredentialImport = true }
+            )
+            .environmentObject(model)
+        }
+        .sheet(isPresented: $showManualEntry) {
             NavigationStack {
                 AddServerView()
             }
+        }
+        .sheet(isPresented: $showCredentialImport) {
+            ImportCredentialsView()
+                .environmentObject(model)
         }
         .sheet(isPresented: $showLocationsSheet) {
             NavigationStack {
