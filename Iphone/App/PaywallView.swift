@@ -250,11 +250,14 @@ struct PaywallView: View {
     // MARK: - Actions
 
     private func buy() async {
-        guard model.store.product != nil else {
+        // The discount stage must buy the dedicated $3 product; the full stage
+        // buys the regular one. Guard on the specific product so a missing
+        // ASC-side product surfaces as "unavailable" instead of a wrong buy.
+        guard isDiscount ? model.store.discountProduct != nil : model.store.product != nil else {
             showUnavailable = true
             return
         }
-        switch await model.buyUnlimited() {
+        switch await model.buyUnlimited(discount: isDiscount) {
         case .success:
             model.paywallPaid()
         case .failure:

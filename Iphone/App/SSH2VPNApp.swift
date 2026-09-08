@@ -50,6 +50,16 @@ final class AppModel: ObservableObject {
     @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
     /// True while the ad stub is "playing" (disables the button).
     @Published var adPlaying = false
+    /// Real user country (detected while the tunnel is DOWN so the ad SDK
+    /// gets honest geo targeting). Ads are blocked whenever the tunnel is
+    /// up or connecting — the exit country would skew the campaign.
+    @Published var userCountryCode: String?
+
+    /// Rewarded ads are only offered with the tunnel down: through the VPN
+    /// the egress country is the server's, which skews ad geo targeting.
+    var adsAvailable: Bool {
+        connection == .disconnected
+    }
 
     /// StoreKit purchase + entitlement restore for Unlimited.
     let store = StoreManager()
@@ -306,6 +316,12 @@ final class AppModel: ObservableObject {
     }
 
     init() {
+        // TEST MODE: while local StoreKit testing is in progress, the
+        // "discount declined forever" latch would make the $3 offer
+        // untestable across relaunches. Reset it on every DEBUG launch.
+        #if DEBUG
+        UserDefaults.standard.removeObject(forKey: Self.paywallDiscountDeclinedKey)
+        #endif
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
             // Observer runs on queue: .main, so this closure is always on the
             // main actor in practice — assert it and delegate all state work.
@@ -1299,19 +1315,32 @@ final class AppModel: ObservableObject {
     }
 
     /// True when an ad may be creditable (not unlimited, cooldown over,
-    /// bank under the 12h cap).
+    /// bank under the 12h cap, tunnel DOWN so geo targeting is honest).
     var canWatchAd: Bool {
-        !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
+        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
     }
 
     /// Rewarded-ad stub: simulates a 2s ad view, then banks +3h wall-clock
     /// into the SHARED ledger so the kernel honors it. Real ad SDK slots in
     /// here later — only this function changes.
+    ///
+    /// Geo rule: the user's real country is resolved through the SAME geo
+    /// endpoints the server list uses, but ONLY while the tunnel is down
+    /// (adsAvailable gate) — through the VPN the egress country would be
+    /// the server's, skewing the ad network's country targeting. CAS.AI
+    /// then serves country-matched demand to the detected region.
     func watchAd() {
         guard canWatchAd else { return }
         adPlaying = true
         ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (STUB — 2s simulated view)")
         Task { @MainActor [weak self] in
+            // Resolve the user's real country through the un-tunneled
+            // interface BEFORE crediting — the ad SDK uses it for country
+            // targeting (CAS.AI serves region-matched demand).
+            if let code = await ServerMetadataResolver.resolveOwnCountry() {
+                self?.userCountryCode = code
+                ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "ad geo targeting: user country \(code) (tunnel down)")
+            }
             try? await Task.sleep(for: .seconds(2))
             guard let self else { return }
             self.adPlaying = false
@@ -1335,16 +1364,19 @@ final class AppModel: ObservableObject {
         _ = QuotaLedgerStore().save(quota)
     }
 
-    /// Triggered from the Settings Unlimited card. Buys `com.sshtunnel.unlimited`
-    /// and, on success, sets the shared ledger to unlimited (kernel honors it).
-    /// Returns the StoreKit outcome so callers can react to cancellation (e.g.
-    /// show the discounted follow-up offer).
-    func buyUnlimited() async -> StoreManager.PurchaseOutcome {
-        let outcome = await store.purchaseUnlimited()
+    /// Triggered from the Settings Unlimited card or the paywall. Buys
+    /// `com.sshtunnel.unlimited` ($5) or `com.sshtunnel.unlimited.discount`
+    /// ($3 one-time offer) and, on success, sets the shared ledger to
+    /// unlimited (kernel honors it). Returns the StoreKit outcome so callers
+    /// can react to cancellation (e.g. show the discounted follow-up offer).
+    func buyUnlimited(discount: Bool = false) async -> StoreManager.PurchaseOutcome {
+        let outcome = await discount ? store.purchaseDiscount() : store.purchaseUnlimited()
         switch outcome {
         case .success:
             reloadQuota()
-            ConsoleLogStore.shared.log(level: .success, tag: "IAP", message: "unlimited purchased and applied")
+            ConsoleLogStore.shared.log(level: .success, tag: "IAP",
+                                       message: discount ? "unlimited (discount $3) purchased and applied"
+                                                          : "unlimited purchased and applied")
         case .failure(let msg):
             ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(msg)")
         case .userCancelled, .pending:

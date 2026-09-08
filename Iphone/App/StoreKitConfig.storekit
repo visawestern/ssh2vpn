@@ -23,6 +23,26 @@
       "productID" : "com.sshtunnel.unlimited",
       "referenceName" : "Unlimited",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "3.00",
+      "familyShareable" : false,
+      "internalID" : "d3c586c3-6e13-4cb6-b0a6-1784cdc6ad30",
+      "localizations" : [
+        {
+          "description" : "One-time offer — removes ads and time limits forever.",
+          "displayName" : "Unlimited Offer",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Одноразовое предложение — убирает рекламу и ограничения по времени навсегда.",
+          "displayName" : "Безлимит со скидкой",
+          "locale" : "ru_RU"
+        }
+      ],
+      "productID" : "com.sshtunnel.unlimited.discount",
+      "referenceName" : "Unlimited Discount",
+      "type" : "NonConsumable"
     }
   ],
   "settings" : {

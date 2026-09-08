@@ -9,8 +9,14 @@ import VPNCore
 @MainActor
 final class StoreManager: ObservableObject {
     static let unlimitedProductID = "com.sshtunnel.unlimited"
+    /// One-time $3 offer product — same entitlement as the full-price one,
+    /// bought only from the paywall's discount stage.
+    static let discountProductID = "com.sshtunnel.unlimited.discount"
+    /// Any of these product IDs grants Unlimited.
+    static let entitledProductIDs: Set<String> = [unlimitedProductID, discountProductID]
 
     @Published private(set) var product: Product?
+    @Published private(set) var discountProduct: Product?
     @Published private(set) var isPurchasing = false
 
     private var lastError: String?
@@ -39,7 +45,7 @@ final class StoreManager: ObservableObject {
         Task { [weak self] in
             for await result in Transaction.updates {
                 guard case .verified(let transaction) = result,
-                      transaction.productID == Self.unlimitedProductID else { continue }
+                      Self.entitledProductIDs.contains(transaction.productID) else { continue }
                 await transaction.finish()
                 self?.applyUnlimited()
             }
@@ -47,11 +53,9 @@ final class StoreManager: ObservableObject {
     }
 
     func loadProduct() async {
-        guard let p = try? await Product.products(for: [Self.unlimitedProductID]).first else {
-            product = nil
-            return
-        }
-        product = p
+        let products = (try? await Product.products(for: [Self.unlimitedProductID, Self.discountProductID])) ?? []
+        product = products.first { $0.id == Self.unlimitedProductID }
+        discountProduct = products.first { $0.id == Self.discountProductID }
     }
 
     /// Refreshes the ledger's `unlimited` flag from App Store transactions.
@@ -63,7 +67,7 @@ final class StoreManager: ObservableObject {
         var owned = false
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
-            if transaction.productID == Self.unlimitedProductID {
+            if Self.entitledProductIDs.contains(transaction.productID) {
                 owned = true
             }
         }
@@ -95,6 +99,16 @@ final class StoreManager: ObservableObject {
     /// unavailable product — the old `String?` conflated "no product loaded"
     /// with success and silently ate failures.
     func purchaseUnlimited() async -> PurchaseOutcome {
+        await purchase(product)
+    }
+
+    /// Buys the one-time $3 discount product (same Unlimited entitlement).
+    /// Only reachable from the paywall's discount stage.
+    func purchaseDiscount() async -> PurchaseOutcome {
+        await purchase(discountProduct)
+    }
+
+    private func purchase(_ product: Product?) async -> PurchaseOutcome {
         guard let product else {
             let msg = lastError ?? "product not loaded"
             return .failure(msg)
