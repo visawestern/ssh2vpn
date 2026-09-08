@@ -316,12 +316,10 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        // TEST MODE: while local StoreKit testing is in progress, the
-        // "discount declined forever" latch would make the $3 offer
-        // untestable across relaunches. Reset it on every DEBUG launch.
-        #if DEBUG
+        // TEMPORARY (owner-requested while testing): reset the "discount
+        // declined forever" latch on every launch so the $3 offer stays
+        // testable across relaunches. Remove before the App Store release.
         UserDefaults.standard.removeObject(forKey: Self.paywallDiscountDeclinedKey)
-        #endif
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
             // Observer runs on queue: .main, so this closure is always on the
             // main actor in practice — assert it and delegate all state work.
