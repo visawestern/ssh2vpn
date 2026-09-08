@@ -14,13 +14,11 @@ struct PaywallView: View {
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
-    /// The price shown in the UI. Full price comes from StoreKit so the UI and
-    /// the Apple payment sheet can never diverge; the $3 discount stage is a
-    /// product-independent offer so it stays a literal. Fallback literals
-    /// match the App Store Connect tier (round $5, no cents).
+    /// The price shown in the UI: always round dollars, no cents. $5 full,
+    /// $3 discount. App Store Connect must use the $5.00 price point so the
+    /// Apple sheet matches exactly.
     private var displayPrice: String? {
-        if isDiscount { return "$3" }
-        return model.store.product?.displayPrice ?? "$5"
+        isDiscount ? "$3" : "$5"
     }
 
     var body: some View {
