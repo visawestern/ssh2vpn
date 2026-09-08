@@ -858,6 +858,11 @@ struct LocationsView: View {
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
     @State private var deleteTargetID: String?
+    /// Add Server in the server list opens the same chooser as the main
+    /// screen (own VPS + partners) — never the bare manual form.
+    @State private var showChooser = false
+    @State private var showManualEntry = false
+    @State private var showCredentialImport = false
 
     var body: some View {
         NavigationStack {
@@ -878,7 +883,9 @@ struct LocationsView: View {
                     }
 
                     // Add Server button
-                    NavigationLink(destination: AddServerView()) {
+                    Button {
+                        showChooser = true
+                    } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 24))
@@ -917,6 +924,23 @@ struct LocationsView: View {
             }
             .sheet(isPresented: $showEdit) {
                 AddServerView(editing: true, editingID: editingServerID)
+                    .environmentObject(model)
+            }
+            .sheet(isPresented: $showChooser) {
+                AddServerChooserView(
+                    onOwnServer: { showManualEntry = true },
+                    onImportCredentials: { showCredentialImport = true }
+                )
+                .environmentObject(model)
+            }
+            .sheet(isPresented: $showManualEntry) {
+                NavigationStack {
+                    AddServerView()
+                }
+                .environmentObject(model)
+            }
+            .sheet(isPresented: $showCredentialImport) {
+                ImportCredentialsView()
                     .environmentObject(model)
             }
             .confirmationDialog(model.copy.text(.deleteServerConfirm),
