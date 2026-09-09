@@ -56,7 +56,10 @@ public struct SSHPoolPolicy: Sendable {
 public final class SSHConnectionPool: @unchecked Sendable {
 
     /// One pooled SSH connection: parent channel + its NIOSSHHandler.
-    public struct Link {
+    /// NIOSSHHandler's Sendable conformance is unavailable (it is a
+    /// channel-scoped, non-thread-safe object); the pool itself serializes
+    /// access via its lock, so the unchecked conformance is accurate here.
+    public struct Link: @unchecked Sendable {
         public let channel: Channel
         public let handler: NIOSSHHandler
         public init(channel: Channel, handler: NIOSSHHandler) {
@@ -66,8 +69,9 @@ public final class SSHConnectionPool: @unchecked Sendable {
     }
 
     /// Async opener for an additional connection. Implemented by the caller
-    /// (which owns the SSHTransportFactory + credentials).
-    public typealias Connector = (@escaping (Result<Link, Error>) -> Void) -> Void
+    /// (which owns the SSHTransportFactory + credentials). Crosses from NIO
+    /// event loops to the relay queue — hence Sendable.
+    public typealias Connector = @Sendable (@escaping (Result<Link, Error>) -> Void) -> Void
 
     private struct Entry {
         var link: Link

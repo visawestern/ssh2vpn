@@ -61,10 +61,10 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear { armClose(after: isDiscount ? 3 : 0) }
-        .onChange(of: model.isPaywallPresented) { presented in
-            if presented { armClose(after: isDiscount ? 3 : 0) }
+        .onChange(of: model.isPaywallPresented) {
+            if model.isPaywallPresented { armClose(after: isDiscount ? 3 : 0) }
         }
-        .onChange(of: model.paywallStage) { _ in
+        .onChange(of: model.paywallStage) {
             // Escalating full -> discount re-locks the close button for 3s.
             armClose(after: isDiscount ? 3 : 0)
         }

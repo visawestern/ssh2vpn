@@ -36,7 +36,7 @@ public final class SSHTransportSession: ChannelInboundHandler, @unchecked Sendab
         context.fireChannelInactive()
     }
 
-    public func send(_ frame: TransportFrame, completion: @escaping (Error?) -> Void = { _ in }) {
+    public func send(_ frame: TransportFrame, completion: @escaping @Sendable (Error?) -> Void = { _ in }) {
         let write = {
             self.channel.writeAndFlush(frame).whenComplete { result in
                 switch result {

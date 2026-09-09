@@ -89,8 +89,10 @@ public struct HackerConsoleSidebarView: View {
     @State private var showCopiedToast: Bool = false
     @State private var showShareSheet: Bool = false
     @State private var shareFileUrl: URL?
-    /// Nil = every category; otherwise only that tag (e.g. "DNSFILTER").
-    @State private var filterTag: String? = nil
+    /// Empty = every tag; otherwise ONLY these tags pass (multi-select).
+    @State private var selectedTags: Set<String> = []
+    /// Whether the custom type-filter dropdown sheet is open.
+    @State private var isTypeDropdownOpen: Bool = false
 
     public init(isOpen: Binding<Bool>) {
         self._isOpen = isOpen
@@ -105,8 +107,17 @@ public struct HackerConsoleSidebarView: View {
     }
 
     private var visibleEntries: [ConsoleLogEntry] {
-        guard let filterTag else { return entries }
-        return entries.filter { $0.tag == filterTag }
+        guard !selectedTags.isEmpty else { return entries }
+        return entries.filter { selectedTags.contains($0.tag) }
+    }
+
+    /// Stable per-tag color: each type keeps its own hue across launches
+    /// (hash → golden-angle rotation over a vivid palette).
+    static func tagColor(_ tag: String) -> Color {
+        var hash: UInt64 = 0
+        for scalar in tag.unicodeScalars { hash = hash &* 31 &+ UInt64(scalar.value) }
+        let hue = Double((hash % 12)) / 12.0
+        return Color(hue: hue, saturation: 0.72, brightness: 0.95)
     }
 
     public var body: some View {
@@ -199,7 +210,9 @@ public struct HackerConsoleSidebarView: View {
 
                 Spacer()
 
-                Text(filterTag == nil ? "\(entries.count) lines" : "\(visibleEntries.count)/\(entries.count) \(filterTag!)")
+                Text(selectedTags.isEmpty
+                     ? "\(entries.count) lines"
+                     : "\(visibleEntries.count)/\(entries.count) \(selectedTags.count) on")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0))
                     .padding(.horizontal, 6)
@@ -281,46 +294,22 @@ public struct HackerConsoleSidebarView: View {
                 Spacer()
             }
 
-            // Type filter: ALL + one chip per distinct tag. Tapping a chip
-            // shows only that category (e.g. DNSFILTER), which is exactly how
-            // you watch the DNS blocklist verdict in isolation.
+            // Type filter: custom dropdown with MULTI-SELECT colored chips.
+            // Each tag has its own stable hue; selection state is shown both
+            // in the collapsed capsule (colored dots) and in the list.
             if !availableTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        filterChip(title: "ALL", tag: nil)
-                        ForEach(availableTags, id: \.self) { tag in
-                            filterChip(title: tag, tag: tag)
-                        }
-                    }
-                }
+                TypeFilterDropdown(
+                    availableTags: availableTags,
+                    selected: $selectedTags,
+                    isOpen: $isTypeDropdownOpen,
+                    color: Self.tagColor
+                )
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(Color(red: 0.03, green: 0.04, blue: 0.07))
-    }
-
-    // MARK: - Filter chip
-    private func filterChip(title: String, tag: String?) -> some View {
-        let isActive = filterTag == tag
-        return Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                filterTag = tag
-            }
-        } label: {
-            Text(title)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(isActive ? Color.black : Color(red: 0.0, green: 0.94, blue: 1.0))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    isActive
-                        ? Color(red: 0.0, green: 0.94, blue: 1.0)
-                        : Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.12),
-                    in: Capsule()
-                )
-        }
-        .buttonStyle(.plain)
+        .zIndex(10)
     }
 
     // MARK: - Terminal Log List
@@ -332,8 +321,9 @@ public struct HackerConsoleSidebarView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("/* SSH2VPN Terminal Logger Initialized */")
                                 .foregroundStyle(Color.gray.opacity(0.7))
-                            Text(filterTag.map { "/* No \"\($0)\" entries yet */" }
-                                 ?? "/* Ready to capture transport events... */")
+                            Text(selectedTags.isEmpty
+                                 ? "/* Ready to capture transport events... */"
+                                 : "/* No entries for the selected types yet */")
                                 .foregroundStyle(Color.gray.opacity(0.7))
                         }
                         .font(.system(size: 11, design: .monospaced))
@@ -353,7 +343,7 @@ public struct HackerConsoleSidebarView: View {
                 .padding(.vertical, 8)
             }
             .background(Color(red: 0.04, green: 0.05, blue: 0.08))
-            .onChange(of: entries.count) { _ in
+            .onChange(of: entries.count) {
                 if autoScroll, let newest = entries.last {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo(newest.id, anchor: .top)
@@ -374,7 +364,7 @@ public struct HackerConsoleSidebarView: View {
 
                 Text("[\(entry.tag)]")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(tagColor(for: entry.level))
+                    .foregroundStyle(Self.tagColor(entry.tag).opacity(0.9))
             }
 
             // Line 2 — the actual parameters / message body
@@ -457,4 +447,146 @@ private struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Multi-select type-filter dropdown (custom, colored chips)
+/// Collapsed: a capsule listing either ALL or the selected type dots.
+/// Expanded: a panel with one colored chip per tag — tap toggles it in the
+/// selection Set; multiple chips may be active at once (AND-free union).
+/// "ALL" clears the selection.
+struct TypeFilterDropdown: View {
+    let availableTags: [String]
+    @Binding var selected: Set<String>
+    @Binding var isOpen: Bool
+    let color: (String) -> Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Collapsed trigger
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    isOpen.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0))
+
+                    if selected.isEmpty {
+                        Text("TYPES: ALL")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0))
+                    } else {
+                        // Colored dots summarize the active selection.
+                        HStack(spacing: 3) {
+                            ForEach(selected.sorted(), id: \.self) { tag in
+                                Circle()
+                                    .fill(color(tag))
+                                    .frame(width: 7, height: 7)
+                            }
+                            Text("TYPES: \(selected.count)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0))
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.7))
+                        .rotationEffect(.degrees(isOpen ? 180 : 0))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.10),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().stroke(Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            // Expanded panel
+            if isOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    // ALL chip (clears the filter)
+                    allChip
+
+                    // Per-type chips, wrapped via FlowLayout, each in its own
+                    // stable hue; selected = filled, unselected = tinted.
+                    FlowLayout(spacing: 6) {
+                        ForEach(availableTags, id: \.self) { tag in
+                            typeChip(tag)
+                        }
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(red: 0.05, green: 0.07, blue: 0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.25), lineWidth: 1)
+                        )
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.top, 6)
+            }
+        }
+    }
+
+    private var allChip: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.12)) {
+                selected.removeAll()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: selected.isEmpty ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 10, weight: .bold))
+                Text("ALL")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+            }
+            .foregroundStyle(selected.isEmpty ? Color.black : Color(red: 0.0, green: 0.94, blue: 1.0))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                selected.isEmpty
+                    ? Color(red: 0.0, green: 0.94, blue: 1.0)
+                    : Color(red: 0.0, green: 0.94, blue: 1.0).opacity(0.12),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func typeChip(_ tag: String) -> some View {
+        let isActive = selected.contains(tag)
+        let c = color(tag)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.12)) {
+                if isActive { selected.remove(tag) } else { selected.insert(tag) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isActive ? "checkmark" : "circle.fill")
+                    .font(.system(size: 8, weight: .black))
+                Text(tag)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+            }
+            .foregroundStyle(isActive ? Color.black : c)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(isActive ? c : c.opacity(0.16), in: Capsule())
+            .overlay(
+                Capsule().stroke(c.opacity(isActive ? 0 : 0.55), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }

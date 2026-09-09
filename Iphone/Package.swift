@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SSH2VPN",
-    platforms: [.iOS(.v16), .macOS(.v10_15)],
+    platforms: [.iOS(.v18), .macOS(.v10_15)],
     products: [
         .library(name: "VPNCore", targets: ["VPNCore"])
     ],

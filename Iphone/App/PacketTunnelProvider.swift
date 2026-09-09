@@ -2,7 +2,7 @@ import Foundation
 import Network
 import NetworkExtension
 import NIOCore
-import NIOSSH
+@preconcurrency import NIOSSH
 import VPNCore
 
 /// Dual-write for extension diagnostics: device console (NSLog, visible in
@@ -14,7 +14,41 @@ private func elog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
     ConsoleLogStore.shared.log(level: level, tag: tag, message: message)
 }
 
-final class PacketTunnelProvider: NEPacketTunnelProvider {
+/// NIOSSH marks its handler's Sendable conformance unavailable (the handler
+/// is pinned to its channel's event loop), which trips NIO's Sendable
+/// generic on the async `handler(type:)` API. The official NIOSSH test
+/// pattern is the sync pipeline accessor — same lookup, no Sendable gate.
+/// Safe here: the start sequence is strictly sequential per channel.
+private func extractSSHHandler(_ channel: Channel) throws -> NIOSSHHandler {
+    try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+}
+
+/// Dials one extra pooled SSH connection and hands a Link to the pool's
+/// connector callback. Uses the sync handler accessor (see above) from the
+/// event-loop-threaded flatMap — the canonical NIOSSH pattern. The final
+/// hop goes through a lock-guarded box because NIO's whenComplete takes a
+/// @Sendable closure while the pool's connector callback is not.
+private func dialPooledLink(factory: SSHTransportFactory,
+                            credentials: SSHCredentials,
+                            completion: @escaping (Result<SSHConnectionPool.Link, Error>) -> Void) {
+    final class CompletionBox: @unchecked Sendable {
+        let fn: (Result<SSHConnectionPool.Link, Error>) -> Void
+        init(_ fn: @escaping (Result<SSHConnectionPool.Link, Error>) -> Void) { self.fn = fn }
+    }
+    let box = CompletionBox(completion)
+    factory.connect(credentials)
+        .flatMap { ch in
+            do {
+                let handler = try ch.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+                return ch.eventLoop.makeSucceededFuture(SSHConnectionPool.Link(channel: ch, handler: handler))
+            } catch {
+                return ch.eventLoop.makeFailedFuture(error)
+            }
+        }
+        .whenComplete { box.fn($0) }
+}
+
+final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var packetLoop: PacketTunnelPacketLoop?
     private var transport: PacketTunnelTransport?
     // Latest runtime failure surfaced by the tunnel (auth, transport, config,
@@ -93,7 +127,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler?(router.handle(messageData))
     }
 
-    override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+    override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping @Sendable (Error?) -> Void) {
         elog(.info, "TUNNEL", "startTunnel BEGIN (relay mode — no root/TUN needed on server)")
         stopLock.lock()
         if startInFlight {
@@ -110,12 +144,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // of blocking work — the "VPN hangs when cancelled" flake. The whole
         // start sequence now runs on a background queue; stopTunnel cancels
         // it at the checkpoints inside runStartSequence.
+        let completion = completionHandler
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.runStartSequence(completionHandler: completionHandler)
+            self?.runStartSequence(completionHandler: completion)
         }
     }
 
-    private func runStartSequence(completionHandler: @escaping (Error?) -> Void) {
+    private func runStartSequence(completionHandler: @escaping @Sendable (Error?) -> Void) {
         tunnelPhase = "begin"
         // KERNEL-side usage gate. The budget is read from the SHARED keychain
         // here in the extension — not trusted from the app — so launching the
@@ -205,7 +240,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                                             username: configuration.username,
                                             password: configuration.password, privateKey: nil)
             let sshChannel = try factory.connect(credentials).wait()
-            let sshHandler = try sshChannel.pipeline.handler(type: NIOSSHHandler.self).wait()
+            let sshHandler = try extractSSHHandler(sshChannel)
             tunnelPhase = "ssh-connected"
             // Cancel checkpoint #1: the user hit disconnect while we were
             // blocking on the SSH connect. Close the parent channel and get
@@ -260,19 +295,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Parallel SSH pool: starts with the one already-authenticated
             // connection, grows on demand (all channels saturated) up to the
             // policy max, and logs every step under the POOL tag.
-            let connector: SSHConnectionPool.Connector = { completion in
-                factory.connect(credentials)
-                    .flatMap { ch in
-                        ch.pipeline.handler(type: NIOSSHHandler.self)
-                            .map { SSHConnectionPool.Link(channel: ch, handler: $0) }
-                    }
-                    .whenComplete { completion($0) }
+            let connector: SSHConnectionPool.Connector = { @Sendable (completion: @escaping (Result<SSHConnectionPool.Link, Error>) -> Void) in
+                dialPooledLink(factory: factory, credentials: credentials, completion: completion)
             }
             let pool = SSHConnectionPool(initial: SSHConnectionPool.Link(channel: sshChannel, handler: sshHandler),
                                          connector: connector)
             elog(.info, "POOL", "ssh pool ready: 1 connection (grows on demand, max 4)")
 
-            let dnsUpstream = configuration.dnsServers.first(where: { !$0.isEmpty }) ?? "8.8.8.8"
             elog(.info, "TUNNEL", "config loaded: dns=\(configuration.dnsServers) rules=\(configuration.dnsRules.count) (blocklist from app)")
             let relay = RelayTransport(factory: factory,
                                        pool: pool,
@@ -407,7 +436,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// start was mid-flight — fires the parked stop completion right after.
     /// Ordering guarantee: the system never sees stop-completed before
     /// start-completed, which is exactly what the old blocking start broke.
-    private func completeStart(_ errorParam: Error?, completionHandler: @escaping (Error?) -> Void) {
+    private func completeStart(_ errorParam: Error?, completionHandler: @escaping @Sendable (Error?) -> Void) {
         var error = errorParam
         stopLock.lock()
         startInFlight = false
@@ -441,7 +470,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// True when the start was cancelled (also finishes the start if so):
     /// the caller closes whatever SSH channel it holds and returns.
-    private func abandonStartIfCancelled(_ completionHandler: @escaping (Error?) -> Void, stage: String) -> Bool {
+    private func abandonStartIfCancelled(_ completionHandler: @escaping @Sendable (Error?) -> Void, stage: String) -> Bool {
         stopLock.lock()
         let cancelled = startCancelled
         stopLock.unlock()
@@ -608,10 +637,10 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
     private var pathMonitor: NWPathMonitor?
     private var stopped = false
 
-    private var receivePacket: ((Data) -> Void)?
-    private var failure: ((Error) -> Void)?
-    private var ready: ((Error?) -> Void)?
-    private var pending = [(packet: Data, completion: (Error?) -> Void)]()
+    private var receivePacket: (@Sendable (Data) -> Void)?
+    private var failure: (@Sendable (Error) -> Void)?
+    private var ready: (@Sendable (Error?) -> Void)?
+    private var pending = [(packet: Data, completion: @Sendable (Error?) -> Void)]()
     private let maxPendingPackets = 512
     private var pendingBytes = 0
     private let maxPendingBytes = 256 * 1024
@@ -627,7 +656,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
         self.factory = try SSHTransportFactory(pinnedOpenSSHHostKey: configuration.hostKey)
     }
 
-    func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void) {
+    func start(receive: @escaping @Sendable (Data) -> Void, failure: @escaping @Sendable (Error) -> Void, ready: @escaping @Sendable (Error?) -> Void) {
         elog(.info, "TRANSPORT", "start() invoked; desired sessions=\(desiredSessionCount)")
         stateQueue.async { [weak self] in
             guard let self else { return }
@@ -704,7 +733,8 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
         let sessionHolder = SessionHolder()
         let handshake = LockedSessionHandshake(nonce: nonce)
         factory.openSession(credentials, command: command, receive: { [weak self] frame in
-            self?.stateQueue.async {
+            guard let self else { return }
+            self.stateQueue.async { [weak self] in
                 guard let self else { return }
                 switch frame.type {
                 case .helloAck:
@@ -736,11 +766,13 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
                 if let packet = try? RawPacketBridge.inboundPacket(from: frame) { self.receivePacket?(packet) }
             }
         }, failure: { [weak self] error in
-            self?.stateQueue.async {
+            guard let self else { return }
+            self.stateQueue.async { [weak self] in
                 self?.handleSessionFailure(error)
             }
         }).whenComplete { [weak self] result in
-            self?.stateQueue.async {
+            guard let self else { return }
+            self.stateQueue.async { [weak self] in
                 guard let self else { return }
                 switch result {
                 case .success(let childSession):
@@ -774,7 +806,7 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
     /// on purpose (same as the loop counters) — informational only.
     var sessionCount: Int { sessions.count }
 
-    func send(packet: Data, completion: @escaping (Error?) -> Void) {
+    func send(packet: Data, completion: @escaping @Sendable (Error?) -> Void) {
         stateQueue.async { [weak self] in
             guard let self else { completion(SSHPacketTunnelError.cancelled); return }
             guard !self.sessions.isEmpty else {
@@ -827,7 +859,8 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
         let delay = ReconnectPolicy(baseDelay: 1, maxDelay: 3600, jitter: 0.2)
             .delay(for: reconnectController.reconnectAttempt, randomUnit: Double.random(in: 0...1))
         let work = DispatchWorkItem { [weak self] in
-            self?.stateQueue.async {
+            guard let self else { return }
+            self.stateQueue.async { [weak self] in
                 guard let self, !self.stopped else { return }
                 self.reconnectWorkItem = nil
                 self.reconnectController.reconnectFired()
@@ -1124,7 +1157,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var droppedParse = 0
     private var lastDroppedDst = "none"
 
-    func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void) {
+    func start(receive: @escaping @Sendable (Data) -> Void, failure: @escaping @Sendable (Error) -> Void, ready: @escaping @Sendable (Error?) -> Void) {
         guard !isStarted else { return }
         isStarted = true
         // SSH is already connected by the caller; flush anything queued.
@@ -1219,7 +1252,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         keepaliveTimer = ka
     }
 
-    func send(packet: Data, completion: @escaping (Error?) -> Void) {
+    func send(packet: Data, completion: @escaping @Sendable (Error?) -> Void) {
         guard isStarted else {
             // SSH not ready yet — queue (bounded) so a burst at connect time
             // doesn't grow memory forever.
@@ -1417,12 +1450,11 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                 guard let self else { return }
                 // demux is per-query local: safe to drive inline here; only
                 // shared-state hops to relayQueue below.
-                var answered: [(RelayFlow, Data)] = []
-                for (f, resp) in demux.receive(bytes) { answered.append((f, resp)) }
+                let answered = demux.receive(bytes)
                 guard !answered.isEmpty else { return }
                 channelRef?.close()
                 guard let id = channelRef.map({ ObjectIdentifier($0 as AnyObject) }) else { return }
-                self.relayQueue.async { [weak self, id] in
+                self.relayQueue.async { [weak self, id, answered] in
                     guard let self else { return }
                     self.dnsInFlight.removeAll { ObjectIdentifier($0) == id }
                     for (f, resp) in answered {

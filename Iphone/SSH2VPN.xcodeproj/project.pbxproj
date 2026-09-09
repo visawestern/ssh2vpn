@@ -402,7 +402,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				OTHER_LDFLAGS = ("$(inherited)", "-ObjC");
 				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -423,7 +423,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				OTHER_LDFLAGS = ("$(inherited)", "-ObjC");
 				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -442,7 +442,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = "App/PacketTunnel-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ssh2vpn.app.packet-tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -459,7 +459,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = "App/PacketTunnel-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.ssh2vpn.app.packet-tunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

@@ -251,8 +251,8 @@ struct ConnectView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { model.startDisplayTimerIfNeeded() }
         .onDisappear { model.stopDisplayTimer() }
-        .onChange(of: model.connection) { newStatus in
-            switch newStatus {
+        .onChange(of: model.connection) {
+            switch model.connection {
             case .connected:
                 model.startDisplayTimerIfNeeded()
             case .disconnected, .failed:
@@ -366,8 +366,7 @@ struct ConnectView: View {
 
     // MARK: - Central Power Button (with arc progress ring)
     private var powerButton: some View {
-        let scale: CGFloat = vSize == .compact ? 0.72 : 1.0
-        return ZStack {
+        ZStack {
             // Animated thin arc ring during connecting
             if case .connecting = model.connection {
                 SpinningArcView()
@@ -985,7 +984,7 @@ struct LocationsView: View {
         // a card mid-connect would split the session (UI points at the new
         // server, the live tunnel still runs the old one).
         let switchLocked = model.connection == .connected || model.connection == .connecting
-        return Button {
+        Button {
             model.selectServer(id: server.id)
             dismiss()
         } label: {
@@ -2429,60 +2428,83 @@ struct InfoDotButtonCompact: View {
 
 /// Wrapping row of small colored chips (capability labels). Keeps preset
 /// rows compact for any chip count and any language width.
+/// Uses the native Layout protocol (iOS 16+) — no captured-var mutation in
+/// alignmentGuide closures (Swift 6 concurrency-clean).
 struct FlowChips: View {
     let chips: [(String, Color)]
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Chips may wrap onto a second line for long translations.
-            LayoutChips(chips: chips)
+        FlowLayout(spacing: 4) {
+            ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                chipView(chip.0, chip.1)
+            }
         }
     }
-    private struct LayoutChips: View {
-        let chips: [(String, Color)]
-        @State private var totalWidth: CGFloat = 0
-        var body: some View {
-            var width: CGFloat = 0
-            var height: CGFloat = 0
-            return GeometryReader { geo in
-                ZStack(alignment: .topLeading) {
-                    Color.clear.frame(width: geo.size.width, height: height).onAppear { totalWidth = geo.size.width }
-                    ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
-                        chipView(chip.0, chip.1)
-                            .padding(.trailing, 4)
-                            .padding(.bottom, 4)
-                            .alignmentGuide(.leading) { d in
-                                if abs(width - d.width) > totalWidth {
-                                    width = 0
-                                    height -= d.height
-                                }
-                                let result = width
-                                if chip == chips.last! {
-                                    width = 0
-                                } else {
-                                    width -= d.width
-                                }
-                                return result
-                            }
-                            .alignmentGuide(.top) { _ in
-                                let result = height
-                                if chip == chips.last! {
-                                    height = 0
-                                }
-                                return result
-                            }
-                    }
-                }
+
+    private func chipView(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+    }
+}
+
+/// Simple left-to-right wrap layout (chat-bubble style).
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.reduce(0) { $0 + $1.height + spacing } - spacing
+        return CGSize(width: max(width, 0), height: max(height, 0))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for index in row.indices {
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(row.sizes[index])
+                )
+                x += row.sizes[index].width + spacing
             }
-            .frame(height: 40)
+            y += row.height + spacing
         }
-        private func chipView(_ text: String, _ color: Color) -> some View {
-            Text(text)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundStyle(color)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.12), in: Capsule())
+    }
+
+    /// Groups subviews into rows that fit the proposed width.
+    private func computeRows(proposal: ProposedViewSize, subviews: Subviews) -> [Row] {
+        let maxWidth = proposal.width ?? subviews.reduce(CGFloat(0)) { $0 + $1.sizeThatFits(.unspecified).width + spacing }
+        var rows: [Row] = []
+        var current = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let next: CGFloat = current.width + (current.indices.isEmpty ? 0 : spacing) + size.width
+            if next > maxWidth, !current.indices.isEmpty {
+                rows.append(current)
+                current = Row()
+            }
+            current.indices.append(index)
+            current.sizes.append(size)
+            current.width += (current.indices.count > 1 ? spacing : 0) + size.width
+            current.height = max(current.height, size.height)
         }
+        if !current.indices.isEmpty { rows.append(current) }
+        return rows
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var sizes: [CGSize] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
     }
 }
 

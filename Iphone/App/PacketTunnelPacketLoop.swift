@@ -2,8 +2,8 @@ import Foundation
 import NetworkExtension
 
 protocol PacketTunnelTransport: AnyObject {
-    func start(receive: @escaping (Data) -> Void, failure: @escaping (Error) -> Void, ready: @escaping (Error?) -> Void)
-    func send(packet: Data, completion: @escaping (Error?) -> Void)
+    func start(receive: @escaping @Sendable (Data) -> Void, failure: @escaping @Sendable (Error) -> Void, ready: @escaping @Sendable (Error?) -> Void)
+    func send(packet: Data, completion: @escaping @Sendable (Error?) -> Void)
     func stop()
 }
 
