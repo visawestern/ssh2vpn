@@ -25,11 +25,11 @@ enum AdsConfig {
     /// CAS "demo" (account manager pending — asleep).
     static let casID = "demo"
 
-    /// Google's official TEST app ID / rewarded ad unit
-    /// (developers.google.com/admob/ios/quick-start). Safe to click, never
-    /// flags the future production account. Replace both with the AdMob
-    /// dashboard values once the app is registered there.
-    static let gadAppID = "ca-app-pub-3940256099942544~1458002511"
+    /// Own AdMob App ID (dashboard-issued). The rewarded ad unit below is
+    /// still Google's TEST unit until the dashboard's own Rewarded ad unit
+    /// ID lands here — test units stay test regardless of the app ID, so
+    /// the button keeps working safely meanwhile.
+    static let gadAppID = "ca-app-pub-1498434981323978~5326656863"
     static let gadRewardedUnitID = "ca-app-pub-3940256099942544/1712485313"
 
     /// AppLovin MAX SDK key — "PENDING" until account approval lands.
