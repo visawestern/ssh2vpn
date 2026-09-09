@@ -610,29 +610,36 @@ struct ConnectView: View {
             .accessibilityLabel(model.copy.text(.buyUnlimited))
             .disabled(model.store.isPurchasing)
 
-            // Rewarded ad refill.
+            // Rewarded ad refill. Disabled while the tunnel is up: the ad
+            // network targets by egress country, which through the VPN is
+            // the server's — the hint row explains it.
             Button { model.watchAd() } label: {
                 HStack(spacing: 5) {
                     if model.adPlaying {
                         ProgressView()
                             .scaleEffect(0.7)
                     } else {
-                        Image(systemName: "play.rectangle.fill")
+                        Image(systemName: model.adsAvailable ? "play.rectangle.fill" : "shield.lefthalf.filled")
                             .font(.system(size: 12))
                     }
                     Text(model.adPlaying ? "…" : adButtonText)
                         .font(.openSans(12, weight: .semibold))
+                        .lineLimit(1)
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    (model.canWatchAd ? Color.sec50 : Color.octGray40),
+                    (model.canWatchAd ? Color.sec50 : Color.octGray60),
                     in: RoundedRectangle(cornerRadius: 10)
                 )
             }
             .buttonStyle(.plain)
             .disabled(!model.canWatchAd)
+            .accessibilityLabel(model.adsAvailable ? model.copy.text(.watchAdPlus3h) : model.copy.text(.adUnavailableVPNOn))
+            // Explain the VPN-on state via a tap hint instead of cramming
+            // a long sentence into the button label.
+            .help(model.copy.text(.adUnavailableVPNOn))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -641,15 +648,17 @@ struct ConnectView: View {
     }
 
     /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
-    /// when the 12h bank is full.
+    /// when the 12h bank is full. While the tunnel is up the button shows
+    /// a SHORT locked state (icon + word) — the .help hint carries the full
+    /// explanation, so the pill never renders gray-on-gray mush.
     private var adButtonText: String {
+        if !model.adsAvailable { return model.copy.text(.adUnavailableVPNOnShort) }
         if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
         let s = Int(model.adCooldownRemaining)
         if s > 0 { return "\(Int((s + 59) / 60))m" }
         return "MAX"
     }
-
-    }
+}
 
 // MARK: - Power Button Style (Apple Design - instant feedback)
 
@@ -854,8 +863,10 @@ struct ServerDot: Identifiable {
 struct LocationsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var editingServerID: String?
-    @State private var showEdit = false
+    /// Non-nil while the edit sheet is up. Using sheet(item:) guarantees the
+    /// server is captured BEFORE the sheet content builds — the old
+    /// isPresented+editingServerID pair could hand the form a stale/nil id.
+    @State private var editingServer: ServerProfile?
     @State private var showDeleteConfirm = false
     @State private var deleteTargetID: String?
     /// Add Server in the server list opens the same chooser as the main
@@ -922,8 +933,8 @@ struct LocationsView: View {
                 // even though the tunnel is really down.
                 model.resyncConnectionStateWithSystem()
             }
-            .sheet(isPresented: $showEdit) {
-                AddServerView(editing: true, editingID: editingServerID)
+            .sheet(item: $editingServer) { server in
+                AddServerView(editing: true, editingServer: server)
                     .environmentObject(model)
             }
             .sheet(isPresented: $showChooser) {
@@ -1007,8 +1018,7 @@ struct LocationsView: View {
                 Spacer()
                 if isSelected {
                     Button {
-                        editingServerID = server.id
-                        showEdit = true
+                        editingServer = server
                     } label: {
                         Image(systemName: "pencil")
                             .font(.system(size: 15, weight: .medium))
@@ -1443,8 +1453,8 @@ struct AddServerView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     var editing: Bool = false
-    /// When editing, the id of the server being modified (nil = adding new).
-    var editingID: String? = nil
+    /// When editing, the server being modified (nil = adding new).
+    var editingServer: ServerProfile? = nil
     @State private var address = ""
     @State private var username = ""
     @State private var port = "22"
@@ -1556,11 +1566,12 @@ struct AddServerView: View {
                             // currently selected one when editing without an
                             // explicit id), otherwise mint a fresh one. Never
                             // mint blindly on edit — that spawns duplicates.
-                            let id = editingID ?? (editing ? model.selectedServer?.id : nil) ?? UUID().uuidString
+                            let id = editingServer?.id ?? (editing ? model.selectedServer?.id : nil) ?? UUID().uuidString
 
                             // When editing, preserve existing secrets if the user
                             // left the fields blank (same merge semantics as the
-                            // old single-profile editor).
+                            // old single-profile editor). Local copies keep the
+                            // values; extension sync sends only non-nil ones.
                             var existingPassword: String?
                             var existingPrivateKey: String?
                             if let existing = model.servers.first(where: { $0.id == id }) {
@@ -1623,14 +1634,32 @@ struct AddServerView: View {
                 }
             }
             .onAppear {
-                if editing, let server = model.servers.first(where: { $0.id == editingID }) {
-                    address = server.host
-                    username = server.username
-                    port = String(server.port)
-                    hostKey = server.hostKey
-                    // Pre-fill secrets so the edit form shows what is stored.
-                    password = server.password ?? ""
-                    privateKey = server.privateKey ?? ""
+                guard editing, let server = editingServer else { return }
+                // Instant pre-fill from the captured profile, then refresh
+                // from the EXTENSION's authoritative store (serverGet) —
+                // secrets never come back, everything else stays live-fresh.
+                address = server.host
+                username = server.username
+                port = String(server.port)
+                hostKey = server.hostKey
+                // Secret fields start EMPTY on edit: the app never holds the
+                // stored values (serverGet strips them). Leaving them blank
+                // preserves the stored secrets on save (merge in saveServer).
+                password = ""
+                privateKey = ""
+                let fetchedID = server.id
+                Task { @MainActor in
+                    // Fresh copy from the extension's store (works even with
+                    // the tunnel down — the message channel carries it).
+                    if let fresh = await model.fetchServerForEdit(id: fetchedID) {
+                        // Only overwrite non-secret fields the user hasn't
+                        // touched in the meantime (they can't have — this
+                        // runs within milliseconds of the sheet opening).
+                        address = fresh.host
+                        username = fresh.username
+                        port = String(fresh.port)
+                        hostKey = fresh.hostKey
+                    }
                 }
             }
             .alert(model.copy.text(.invalidInput), isPresented: $showErrorAlert) {

@@ -114,7 +114,71 @@ struct AddServerChooserView: View {
             }
             .padding(.vertical, 6)
             .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+            otherProvidersSection
         }
+    }
+
+    // MARK: - "Other providers" accordion (hosts without an affiliate
+    // program — collapsed by default so partners stay the focus).
+
+    @State private var otherExpanded = false
+
+    private var others: [VPSSupplier] {
+        VPSSupplierCatalog.all.filter { $0.kind == .other }
+    }
+
+    private var otherProvidersSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                    otherExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .frame(width: 44, height: 44)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+
+                    Text(model.copy.text(.vpsOtherProviders))
+                        .font(.openSans(14, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.octGray40)
+                        .rotationEffect(.degrees(otherExpanded ? 180 : 0))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(.rect)
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityLabel(Text(model.copy.text(.vpsOtherProviders)))
+            .accessibilityValue(Text(otherExpanded ? model.copy.text(.cancel) : ""))
+
+            if otherExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(others) { supplier in
+                        PartnerCard(supplier: supplier) { url in
+                            safariURL = IdentifiableURL(url: url)
+                        }
+                        if supplier.id != others.last?.id {
+                            Divider().padding(.leading, 68)
+                        }
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.vertical, 6)
+        .background(Color.octGray0.opacity(otherExpanded ? 1 : 0.6), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.octGray40.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var partners: [VPSSupplier] {
@@ -249,6 +313,9 @@ private struct SupplierIcon: View {
         case "linode": return Color(red: 0.00, green: 0.62, blue: 0.42)
         case "interserver": return Color(red: 0.85, green: 0.20, blue: 0.10)
         case "cloudways": return Color(red: 0.00, green: 0.60, blue: 0.90)
+        case "racknerd": return Color(red: 0.95, green: 0.55, blue: 0.10)
+        case "hetzner": return Color(red: 0.90, green: 0.35, blue: 0.30)
+        case "ovh": return Color(red: 0.00, green: 0.45, blue: 0.90)
         default: return Color.prim50
         }
     }

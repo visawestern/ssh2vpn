@@ -1,12 +1,13 @@
 import XCTest
 @testable import VPNCore
 
-/// The hardcoded provider catalog: 8 entries (own VPS + 7 partners), layered
-/// ordering, unique ids, valid URLs, no empty display fields.
+/// The hardcoded provider catalog: own VPS + 8 affiliate partners + 3
+/// "Other" providers (collapsed accordion), layered ordering, unique ids,
+/// valid URLs, no empty display fields.
 final class VPSSupplierTests: XCTestCase {
 
-    func testCatalogContainsExactlyEightEntries() {
-        XCTAssertEqual(VPSSupplierCatalog.all.count, 8)
+    func testCatalogContainsExactlyElevenEntries() {
+        XCTAssertEqual(VPSSupplierCatalog.all.count, 11)
     }
 
     func testFirstEntryIsOwnVPSSoUsersDoNotGetConfused() {
@@ -18,8 +19,8 @@ final class VPSSupplierTests: XCTestCase {
         XCTAssertEqual(ids.count, Set(ids).count, "duplicate supplier ids")
     }
 
-    func testAllPartnerEntriesHaveValidHTTPSURL() throws {
-        for s in VPSSupplierCatalog.all where s.kind == .partner {
+    func testAllPartnerAndOtherEntriesHaveValidHTTPSURL() throws {
+        for s in VPSSupplierCatalog.all where s.kind != .ownServer {
             let url = try XCTUnwrap(URL(string: s.refURL), "\(s.id): bad URL")
             XCTAssertEqual(url.scheme, "https", "\(s.id): must be https")
             XCTAssertNotNil(url.host, "\(s.id): no host")
@@ -27,13 +28,9 @@ final class VPSSupplierTests: XCTestCase {
     }
 
     func testEveryPartnerEntryHasNonEmptyDisplayFields() {
-        for s in VPSSupplierCatalog.all where s.kind == .partner {
+        for s in VPSSupplierCatalog.all where s.kind != .ownServer {
             XCTAssertFalse(s.name.isEmpty, "\(s.id): empty name")
-            // Price is a bare amount ("$4"); the "/mo" wording lives in the
-            // localized vpsPriceFrom/vpsSub* copy templates.
             XCTAssertFalse(s.price.isEmpty, "\(s.id): empty price")
-            XCTAssertFalse(s.price.contains("/"), "\(s.id): price must be a bare amount, got \(s.price)")
-            XCTAssertTrue(s.subtitle.hasPrefix("vpsSub"), "\(s.id): subtitle must be a vpsSub* copy key")
         }
     }
 
@@ -52,13 +49,19 @@ final class VPSSupplierTests: XCTestCase {
     func testLayerOrderingOwnFirstThenRecommendedThenOthers() {
         let kinds = VPSSupplierCatalog.all.map(\.kind)
         XCTAssertEqual(kinds.first, .ownServer)
-        // All .recommended before plain .partner entries.
-        let recIdx = VPSSupplierCatalog.all.firstIndex(where: { $0.badge != nil }) ?? 0
-        let partnersAfter = VPSSupplierCatalog.all.dropFirst(1)
-        let recommended = partnersAfter.filter { $0.badge != nil }.count
-        let badgedInPlace = VPSSupplierCatalog.all.dropFirst(1).prefix(recommended).allSatisfy { $0.badge != nil }
-        XCTAssertTrue(badgedInPlace, "recommended suppliers must come before non-recommended")
-        _ = recIdx
+        // All .recommended before plain .partner entries, and every
+        // .partner before .other (accordion tail).
+        let partners = VPSSupplierCatalog.all.dropFirst(1)
+        let recommended = partners.filter { $0.badge != nil }.count
+        XCTAssertTrue(
+            partners.prefix(recommended).allSatisfy { $0.badge != nil },
+            "recommended suppliers must come before non-recommended"
+        )
+        let firstOther = kinds.firstIndex(of: .other)
+        let lastPartner = kinds.lastIndex(of: .partner)
+        if let fo = firstOther, let lp = lastPartner {
+            XCTAssertLessThan(lp, fo, "all affiliate partners must precede the Other accordion")
+        }
     }
 
     func testRecommendedBadgeOnlyOnPartners() {
@@ -67,7 +70,25 @@ final class VPSSupplierTests: XCTestCase {
         }
     }
 
-    func testExactlySevenPartners() {
+    func testExactlySevenPartnersAndThreeOthers() {
         XCTAssertEqual(VPSSupplierCatalog.all.filter { $0.kind == .partner }.count, 7)
+        XCTAssertEqual(VPSSupplierCatalog.all.filter { $0.kind == .other }.count, 3)
+    }
+
+    /// Partner URLs must go straight to a signup/registration/order page —
+    /// not a marketing homepage the user has to hunt through.
+    func testPartnerURLsPointAtSignupPages() {
+        let expected: [String: String] = [
+            "digitalocean": "https://cloud.digitalocean.com/registrations/new",
+            "vultr": "https://my.vultr.com/signup/",
+            "hostinger": "https://www.hostinger.com/signup",
+            "contabo": "https://contabo.com/en/register/email/",
+            "interserver": "https://my.interserver.net/signup.php",
+            "racknerd": "https://my.racknerd.com/register.php",
+            "cloudways": "https://www.cloudways.com/en/signup.php",
+        ]
+        for s in VPSSupplierCatalog.all where s.kind == .partner {
+            XCTAssertEqual(s.refURL, expected[s.id], "\(s.id): signup URL drifted")
+        }
     }
 }

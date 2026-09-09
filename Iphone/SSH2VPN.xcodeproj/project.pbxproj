@@ -30,12 +30,19 @@
 		A10000010000000000000045 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000045 /* PaywallView.swift */; };
 		A10000010000000000000046 /* AddServerChooserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000046 /* AddServerChooserView.swift */; };
 		A10000010000000000000047 /* ImportCredentialsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000047 /* ImportCredentialsView.swift */; };
+		A10000010000000000000051 /* AdsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000051 /* AdsManager.swift */; };
 		A10000010000000000000044 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000044 /* index.html */; };
 		A10000010000000000000049 /* privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000049 /* privacy.html */; };
 		A10000010000000000000048 /* terms.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000048 /* terms.html */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
 		C30000010000000000000002 /* gateway.py in Resources */ = {isa = PBXBuildFile; fileRef = C40000010000000000000001 /* gateway.py */; };
 		C30000010000000000000003 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
+		C30000010000000000000010 /* CleverAdsSolutionsSPM in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000010 /* CleverAdsSolutionsSPM */; };
+		C30000010000000000000011 /* CASMediationGoogleAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000011 /* CASMediationGoogleAds */; };
+		C30000010000000000000012 /* CASMediationYangoAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000012 /* CASMediationYangoAds */; };
+		C30000010000000000000013 /* CASMediationUnityAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000013 /* CASMediationUnityAds */; };
+		C30000010000000000000014 /* CASMediationIronSource in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000014 /* CASMediationIronSource */; };
+		C30000010000000000000015 /* CASMediationMintegral in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000015 /* CASMediationMintegral */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +104,7 @@
 		A20000010000000000000045 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		A20000010000000000000046 /* AddServerChooserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddServerChooserView.swift; sourceTree = "<group>"; };
 		A20000010000000000000047 /* ImportCredentialsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCredentialsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000051 /* AdsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdsManager.swift; sourceTree = "<group>"; };
 		A20000010000000000000044 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/index.html"; sourceTree = "<group>"; };
 		A20000010000000000000049 /* privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/privacy.html"; sourceTree = "<group>"; };
 		A20000010000000000000048 /* terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/terms.html"; sourceTree = "<group>"; };
@@ -110,6 +118,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				C30000010000000000000003 /* VPNCore in Frameworks */,
+				C30000010000000000000010 /* CleverAdsSolutionsSPM in Frameworks */,
+				C30000010000000000000011 /* CASMediationGoogleAds in Frameworks */,
+				C30000010000000000000012 /* CASMediationYangoAds in Frameworks */,
+				C30000010000000000000013 /* CASMediationUnityAds in Frameworks */,
+				C30000010000000000000014 /* CASMediationIronSource in Frameworks */,
+				C30000010000000000000015 /* CASMediationMintegral in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -149,6 +163,7 @@
 				A20000010000000000000045 /* PaywallView.swift */,
 				A20000010000000000000046 /* AddServerChooserView.swift */,
 				A20000010000000000000047 /* ImportCredentialsView.swift */,
+				A20000010000000000000051 /* AdsManager.swift */,
 				A20000010000000000000044 /* index.html */,
 				A20000010000000000000049 /* privacy.html */,
 				A20000010000000000000048 /* terms.html */,
@@ -237,6 +252,12 @@
 			name = SSH2VPN;
 			packageProductDependencies = (
 				C10000010000000000000004 /* VPNCore */,
+				C10000010000000000000010 /* CleverAdsSolutionsSPM */,
+				C10000010000000000000011 /* CASMediationGoogleAds */,
+				C10000010000000000000012 /* CASMediationYangoAds */,
+				C10000010000000000000013 /* CASMediationUnityAds */,
+				C10000010000000000000014 /* CASMediationIronSource */,
+				C10000010000000000000015 /* CASMediationMintegral */,
 			);
 			productName = SSH2VPN;
 			productReference = A20000010000000000000007 /* SSH2VPN.app */;
@@ -289,6 +310,7 @@
 			mainGroup = A70000010000000000000001;
 			packageReferences = (
 				C20000010000000000000003 /* XCLocalSwiftPackageReference "." */,
+				C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */,
 			);
 			productRefGroup = A70000010000000000000004 /* Products */;
 			projectDirPath = "";
@@ -355,6 +377,7 @@
 				A10000010000000000000045 /* PaywallView.swift in Sources */,
 				A10000010000000000000046 /* AddServerChooserView.swift in Sources */,
 				A10000010000000000000047 /* ImportCredentialsView.swift in Sources */,
+				A10000010000000000000051 /* AdsManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -374,11 +397,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/SSH2VPN.entitlements;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				OTHER_LDFLAGS = ("$(inherited)", "-ObjC");
 				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -393,11 +418,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/SSH2VPN.entitlements;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 326TF9BQ3C;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				OTHER_LDFLAGS = ("$(inherited)", "-ObjC");
 				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -500,11 +527,52 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/cleveradssolutions/CAS-iOS";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 4.7.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		C10000010000000000000004 /* VPNCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C20000010000000000000003 /* XCLocalSwiftPackageReference "." */;
 			productName = VPNCore;
+		};
+		C10000010000000000000010 /* CleverAdsSolutionsSPM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CleverAdsSolutionsSPM;
+		};
+		C10000010000000000000011 /* CASMediationGoogleAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CASMediationGoogleAds;
+		};
+		C10000010000000000000012 /* CASMediationYangoAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CASMediationYangoAds;
+		};
+		C10000010000000000000013 /* CASMediationUnityAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CASMediationUnityAds;
+		};
+		C10000010000000000000014 /* CASMediationIronSource */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CASMediationIronSource;
+		};
+		C10000010000000000000015 /* CASMediationMintegral */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
+			productName = CASMediationMintegral;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -69,6 +69,35 @@ public enum ServerMetadataResolver {
         return false
     }
 
+    /// Resolves the CURRENT device's public-IP country — the geo endpoints
+    /// return the caller's own info when no IP is given. Called for ad geo
+    /// targeting ONLY while the tunnel is down (see AppModel.adsAvailable):
+    /// through the VPN the egress country would be the server's.
+    public static func resolveOwnCountry() async -> String? {
+        for urlStr in [
+            "https://ipwhois.app/json/",
+            "http://ip-api.com/json/?fields=status,countryCode",
+        ] {
+            guard let url = URL(string: urlStr) else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 3.0
+            guard let (data, response) = try? await URLSession.shared.data(for: request),
+                  let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            // ipwhois: {"success": true, "country_code": "RU"}
+            if let success = json["success"] as? Bool, success,
+               let code = json["country_code"] as? String, code.count == 2 {
+                return code.uppercased()
+            }
+            // ip-api: {"status": "success", "countryCode": "RU"}
+            if let status = json["status"] as? String, status == "success",
+               let code = json["countryCode"] as? String, code.count == 2 {
+                return code.uppercased()
+            }
+        }
+        return nil
+    }
+
     public static func resolveGeo(host: String) async -> ServerGeoInfo? {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

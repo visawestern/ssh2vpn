@@ -55,10 +55,13 @@ final class AppModel: ObservableObject {
     /// up or connecting — the exit country would skew the campaign.
     @Published var userCountryCode: String?
 
-    /// Rewarded ads are only offered with the tunnel down: through the VPN
-    /// the egress country is the server's, which skews ad geo targeting.
+    /// Rewarded ads are offered whenever NO tunnel is up: `.disconnected`
+    /// OR `.failed` (a failed start — e.g. the free-time gate blocking
+    /// connect at 00:00 — leaves no tunnel, so the user's egress country is
+    /// still honest). Blocked only while `.connecting`/`.connected`, where
+    /// the egress country would be the server's and skew ad targeting.
     var adsAvailable: Bool {
-        connection == .disconnected
+        connection == .disconnected || connection == .failed("freeTimeExhausted") || connection == .failed("quotaExhausted")
     }
 
     /// StoreKit purchase + entitlement restore for Unlimited.
@@ -78,8 +81,28 @@ final class AppModel: ObservableObject {
         get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
         set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
     }
+    /// When the $3 offer expires for good (honest urgency: the countdown on
+    /// the paywall is REAL — hit zero and the discount is gone forever).
+    private static let paywallDiscountDeadlineKey = "ssh2vpn.paywallDiscountDeadline.v1"
+    static var paywallDiscountDeadline: Date? {
+        get { UserDefaults.standard.object(forKey: paywallDiscountDeadlineKey) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeadlineKey) }
+    }
+    /// Instance accessor for the view layer (the deadline is device-global).
+    var discountDeadline: Date? {
+        get { Self.paywallDiscountDeadline }
+        set { Self.paywallDiscountDeadline = newValue }
+    }
     @Published var paywallStage = PaywallStage.full
     @Published var isPaywallPresented = false
+
+    /// Marks the $3 offer as expired: declined forever, any later paywall
+    /// shows only the full price.
+    func expireDiscountOffer() {
+        Self.paywallDiscountDeclined = true
+        Self.paywallDiscountDeadline = nil
+        if paywallStage == .discount { paywallStage = .full }
+    }
 
     func showPaywall() {
         guard !isUnlimited else { return }
@@ -98,10 +121,15 @@ final class AppModel: ObservableObject {
     func dismissPaywall() {
         if paywallStage == .full, !Self.paywallDiscountDeclined {
             paywallStage = .discount
+            // Start the 10-minute one-time offer window on first escalation.
+            if Self.paywallDiscountDeadline == nil {
+                Self.paywallDiscountDeadline = Date().addingTimeInterval(600)
+            }
             return
         }
         if paywallStage == .discount {
             Self.paywallDiscountDeclined = true
+            Self.paywallDiscountDeadline = nil
         }
         isPaywallPresented = false
     }
@@ -222,6 +250,21 @@ final class AppModel: ObservableObject {
             await VPNExtensionAPI.saveServer(p, to: vpn.diagnosticManager())
             await VPNExtensionAPI.selectServer(id: p.id, from: vpn.diagnosticManager())
         }
+    }
+
+    /// Pulls the extension's authoritative copy of one server (via serverGet)
+    /// so the EDIT form pre-fills with live data, not the app's stale local
+    /// snapshot. Secrets never come back — the router strips them — and the
+    /// form keeps its own "blank = keep stored secret" merge semantics.
+    @MainActor
+    func fetchServerForEdit(id: String) async -> ServerProfile? {
+        // Make sure the provider manager exists (message channel carrier).
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            vpn.ensureManagerLoaded { continuation.resume() }
+        }
+        let d = await VPNExtensionAPI.call(from: vpn.diagnosticManager(), cmd: .serverGet, args: ["id": id])
+        guard let json = d["server"], let raw = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(ServerProfile.self, from: raw)
     }
 
     /// Removes a server locally (instant UI), then best-effort syncs the
@@ -1171,11 +1214,13 @@ final class AppModel: ObservableObject {
 
     private var displayTimer: Timer?
 
-    /// Keeps the 1s tick running while a session is live OR the console-grace
-    /// window is open; stops itself (fires once more, then dies) once neither
-    /// applies, so the floating console button hides at exactly T+2:00.
+    /// Keeps the 1s tick running while anything time-based is on screen:
+    /// a live session, the console-grace window, OR the free-quota countdown
+    /// (which decays every second whether the tunnel is up or not). Stops
+    /// itself once none applies so we never burn a wakeup when idle+unlimited.
     func startDisplayTimerIfNeeded() {
-        guard connection == .connected || consoleGraceActive else {
+        let quotaTicking = !quota.isUnlimited && quota.remaining(now: Date()) > 0
+        guard connection == .connected || consoleGraceActive || quotaTicking else {
             stopDisplayTimer()
             return
         }
@@ -1186,7 +1231,8 @@ final class AppModel: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.tickConnectionTimer()
-                if self.connection != .connected && !self.consoleGraceActive {
+                let stillQuota = !self.quota.isUnlimited && self.quota.remaining(now: Date()) > 0
+                if self.connection != .connected && !self.consoleGraceActive && !stillQuota {
                     self.stopDisplayTimer()
                 }
             }
@@ -1318,30 +1364,32 @@ final class AppModel: ObservableObject {
         adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
     }
 
-    /// Rewarded-ad stub: simulates a 2s ad view, then banks +3h wall-clock
-    /// into the SHARED ledger so the kernel honors it. Real ad SDK slots in
-    /// here later — only this function changes.
+    /// Rewarded ad via CAS.AI (demo ID + test mode until the account
+    /// manager issues the production manager ID — see AdsConfig).
     ///
     /// Geo rule: the user's real country is resolved through the SAME geo
     /// endpoints the server list uses, but ONLY while the tunnel is down
-    /// (adsAvailable gate) — through the VPN the egress country would be
-    /// the server's, skewing the ad network's country targeting. CAS.AI
-    /// then serves country-matched demand to the detected region.
+    /// (adsAvailable gate) — through the tunnel the egress country would
+    /// be the server's, skewing the ad network's country targeting.
     func watchAd() {
         guard canWatchAd else { return }
         adPlaying = true
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (STUB — 2s simulated view)")
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (CAS.AI)")
+        RewardedAdCoordinator.shared.initialize()
         Task { @MainActor [weak self] in
             // Resolve the user's real country through the un-tunneled
-            // interface BEFORE crediting — the ad SDK uses it for country
-            // targeting (CAS.AI serves region-matched demand).
+            // interface BEFORE loading — CAS serves country-matched demand.
             if let code = await ServerMetadataResolver.resolveOwnCountry() {
                 self?.userCountryCode = code
                 ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "ad geo targeting: user country \(code) (tunnel down)")
             }
-            try? await Task.sleep(for: .seconds(2))
+            let earned = await RewardedAdCoordinator.shared.presentRewarded()
             guard let self else { return }
             self.adPlaying = false
+            guard earned else {
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early or no fill)")
+                return
+            }
             let now = Date()
             var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
             if let credited = ledger.creditingAdView(now: now) {
@@ -1360,6 +1408,10 @@ final class AppModel: ObservableObject {
         quota = QuotaLedgerStore().load().withInitialGrant(now: Date())
         // ensure initial grant is persisted once
         _ = QuotaLedgerStore().save(quota)
+        // The quota countdown may have (re)started ticking — spin the 1s
+        // display timer even with the tunnel down so the mm:ss actually
+        // decays on screen.
+        startDisplayTimerIfNeeded()
     }
 
     /// Triggered from the Settings Unlimited card or the paywall. Buys

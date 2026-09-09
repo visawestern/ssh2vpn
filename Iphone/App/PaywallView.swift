@@ -11,6 +11,8 @@ struct PaywallView: View {
     @EnvironmentObject private var model: AppModel
     @State private var closeAllowedAt = Date.distantPast
     @State private var showUnavailable = false
+    /// Drives the "hot offer" breathing animation on the discount CTA.
+    @State private var pulse = false
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
@@ -84,26 +86,31 @@ struct PaywallView: View {
                     .foregroundStyle(.white)
             }
             Spacer()
-            Button {
-                model.dismissPaywall()
-            } label: {
-                Group {
-                    if isDiscount && Date() < closeAllowedAt {
-                        Text("\(max(1, Int(ceil(closeAllowedAt.timeIntervalSinceNow))))")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                    } else {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
+            // 4 Hz while the close is locked (3-2-1 digit steps cleanly),
+            // paused otherwise — no idle redraws on the full-price stage.
+            TimelineView(.periodic(from: .now, by: isDiscount ? 0.25 : 3600)) { context in
+                let locked = isDiscount && context.date < closeAllowedAt
+                Button {
+                    model.dismissPaywall()
+                } label: {
+                    Group {
+                        if locked {
+                            Text("\(max(1, Int(ceil(closeAllowedAt.timeIntervalSince(context.date)))))")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                        } else {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
                     }
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 34, height: 34)
+                    .background(.white.opacity(0.10), in: Circle())
                 }
-                .foregroundStyle(.white.opacity(0.85))
-                .frame(width: 34, height: 34)
-                .background(.white.opacity(0.10), in: Circle())
+                .buttonStyle(.plain)
+                .disabled(locked)
+                .accessibilityLabel(model.copy.text(.cancel))
             }
-            .buttonStyle(.plain)
-            .disabled(isDiscount && Date() < closeAllowedAt)
-            .accessibilityLabel(model.copy.text(.cancel))
         }
     }
 
@@ -111,6 +118,28 @@ struct PaywallView: View {
 
     private var hero: some View {
         VStack(spacing: 14) {
+            if isDiscount {
+                // Pulsing exclusivity badge — the first thing the eye lands on.
+                HStack(spacing: 6) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 12, weight: .black))
+                    Text(model.copy.text(.paywallDiscountTag))
+                        .font(.openSans(12, weight: .black))
+                        .tracking(1.2)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule().fill(
+                        LinearGradient(colors: [Color(red: 1.0, green: 0.45, blue: 0.10), Color(red: 0.95, green: 0.15, blue: 0.12)],
+                                       startPoint: .leading, endPoint: .trailing)
+                    )
+                )
+                .shadow(color: Color(red: 1.0, green: 0.35, blue: 0.10).opacity(pulse ? 0.7 : 0.35), radius: pulse ? 16 : 9, y: 3)
+                .scaleEffect(pulse ? 1.04 : 1.0)
+            }
+
             ZStack {
                 Circle()
                     .fill(
@@ -168,32 +197,103 @@ struct PaywallView: View {
     // MARK: - Pricing + Buy
 
     private var pricing: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Group {
             if isDiscount {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.copy.text(.paywallDiscountTag, price: displayPrice))
-                        .font(.openSans(11, weight: .bold))
-                        .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.30))
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
-                }
+                discountPricing
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
+                    Spacer()
+                    Text(model.copy.text(.paywallOneTime))
+                        .font(.openSans(12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+                .padding(18)
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
+            }
+        }
+    }
+
+    /// The $3 flash-offer block: crossed-out $5 anchor, glowing $3, "SAVE
+    /// 40%" capsule, and a REAL countdown — hit zero and the offer is gone
+    /// forever (persisted deadline, no fake-reset dark pattern).
+    private var discountPricing: some View {
+        VStack(spacing: 14) {
+            // Live offer timer — the urgency is honest: expiry is persisted
+            // and permanently kills the discount. TimelineView drives its
+            // own redraws every second, so the digits never freeze (a plain
+            // Text with Date() in body has nothing to invalidate it).
+            if let deadline = model.discountDeadline {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    HStack(spacing: 6) {
+                        Image(systemName: "timer")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(discountCountdown(deadline, now: context.date))
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(colors: [Color(red: 0.95, green: 0.25, blue: 0.20), Color(red: 0.85, green: 0.12, blue: 0.10)],
+                                           startPoint: .leading, endPoint: .trailing)
+                        )
+                    )
+                    .shadow(color: Color(red: 0.95, green: 0.25, blue: 0.20).opacity(0.5), radius: 10, y: 2)
                 }
             }
-            Spacer()
-            Text(model.copy.text(.paywallOneTime))
-                .font(.openSans(12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.65))
+
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(model.copy.text(.paywallOldPrice))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .strikethrough(true, color: .white.opacity(0.55))
+                    .foregroundStyle(.white.opacity(0.45))
+                Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
+                    .font(.system(size: 58, weight: .heavy, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.35), Color(red: 1.0, green: 0.60, blue: 0.15)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .shadow(color: Color(red: 1.0, green: 0.65, blue: 0.15).opacity(0.55), radius: 14, y: 3)
+                Text("−40%")
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.10, green: 0.75, blue: 0.45), in: Capsule())
+                    .rotationEffect(.degrees(-6))
+            }
+            .frame(maxWidth: .infinity)
         }
         .padding(18)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(colors: [Color(red: 1.0, green: 0.75, blue: 0.25).opacity(0.85), Color(red: 1.0, green: 0.45, blue: 0.15).opacity(0.85)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1.5
+                        )
+                )
+        )
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in
+            if let deadline = model.discountDeadline, now >= deadline {
+                model.expireDiscountOffer()
+            }
+        }
+    }
+
+    /// "m:ss" until the $3 offer dies. `now` comes from the TimelineView
+    /// context so each redraw reflects the tick, not a stale Date().
+    private func discountCountdown(_ deadline: Date, now: Date) -> String {
+        let s = max(0, Int(deadline.timeIntervalSince(now)))
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private var buyButton: some View {
@@ -206,7 +306,7 @@ struct PaywallView: View {
                         .scaleEffect(0.8)
                         .tint(.white)
                 } else {
-                    Image(systemName: "lock.fill")
+                    Image(systemName: isDiscount ? "flame.fill" : "lock.fill")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 Text(model.store.isPurchasing
@@ -216,23 +316,32 @@ struct PaywallView: View {
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(height: 56)
             .background(
                 LinearGradient(
                     colors: isDiscount
-                        ? [Color(red: 0.95, green: 0.62, blue: 0.18), Color(red: 0.85, green: 0.42, blue: 0.12)]
+                        ? [Color(red: 1.0, green: 0.72, blue: 0.16), Color(red: 0.95, green: 0.35, blue: 0.08)]
                         : [Color(red: 0.35, green: 0.90, blue: 0.64), Color(red: 0.14, green: 0.70, blue: 0.46)],
                     startPoint: .leading,
                     endPoint: .trailing
                 ),
                 in: RoundedRectangle(cornerRadius: 16)
             )
-            .shadow(color: (isDiscount ? Color(red: 0.95, green: 0.62, blue: 0.18) : Color.prim50).opacity(0.35),
-                    radius: 14, y: 6)
+            .shadow(color: (isDiscount ? Color(red: 1.0, green: 0.55, blue: 0.12) : Color.prim50).opacity(pulse ? 0.65 : 0.35),
+                    radius: pulse ? 18 : 12, y: 6)
+            .scaleEffect(isDiscount && pulse ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .disabled(model.store.isPurchasing)
         .padding(.top, 14)
+        // "Hot purchase" pulse: the CTA breathes so the eye lands on it
+        // first. Runs only on the discount stage.
+        .onAppear {
+            guard isDiscount else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
     }
 
     private var restoreButton: some View {
