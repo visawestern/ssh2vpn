@@ -1374,16 +1374,16 @@ final class AppModel: ObservableObject {
     func watchAd() {
         guard canWatchAd else { return }
         adPlaying = true
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (CAS.AI)")
-        RewardedAdCoordinator.shared.initialize()
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (\(AdsProvider.active == .admob ? "AdMob" : AdsProvider.active == .applovinMax ? "AppLovin MAX" : "CAS.AI"))")
         Task { @MainActor [weak self] in
             // Resolve the user's real country through the un-tunneled
-            // interface BEFORE loading — CAS serves country-matched demand.
+            // interface BEFORE loading — networks serve country-matched
+            // demand.
             if let code = await ServerMetadataResolver.resolveOwnCountry() {
                 self?.userCountryCode = code
                 ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "ad geo targeting: user country \(code) (tunnel down)")
             }
-            let earned = await RewardedAdCoordinator.shared.presentRewarded()
+            let earned = await RewardedAdRouter.presentRewarded()
             guard let self else { return }
             self.adPlaying = false
             guard earned else {

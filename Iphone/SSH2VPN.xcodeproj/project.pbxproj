@@ -35,6 +35,7 @@
 		A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
 		A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
 		A10000010000000000000052 /* logo.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000052 /* logo.png */; };
+		A10000010000000000000055 /* shot-connected.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000055 /* shot-connected.png */; };
 		A10000010000000000000049 /* privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000049 /* privacy.html */; };
 		A10000010000000000000048 /* terms.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000048 /* terms.html */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
@@ -46,6 +47,8 @@
 		C30000010000000000000013 /* CASMediationUnityAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000013 /* CASMediationUnityAds */; };
 		C30000010000000000000014 /* CASMediationIronSource in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000014 /* CASMediationIronSource */; };
 		C30000010000000000000015 /* CASMediationMintegral in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000015 /* CASMediationMintegral */; };
+		C30000010000000000000020 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000020 /* GoogleMobileAds */; };
+		C30000010000000000000021 /* AppLovinSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000021 /* AppLovinSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +114,7 @@
 		A20000010000000000000044 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/index.html"; sourceTree = "<group>"; };
 			A20000010000000000000053 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
 			A20000010000000000000052 /* logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Docs/logo.png"; sourceTree = "<group>"; };
+			A20000010000000000000055 /* shot-connected.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Docs/shot-connected.png"; sourceTree = "<group>"; };
 		A20000010000000000000049 /* privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/privacy.html"; sourceTree = "<group>"; };
 		A20000010000000000000048 /* terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = "Docs/terms.html"; sourceTree = "<group>"; };
 		A20000010000000000000050 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
@@ -129,6 +133,8 @@
 				C30000010000000000000013 /* CASMediationUnityAds in Frameworks */,
 				C30000010000000000000014 /* CASMediationIronSource in Frameworks */,
 				C30000010000000000000015 /* CASMediationMintegral in Frameworks */,
+				C30000010000000000000020 /* GoogleMobileAds in Frameworks */,
+				C30000010000000000000021 /* AppLovinSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -172,6 +178,7 @@
 				A20000010000000000000044 /* index.html */,
 				A20000010000000000000053 /* PrivacyInfo.xcprivacy */,
 				A20000010000000000000052 /* logo.png */,
+				A20000010000000000000055 /* shot-connected.png */,
 				A20000010000000000000049 /* privacy.html */,
 				A20000010000000000000048 /* terms.html */,
 				A20000010000000000000050 /* StoreKitConfig.storekit */,
@@ -265,6 +272,8 @@
 				C10000010000000000000013 /* CASMediationUnityAds */,
 				C10000010000000000000014 /* CASMediationIronSource */,
 				C10000010000000000000015 /* CASMediationMintegral */,
+				C10000010000000000000020 /* GoogleMobileAds */,
+				C10000010000000000000021 /* AppLovinSDK */,
 			);
 			productName = SSH2VPN;
 			productReference = A20000010000000000000007 /* SSH2VPN.app */;
@@ -318,6 +327,8 @@
 			packageReferences = (
 				C20000010000000000000003 /* XCLocalSwiftPackageReference "." */,
 				C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */,
+				C50000010000000000000020 /* XCRemoteSwiftPackageReference "https://github.com/googleads/swift-package-manager-google-mobile-ads.git" */,
+				C50000010000000000000021 /* XCRemoteSwiftPackageReference "https://github.com/AppLovin/AppLovin-MAX-Swift-Package.git" */,
 			);
 			productRefGroup = A70000010000000000000004 /* Products */;
 			projectDirPath = "";
@@ -352,6 +363,7 @@
 				A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */,
 				A10000010000000000000044 /* index.html in Resources */,
 				A10000010000000000000052 /* logo.png in Resources */,
+				A10000010000000000000055 /* shot-connected.png in Resources */,
 				A10000010000000000000049 /* privacy.html in Resources */,
 				A10000010000000000000048 /* terms.html in Resources */,
 			);
@@ -546,6 +558,22 @@
 				minimumVersion = 4.7.4;
 			};
 		};
+		C50000010000000000000020 /* XCRemoteSwiftPackageReference "https://github.com/googleads/swift-package-manager-google-mobile-ads.git" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = exactVersion;
+				version = 13.3.0;
+			};
+		};
+		C50000010000000000000021 /* XCRemoteSwiftPackageReference "https://github.com/AppLovin/AppLovin-MAX-Swift-Package.git" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AppLovin/AppLovin-MAX-Swift-Package.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.6.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -583,6 +611,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C50000010000000000000010 /* XCRemoteSwiftPackageReference "https://github.com/cleveradssolutions/CAS-iOS" */;
 			productName = CASMediationMintegral;
+		};
+		C10000010000000000000020 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000020 /* XCRemoteSwiftPackageReference "https://github.com/googleads/swift-package-manager-google-mobile-ads.git" */;
+			productName = GoogleMobileAds;
+		};
+		C10000010000000000000021 /* AppLovinSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C50000010000000000000021 /* XCRemoteSwiftPackageReference "https://github.com/AppLovin/AppLovin-MAX-Swift-Package.git" */;
+			productName = AppLovinSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
