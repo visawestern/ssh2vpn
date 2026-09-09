@@ -5,7 +5,7 @@
   ],
   "products" : [
     {
-      "displayPrice" : "5.00",
+      "displayPrice" : "10.00",
       "familyShareable" : false,
       "internalID" : "d3c586c3-6e13-4cb6-b0a6-1784cdc6ad29",
       "localizations" : [
@@ -25,7 +25,7 @@
       "type" : "NonConsumable"
     },
     {
-      "displayPrice" : "3.00",
+      "displayPrice" : "6.00",
       "familyShareable" : false,
       "internalID" : "d3c586c3-6e13-4cb6-b0a6-1784cdc6ad30",
       "localizations" : [

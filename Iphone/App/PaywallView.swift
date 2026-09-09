@@ -3,8 +3,8 @@ import SwiftUI
 /// Full-screen paywall shown when the user taps the Unlimited buy button.
 ///
 /// Double-offer flow (persisted across launches):
-///  - `.full`   : one-time price ($5) — dismiss escalates to `.discount`.
-///  - `.discount`: one-time $3 offer. Its close button is locked for 3s to
+///  - `.full`   : one-time price ($10) — dismiss escalates to `.discount`.
+///  - `.discount`: one-time $6 offer. Its close button is locked for 3s to
 ///    hold attention; dismissing it marks the discount as declined forever,
 ///    so only the full price is ever offered again on this device.
 struct PaywallView: View {
@@ -16,11 +16,11 @@ struct PaywallView: View {
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
-    /// The price shown in the UI: always round dollars, no cents. $5 full,
-    /// $3 discount. App Store Connect must use the $5.00 price point so the
+    /// The price shown in the UI: always round dollars, no cents. $10 full,
+    /// $6 discount. App Store Connect must use the $10.00 price point so the
     /// Apple sheet matches exactly.
     private var displayPrice: String? {
-        isDiscount ? "$3" : "$5"
+        isDiscount ? "$6" : "$10"
     }
 
     var body: some View {
@@ -216,7 +216,7 @@ struct PaywallView: View {
         }
     }
 
-    /// The $3 flash-offer block: crossed-out $5 anchor, glowing $3, "SAVE
+    /// The $6 flash-offer block: crossed-out $10 anchor, glowing $6, "SAVE
     /// 40%" capsule, and a REAL countdown — hit zero and the offer is gone
     /// forever (persisted deadline, no fake-reset dark pattern).
     private var discountPricing: some View {
@@ -289,7 +289,7 @@ struct PaywallView: View {
         }
     }
 
-    /// "m:ss" until the $3 offer dies. `now` comes from the TimelineView
+    /// "m:ss" until the $6 offer dies. `now` comes from the TimelineView
     /// context so each redraw reflects the tick, not a stale Date().
     private func discountCountdown(_ deadline: Date, now: Date) -> String {
         let s = max(0, Int(deadline.timeIntervalSince(now)))
@@ -359,7 +359,7 @@ struct PaywallView: View {
     // MARK: - Actions
 
     private func buy() async {
-        // The discount stage must buy the dedicated $3 product; the full stage
+        // The discount stage must buy the dedicated $6 product; the full stage
         // buys the regular one. Guard on the specific product so a missing
         // ASC-side product surfaces as "unavailable" instead of a wrong buy.
         guard isDiscount ? model.store.discountProduct != nil : model.store.product != nil else {

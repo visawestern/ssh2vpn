@@ -1067,6 +1067,79 @@ struct SettingsViewNew: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    // Unlimited (StoreKit) card — FIRST at the top so the
+                    // purchase is the first thing the eye lands on. Shows the
+                    // purchase UI while not owned, and the owned state
+                    // (badge + .purchaseOwned) once the user bought it.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.isUnlimited
+                             ? model.copy.text(.unlimitedBadge)
+                             : model.copy.text(.buyUnlimited))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.octGray100)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        if model.isUnlimited {
+                            Text(model.copy.text(.purchaseOwned))
+                                .font(.openSans(13, weight: .semibold))
+                                .foregroundStyle(Color.sec50)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 8)
+                        } else {
+                            // Buy button — price ($10) shown right in the button;
+                            // no separate price line, no rewarded-ad button here.
+                            Button(action: { model.showPaywall() }) {
+                                HStack(spacing: 6) {
+                                    if model.store.isPurchasing {
+                                        ProgressView().scaleEffect(0.7)
+                                    } else {
+                                        Image(systemName: "infinity")
+                                            .font(.system(size: 12))
+                                    }
+                                    Text(model.store.isPurchasing
+                                         ? model.copy.text(.purchasing)
+                                         : model.copy.text(.buyUnlimited, price: "$10"))
+                                        .font(.openSans(12, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.store.isPurchasing)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+
+                            Text(model.copy.text(.buyUnlimitedDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                                .lineLimit(2)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+
+                            // Restore for past buyers.
+                            Button {
+                                Task { await model.restorePurchase() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                    Text(model.copy.text(.restorePurchase))
+                                        .font(.openSans(12))
+                                }
+                                .foregroundStyle(Color.sec50)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 6)
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
                     // Language selector card
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.languageSection))
@@ -1101,6 +1174,43 @@ struct SettingsViewNew: View {
                                 showLanguagePicker = false
                             }
                         }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Documentation card — right after the language card so
+                    // even a first-time user finds the plain-language guide.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.documentation))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        NavigationLink(destination: DocsView(language: model.selectedLanguage?.rawValue)) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "book.closed.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.copy.text(.documentation))
+                                        .font(.openSans(15, weight: .medium))
+                                        .foregroundStyle(Color.octGray100)
+                                    Text(model.copy.text(.documentationDesc))
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 
@@ -1162,78 +1272,6 @@ struct SettingsViewNew: View {
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
-                    }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
-
-                    // Unlimited (StoreKit) card — always visible. Shows the
-                    // purchase UI while not owned, and the owned state
-                    // (badge + .purchaseOwned) once the user bought it.
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(model.isUnlimited
-                             ? model.copy.text(.unlimitedBadge)
-                             : model.copy.text(.buyUnlimited))
-                            .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.octGray100)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 8)
-
-                        if model.isUnlimited {
-                            Text(model.copy.text(.purchaseOwned))
-                                .font(.openSans(13, weight: .semibold))
-                                .foregroundStyle(Color.sec50)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 8)
-                        } else {
-                            // Buy button — price ($5) shown right in the button;
-                            // no separate price line, no rewarded-ad button here.
-                            Button(action: { model.showPaywall() }) {
-                                HStack(spacing: 6) {
-                                    if model.store.isPurchasing {
-                                        ProgressView().scaleEffect(0.7)
-                                    } else {
-                                        Image(systemName: "infinity")
-                                            .font(.system(size: 12))
-                                    }
-                                    Text(model.store.isPurchasing
-                                         ? model.copy.text(.purchasing)
-                                         : model.copy.text(.buyUnlimited, price: "$5"))
-                                        .font(.openSans(12, weight: .semibold))
-                                }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model.store.isPurchasing)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
-
-                            Text(model.copy.text(.buyUnlimitedDesc))
-                                .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
-                                .lineLimit(2)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 12)
-
-                            // Restore for past buyers.
-                            Button {
-                                Task { await model.restorePurchase() }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 11))
-                                    Text(model.copy.text(.restorePurchase))
-                                        .font(.openSans(12))
-                                }
-                                .foregroundStyle(Color.sec50)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.bottom, 6)
-                        }
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
 

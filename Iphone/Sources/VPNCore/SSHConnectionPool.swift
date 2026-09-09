@@ -216,18 +216,26 @@ public final class SSHConnectionPool: @unchecked Sendable {
 
     /// Keeps every pooled connection visibly active for NAT/sshd idle
     /// timers: opens one throwaway direct-tcpip channel per connection and
-    /// closes it immediately. Cheap (one SSH round trip), uses only public
-    /// NIOSSH APIs, and runs on each link's own event loop.
+    /// closes it as soon as it is established (an OPEN + immediate CHANNEL_CLOSE
+    /// round trip). Cheap (one SSH round trip), uses only public NIOSSH
+    /// APIs, and runs on each link's own event loop.
+    ///
+    /// CRITICAL: the opened channel MUST be closed. The first version of
+    /// this keepalive left every ping channel open forever, so sshd's
+    /// MaxSessions (default 10) filled up within minutes and the server
+    /// tore the whole SSH connection down — the tunnel kept dying in the
+    /// background exactly at the moment the pool had idled for a while.
     public func keepalivePing() {
         lock.lock()
         let links = entries.map { $0.link }
         lock.unlock()
         for link in links {
             let opener = NIOSSHChannelOpener(handler: link.handler, eventLoop: link.channel.eventLoop)
-            opener.open(targetHost: "127.0.0.1", targetPort: 22,
+            let channel = opener.open(targetHost: "127.0.0.1", targetPort: 22,
                         originatorAddress: (try? SocketAddress(ipAddress: "127.0.0.1", port: 0)) ?? (try! SocketAddress(ipAddress: "0.0.0.0", port: 0)),
                         onData: { _ in },
                         onClosed: { })
+            channel?.close()
         }
     }
 

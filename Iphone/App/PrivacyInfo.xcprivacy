@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- App privacy manifest (required since Spring 2024 for required-reason APIs).
+     - NSPrivacyAccessedAPICategoryUserDefaults / CA92.1: the app stores only
+       its own settings (language, paywall state, quota ledger) in UserDefaults.
+     - NSPrivacyTracking=false: this target's own code does not track. The
+       bundled ad-mediation SDKs (CAS.AI + adapters) ship their own privacy
+       manifests and their data practices are disclosed in the App Store
+       Connect privacy questionnaire, not here. -->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+</dict>
+</plist>

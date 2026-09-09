@@ -9,7 +9,7 @@ import VPNCore
 @MainActor
 final class StoreManager: ObservableObject {
     static let unlimitedProductID = "com.sshtunnel.unlimited"
-    /// One-time $3 offer product — same entitlement as the full-price one,
+    /// One-time $6 offer product — same entitlement as the full-price one,
     /// bought only from the paywall's discount stage.
     static let discountProductID = "com.sshtunnel.unlimited.discount"
     /// Any of these product IDs grants Unlimited.
@@ -102,7 +102,7 @@ final class StoreManager: ObservableObject {
         await purchase(product)
     }
 
-    /// Buys the one-time $3 discount product (same Unlimited entitlement).
+    /// Buys the one-time $6 discount product (same Unlimited entitlement).
     /// Only reachable from the paywall's discount stage.
     func purchaseDiscount() async -> PurchaseOutcome {
         await purchase(discountProduct)

@@ -17,6 +17,7 @@ struct AddServerChooserView: View {
     var onImportCredentials: () -> Void
 
     @State private var safariURL: IdentifiableURL?
+    @State private var showDocs = false
 
     private struct IdentifiableURL: Identifiable {
         let id = UUID()
@@ -43,10 +44,39 @@ struct AddServerChooserView: View {
                     Button(model.copy.text(.cancel)) { dismiss() }
                         .foregroundStyle(Color.sec50)
                 }
+                // Documentation: the same guide as the main screen's book
+                // icon — right where "which VPS?" is being decided, so
+                // nobody has to guess what any of this means.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showDocs = true
+                    } label: {
+                        Image(systemName: "book.closed.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                    }
+                    .accessibilityLabel(model.copy.text(.documentation))
+                }
             }
             .sheet(item: $safariURL) { item in
                 SafariSheet(url: item.url)
                     .ignoresSafeArea()
+            }
+            .fullScreenCover(isPresented: $showDocs) {
+                NavigationStack {
+                    DocsView(language: model.selectedLanguage?.rawValue)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    showDocs = false
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(Color.octGray100)
+                                }
+                                .accessibilityLabel(model.copy.text(.cancel))
+                            }
+                        }
+                }
             }
         }
         .presentationDetents([.large])

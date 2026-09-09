@@ -68,8 +68,8 @@ final class AppModel: ObservableObject {
     let store = StoreManager()
 
     // MARK: - Paywall (double-offer flow)
-    // Stage 1: full-price unlimited ($5 one-time). If dismissed, stage 2
-    // shows a one-time $3 discount offer. If THAT is dismissed, the discount
+    // Stage 1: full-price unlimited ($10 one-time). If dismissed, stage 2
+    // shows a one-time $6 discount offer. If THAT is dismissed, the discount
     // is never offered again on this device — only the full price. Not shown
     // to users who already own Unlimited.
     enum PaywallStage: Equatable {
@@ -81,7 +81,7 @@ final class AppModel: ObservableObject {
         get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
         set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
     }
-    /// When the $3 offer expires for good (honest urgency: the countdown on
+    /// When the $6 offer expires for good (honest urgency: the countdown on
     /// the paywall is REAL — hit zero and the discount is gone forever).
     private static let paywallDiscountDeadlineKey = "ssh2vpn.paywallDiscountDeadline.v1"
     static var paywallDiscountDeadline: Date? {
@@ -96,7 +96,7 @@ final class AppModel: ObservableObject {
     @Published var paywallStage = PaywallStage.full
     @Published var isPaywallPresented = false
 
-    /// Marks the $3 offer as expired: declined forever, any later paywall
+    /// Marks the $6 offer as expired: declined forever, any later paywall
     /// shows only the full price.
     func expireDiscountOffer() {
         Self.paywallDiscountDeclined = true
@@ -116,7 +116,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Dismisses the paywall (user closed it). Full price -> escalate to the
-    /// $3 discount offer unless it was already declined once; discount -> mark
+    /// $6 discount offer unless it was already declined once; discount -> mark
     /// declined forever, never offer it again.
     func dismissPaywall() {
         if paywallStage == .full, !Self.paywallDiscountDeclined {
@@ -360,7 +360,7 @@ final class AppModel: ObservableObject {
 
     init() {
         // TEMPORARY (owner-requested while testing): reset the "discount
-        // declined forever" latch on every launch so the $3 offer stays
+        // declined forever" latch on every launch so the $6 offer stays
         // testable across relaunches. Remove before the App Store release.
         UserDefaults.standard.removeObject(forKey: Self.paywallDiscountDeclinedKey)
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
@@ -1415,8 +1415,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Triggered from the Settings Unlimited card or the paywall. Buys
-    /// `com.sshtunnel.unlimited` ($5) or `com.sshtunnel.unlimited.discount`
-    /// ($3 one-time offer) and, on success, sets the shared ledger to
+    /// `com.sshtunnel.unlimited` ($10) or `com.sshtunnel.unlimited.discount`
+    /// ($6 one-time offer) and, on success, sets the shared ledger to
     /// unlimited (kernel honors it). Returns the StoreKit outcome so callers
     /// can react to cancellation (e.g. show the discounted follow-up offer).
     func buyUnlimited(discount: Bool = false) async -> StoreManager.PurchaseOutcome {
@@ -1425,7 +1425,7 @@ final class AppModel: ObservableObject {
         case .success:
             reloadQuota()
             ConsoleLogStore.shared.log(level: .success, tag: "IAP",
-                                       message: discount ? "unlimited (discount $3) purchased and applied"
+                                       message: discount ? "unlimited (discount $6) purchased and applied"
                                                           : "unlimited purchased and applied")
         case .failure(let msg):
             ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(msg)")
