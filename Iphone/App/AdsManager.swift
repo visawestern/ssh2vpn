@@ -210,23 +210,23 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
         // 3. Present over the top view controller; earn handler fires the
         //    reward, dismissal ends the wait (covers early dismiss too).
         let presentingVC = await topViewController()
-        var earned = false
-        let dismissed = await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            let box = ResumeOnceBox(c)
+        let dismissBox = PresentDismissBox()
+        let earnFlag = EarnedFlag()
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            dismissBox.arm(c)
             ad.fullScreenContentDelegate = self
             ad.present(from: presentingVC) {
-                earned = true
+                earnFlag.set(true)
                 ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "reward earned callback")
             }
             // Safety: presentation itself should never hang the button.
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(120))
-                box.resume()
+                dismissBox.resume()
             }
         }
-        _ = dismissed
         self.rewardedAd = nil
-        return earned
+        return earnFlag.read
     }
 
     /// Top-most view controller for fullscreen ad presentation.
@@ -247,11 +247,72 @@ extension AdMobRewardedProvider: FullScreenContentDelegate {
     }
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded dismissed")
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded dismissed (completing flow)")
+        // THE fix: dismissal is the normal end of the presentation wait —
+        // without resuming here the button spun until the 120s safety
+        // timeout even on a fully earned view.
+        AdMobRewardedProvider.activeDismissBox?.resume()
     }
 
     func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
         ConsoleLogStore.shared.log(level: .error, tag: "ADS", message: "rewarded present failed: \(error.localizedDescription)")
+        AdMobRewardedProvider.activeDismissBox?.resume()
+    }
+}
+
+/// Atomic earned flag: the earn handler runs on the SDK thread, the read
+/// happens on MainActor after the dismissal continuation resumes.
+final class EarnedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set(_ v: Bool) {
+        lock.lock()
+        value = v
+        lock.unlock()
+    }
+
+    var read: Bool {
+        lock.lock()
+        let v = value
+        lock.unlock()
+        return v
+    }
+}
+
+/// One-shot resume for the presentation wait: armed on MainActor at
+/// present() time, resumed by the delegate's dismiss/fail callbacks (SDK
+/// thread) or the 120s safety timeout — whichever fires first.
+final class PresentDismissBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    nonisolated(unsafe) static var active: PresentDismissBox?
+
+    init() {}
+
+    func arm(_ c: CheckedContinuation<Void, Never>) {
+        lock.lock()
+        continuation = c
+        lock.unlock()
+        Self.active = self
+    }
+
+    func resume() {
+        lock.lock()
+        let c = continuation
+        continuation = nil
+        lock.unlock()
+        c?.resume()
+        if Self.active === self { Self.active = nil }
+    }
+}
+
+extension AdMobRewardedProvider {
+    /// Delegate callbacks land on the SDK's thread; route them through the
+    /// armed PresentDismissBox.
+    nonisolated(unsafe) static var activeDismissBox: PresentDismissBox? {
+        get { PresentDismissBox.active }
+        set { PresentDismissBox.active = newValue }
     }
 }
 
