@@ -4,43 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SSH2VPN — Support</title>
+<meta name="description" content="SSH2VPN support: contact, setup guide, free time, purchases and troubleshooting.">
+<link rel="icon" type="image/png" href="screenshots/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0a0e17; --card:#111827; --card-hover:#1a2332; --border:#1e293b; --text:#f1f5f9; --mut:#94a3b8; --acc:#3b82f6; --green:#10b981; }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; padding:20px; }
-  .wrap { max-width:760px; margin:0 auto; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
-  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; color:var(--text); text-decoration:none; }
-  .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#10b981,#3b82f6); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800; }
-  select { font:inherit; padding:7px 12px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; }
-  h1 { font-size:24px; margin:14px 0 4px; }
-  .updated { color:var(--mut); font-size:13px; margin-bottom:18px; }
-  section { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
-  section h2 { font-size:16px; margin-bottom:8px; display:flex; align-items:center; gap:8px; color:var(--text); }
-  section h2 .n { width:22px; height:22px; border-radius:7px; background:rgba(59,130,246,.15); color:var(--acc); font-size:12px; display:flex; align-items:center; justify-content:center; flex:none; }
-  p, li { font-size:14.5px; color:var(--text); }
-  ul { padding-left:20px; margin-top:6px; }
-  li { margin-bottom:5px; }
-  .accent { color:var(--green); font-weight:600; }
-  code { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:13px; color:#c7d8f5; }
-  footer { text-align:center; color:var(--mut); font-size:12.5px; margin-top:20px; }
-  footer a { color:var(--green); text-decoration:none; }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0a0e17;--card:#111827;--card-hover:#1a2332;--border:#1e293b;--text:#f1f5f9;--text-body:#cbd5e1;--muted:#94a3b8;--acc:#3b82f6;--green:#10b981}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+
+  .lang-bar{position:fixed;top:0;width:100%;z-index:200;background:rgba(10,14,23,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:.5rem 1rem}
+  .lang-bar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:flex-end;gap:.25rem;flex-wrap:wrap}
+  .lang-btn{background:none;border:2px solid transparent;color:var(--muted);font-size:1.15rem;padding:.2rem .35rem;border-radius:6px;cursor:pointer;transition:all .2s;line-height:1}
+  .lang-btn:hover{background:rgba(255,255,255,.05)}
+  .lang-btn.active{border-color:var(--acc);background:rgba(59,130,246,.1);color:var(--text)}
+
+  nav{position:fixed;top:44px;width:100%;z-index:100;padding:.75rem 2rem;background:rgba(10,14,23,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+  .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+  .nav-brand{display:flex;align-items:center;gap:.75rem;text-decoration:none;color:var(--text)}
+  .nav-brand img{width:32px;height:32px;border-radius:8px}
+  .nav-brand span{font-weight:700;font-size:1rem}
+  .nav-links{display:flex;align-items:center;gap:1.5rem;list-style:none}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:500;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .nav-cta{background:var(--acc);color:#fff !important;padding:.5rem 1rem;border-radius:8px;font-weight:600}
+  .nav-cta:hover{background:#2563eb}
+  @media (max-width:720px){.nav-links li:not(:last-child){display:none}}
+
+  .hero{padding:130px 20px 30px;text-align:center}
+  .hero-badge{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--green);border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.08);padding:.35rem .8rem;border-radius:999px;margin-bottom:1rem}
+  .hero h1{font-size:clamp(30px,5vw,46px);font-weight:800;background:linear-gradient(135deg,#f1f5f9,#94a3b8);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:.5rem}
+  .hero p{color:var(--muted);font-size:1.05rem;max-width:520px;margin:0 auto}
+
+  .wrap{max-width:760px;margin:0 auto;padding:10px 20px 60px}
+
+  .contact-card{background:linear-gradient(180deg,rgba(59,130,246,.12),rgba(59,130,246,.03)),var(--card);border:1px solid rgba(59,130,246,.35);border-radius:20px;padding:28px 24px;text-align:center;margin:14px 0 26px}
+  .contact-icon{width:52px;height:52px;margin:0 auto 12px;border-radius:14px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center}
+  .contact-icon svg{width:26px;height:26px;stroke:var(--acc)}
+  .contact-card h2{font-size:1.05rem;font-weight:700;margin-bottom:12px}
+  .mail-btn{display:inline-block;background:var(--acc);color:#fff;text-decoration:none;font-weight:700;font-size:.95rem;padding:.7rem 1.4rem;border-radius:12px;transition:background .2s;word-break:break-all}
+  .mail-btn:hover{background:#2563eb}
+  .c-note{color:var(--muted);font-size:.85rem;margin-top:12px}
+
+  details{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:10px;overflow:hidden;transition:border-color .2s}
+  details:hover{border-color:#2d3a4f}
+  details summary{cursor:pointer;list-style:none;padding:16px 20px;font-weight:600;display:flex;align-items:center;gap:10px;font-size:.95rem;user-select:none}
+  details summary::-webkit-details-marker{display:none}
+  details .q-body{padding:0 20px 16px;color:var(--text-body);font-size:.9rem}
+  details .q-body code{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:.8rem;color:#c7d8f5}
+  details .q-body b{color:var(--text)}
+  details[open] summary{border-bottom:1px solid var(--border);padding-bottom:14px}
+  .chev{margin-left:auto;flex:none;color:var(--muted);font-size:1.2rem;font-weight:400;transition:transform .2s}
+  details[open] .chev{transform:rotate(45deg)}
+  .q-num{width:24px;height:24px;border-radius:7px;background:rgba(59,130,246,.12);color:var(--acc);font-size:.72rem;display:flex;align-items:center;justify-content:center;flex:none}
+
+  .legal-links{text-align:center;margin-top:26px;font-size:.85rem;color:var(--muted)}
+  .legal-links a{color:var(--green);text-decoration:none}
+  .legal-links a:hover{text-decoration:underline}
+
+  footer{text-align:center;color:var(--muted);font-size:.8rem;padding:22px 20px;border-top:1px solid var(--border)}
+  footer a{color:var(--green);text-decoration:none}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <a class="brand" href="index.html"><span class="dot">S</span> SSH2VPN</a>
-    <select id="lang" onchange="apply()"></select>
-  </header>
+<div class="lang-bar"><div class="lang-bar-inner" id="langBar"></div></div>
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="index.html"><img src="screenshots/logo.png" alt="SSH2VPN"><span>SSH2VPN</span></a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="privacy.html">Privacy</a></li>
+      <li><a href="terms.html">Terms</a></li>
+      <li><a href="https://apps.apple.com/app/ssh2vpn/id6809367474" class="nav-cta">Download</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-badge">SSH2VPN</div>
   <h1 id="t-title"></h1>
-  <div class="updated" id="t-updated"></div>
-  <div id="body"></div>
-  <footer>SSH2VPN · <span id="t-footer"></span> · <a href="https://visawestern.github.io/ssh2vpn/">ssh2vpn.app</a></footer>
-</div>
+  <p id="t-sub"></p>
+</section>
+
+<main class="wrap">
+  <div class="contact-card">
+    <div class="contact-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="M3 7l9 6 9-6"/></svg>
+    </div>
+    <h2 id="c-title"></h2>
+    <a class="mail-btn" id="mail" href="mailto:visawestern.com@gmail.com">visawestern.com@gmail.com</a>
+    <p class="c-note" id="c-note"></p>
+  </div>
+  <div id="faq"></div>
+  <p class="legal-links"><a href="privacy.html" id="l-priv"></a> &middot; <a href="terms.html" id="l-terms"></a> &middot; <a href="index.html" id="l-home"></a></p>
+</main>
+
+<footer>SSH2VPN &middot; <a href="https://visawestern.github.io/ssh2vpn/">visawestern.github.io/ssh2vpn</a></footer>
+
 <script>
 const T = {
 "en":{"title":"Support","updated":"SSH2VPN — Your VPS, Your VPN","footer":"Support","email":"visawestern.com@gmail.com","sections":[["Contact us","Email: <b>visawestern.com@gmail.com</b> — we usually reply within 24 hours (UTC+7)."],["What you need to get started","SSH2VPN connects through <b>your own server</b> (a VPS you rent). You will need its IP address, SSH username and password. Any cheap VPS with SSH access works — DigitalOcean, Vultr, Hetzner, Hostinger and similar providers are all suitable."],["How to add your server","Open the app → <b>Add Server</b> → enter the IP, port (usually 22), username and password → tap <b>Test Connection</b> → save. You can also paste a line like <code>ssh user@1.2.3.4</code> and the app fills the fields automatically."],["Free time and the \"+3h\" button","Every install starts with 3 hours of free connection time. When it runs out, the <b>+3h free</b> button lets you watch a short ad to add 3 more hours (up to 12 hours banked). The button is visible only while the VPN is disconnected — it needs your real country for ad targeting, and through the tunnel your country would look wrong."],["The Unlimited upgrade","A one-time purchase removes the time limit and the ads forever. It is processed entirely by Apple — we never see your payment details. If you reinstall the app, use <b>Restore Purchase</b> in Settings."],["The app does not connect","Check that your server allows SSH password login and TCP forwarding (default on most VPS images). Verify the IP, port and password. Watch the in-app diagnostics while connecting — it shows exactly which step fails."],["Privacy","SSH2VPN collects nothing. Credentials stay in your iOS Keychain; the full policy ships inside the app and on this site."]]},
@@ -61,36 +123,90 @@ const T = {
 "nl":{"title":"Ondersteuning","updated":"SSH2VPN — jouw VPS, jouw VPN","footer":"Ondersteuning","email":"visawestern.com@gmail.com","sections":[["Neem contact op","E-mail: <b>visawestern.com@gmail.com</b> — meestal antwoord binnen 24 uur (UTC+7)."],["Wat je nodig hebt om te beginnen","SSH2VPN verbindt via <b>je eigen server</b> (een VPS die je huurt). Je hebt het IP-adres, de SSH-gebruikersnaam en het wachtwoord nodig. Elke goedkope VPS met SSH werkt — DigitalOcean, Vultr, Hetzner, Hostinger en dergelijke."],["Server toevoegen","Open de app → <b>Server toevoegen</b> → vul IP, poort (meestal 22), gebruikersnaam en wachtwoord in → <b>Verbinding testen</b> → bewaar. Je kunt ook een regel zoals <code>ssh user@1.2.3.4</code> plakken en de app vult alles in."],["Gratis tijd en de «+3 uur»-knop","Elke installatie begint met 3 uur gratis verbindingstijd. Zodra dat op is, voegt de knop <b>+3 uur gratis</b> na een korte advertentie 3 uur toe (tot 12 uur in voorraad). De knop is alleen zichtbaar wanneer de VPN is losgekoppeld — het advertentienetwerk heeft je echte land nodig, en door de tunnel lijkt het een ander."],["De Onbeperkt-upgrade","Een eenmalige aankoop verwijdert het tijdslimiet en de advertenties voorgoed. Apple verwerkt alles — wij zien je betaalgegevens nooit. Na herinstallatie: <b>Aankoop herstellen</b> in Instellingen."],["De app verbindt niet","Controleer of je server SSH-wachtwoordlogin en TCP-forwarding toestaat (standaard bij de meeste VPS-images). Verifieer IP, poort en wachtwoord. De ingebouwde diagnose toont tijdens het verbinden precies welke stap faalt."],["Privacy","SSH2VPN verzamelt niets. Inloggegevens blijven in de iOS-sleutelhanger; het volledige beleid staat in de app en op deze site."]]},
 "vi":{"title":"Hỗ trợ","updated":"SSH2VPN — VPS của bạn, VPN của bạn","footer":"Hỗ trợ","email":"visawestern.com@gmail.com","sections":[["Liên hệ","Email: <b>visawestern.com@gmail.com</b> — thường trả lời trong 24 giờ (UTC+7)."],["Cần gì để bắt đầu","SSH2VPN kết nối qua <b>server riêng của bạn</b> (VPS bạn thuê). Cần địa chỉ IP, tên đăng nhập SSH và mật khẩu. Bất kỳ VPS rẻ nào có SSH đều dùng được — DigitalOcean, Vultr, Hetzner, Hostinger v.v."],["Cách thêm máy chủ","Mở ứng dụng → <b>Thêm máy chủ</b> → nhập IP, cổng (thường 22), tên đăng nhập, mật khẩu → <b>Kiểm tra kết nối</b> → lưu. Cũng có thể dán dòng <code>ssh user@1.2.3.4</code>, ứng dụng tự điền."],["Thời gian miễn phí và nút «+3 giờ»","Mỗi lần cài đặt có 3 giờ kết nối miễn phí. Hết thì nút <b>+3 giờ miễn phí</b> cho xem quảng cáo ngắn để cộng thêm 3 giờ (tối đa 12 giờ tích lũy). Nút chỉ hiện khi VPN đang tắt — mạng quảng cáo cần quốc gia thật của bạn, qua đường hầm sẽ trông như quốc gia khác."],["Nâng cấp Không giới hạn","Mua một lần bỏ vĩnh viễn giới hạn thời gian và quảng cáo. Apple xử lý toàn bộ — chúng tôi không thấy thông tin thanh toán. Cài lại thì dùng <b>Khôi phục mua hàng</b> trong Cài đặt."],["Ứng dụng không kết nối","Kiểm tra server có cho đăng nhập SSH bằng mật khẩu và TCP forwarding (mặc định ở đa số image VPS). Xác minh IP, cổng, mật khẩu. Chẩn đoán tích hợp sẽ chỉ đúng bước nào lỗi khi đang kết nối."],["Riêng tư","SSH2VPN không thu thập gì. Thông tin đăng nhập nằm trong Keychain iOS; chính sách đầy đủ có trong ứng dụng và trên site này."]]}
 };
+
+
 const FLAGS = {en:"\u{1F1EC}\u{1F1E7}",es:"\u{1F1EA}\u{1F1F8}",de:"\u{1F1E9}\u{1F1EA}",fr:"\u{1F1EB}\u{1F1F0}",it:"\u{1F1EE}\u{1F1F9}",pt:"\u{1F1E7}\u{1F1F7}",ja:"\u{1F1EF}\u{1F1F5}",zh:"\u{1F1E8}\u{1F1F3}",ko:"\u{1F1F0}\u{1F1F7}",ar:"\u{1F1F8}\u{1F1E6}",hi:"\u{1F1EE}\u{1F1F3}",th:"\u{1F1F9}\u{1F1ED}",tr:"\u{1F1F9}\u{1F1F7}",pl:"\u{1F1F5}\u{1F1F1}",nl:"\u{1F1F3}\u{1F1F1}",vi:"\u{1F1FB}\u{1F1F3}",ru:"\u{1F1F7}\u{1F1FA}"};
 const NAMES = {en:"English",es:"Espa\u00f1ol",de:"Deutsch",fr:"Fran\u00e7ais",it:"Italiano",pt:"Portugu\u00eas",ja:"\u65e5\u672c\u8a9e",zh:"\u7b80\u4f53\u4e2d\u6587",ko:"\ud55c\uad6d\uc5b4",ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629",hi:"\u0939\u093f\u0928\u094d\u0926\u0940",th:"\u0e44\u0e17\u0e22",tr:"T\u00fcrk\u00e7e",pl:"Polski",nl:"Nederlands",vi:"Ti\u1ebfng Vi\u1ec7t",ru:"\u0420\u0443\u0441\u0441\u043a\u0438\u0439"};
-// Russian stays last (owner's decision); the browser language picks the default.
+// Russian stays last (owner's decision); the shared key keeps the pick
+// consistent with the landing / legal pages.
 const ORDER = ["en","es","de","fr","it","pt","ja","zh","ko","ar","hi","th","tr","pl","nl","vi","ru"];
 let cur = (localStorage.getItem("ssh2vpn_lang") || navigator.language || "en");
-if (!T[cur] || typeof T[cur] !== "object") {
-  const l = String(cur).toLowerCase().split("-")[0];
-  const map = {"pt":"pt","zh":"zh","ja":"ja","ko":"ko","ar":"ar","hi":"hi","th":"th","tr":"tr","pl":"pl","nl":"nl","vi":"vi"};
-  cur = map[l] || "en";
-}
+(function normalize(){
+  const l = String(cur).toLowerCase();
+  const map = {pt:"pt","pt-br":"pt",zh:"zh","zh-hans":"zh",ja:"ja",ko:"ko",ar:"ar",hi:"hi",th:"th",tr:"tr",pl:"pl",nl:"nl",vi:"vi",ru:"ru",en:"en"};
+  cur = map[l] || map[l.split("-")[0]] || "en";
+})();
+if (!T[cur] || typeof T[cur] !== "object") cur = "en";
+
+function esc(html){ return html; }
+
 function apply(){
-  const sel = document.getElementById("lang");
-  if (sel && sel.value) { cur = sel.value; }
-  try { localStorage.setItem("ssh2vpn_lang", cur); } catch(e) {}
   const t = (typeof T[cur] === "object") ? T[cur] : T.en;
+  document.documentElement.lang = cur;
+  document.documentElement.dir = (cur === "ar") ? "rtl" : "ltr";
+  document.title = "SSH2VPN \u2014 " + t.title;
   document.getElementById("t-title").textContent = t.title;
-  document.getElementById("t-updated").textContent = t.updated;
-  document.getElementById("t-footer").textContent = t.footer;
-  document.getElementById("body").innerHTML = t.sections.map(function(x,i){
-    return "<section><h2><span class='n'>"+(i+1)+"</span>"+x[0]+"</h2><p>"+x[1]+"</p></section>";
+  document.getElementById("t-sub").textContent = t.updated;
+
+  // Section 0 is the contact block: the mail button carries the address,
+  // the note is the body minus the leading "Email: <b>...</b> \u2014 " part.
+  const c = t.sections[0];
+  document.getElementById("c-title").textContent = c[0];
+  let note = c[1];
+  const bIdx = note.indexOf("</b>");
+  if (bIdx >= 0) note = note.slice(bIdx + 4);
+  note = note.replace(/^[\s\u2014\u2013-]+/, "");
+  document.getElementById("c-note").textContent = note;
+
+  const faq = document.getElementById("faq");
+  faq.innerHTML = t.sections.slice(1).map(function(x, i){
+    return '<details' + (i === 0 ? ' open' : '') + '><summary><span class="q-num">' + (i + 1) + '</span>' + x[0] + '<span class="chev">+</span></summary><div class="q-body">' + x[1] + '</div></details>';
   }).join("");
+
+  document.getElementById("l-priv").textContent = privName(cur);
+  document.getElementById("l-terms").textContent = termsName(cur);
+  document.getElementById("l-home").textContent = homeName(cur);
+
+  document.querySelectorAll(".lang-btn").forEach(function(btn){
+    btn.classList.toggle("active", btn.dataset.lang === cur);
+  });
+  try { localStorage.setItem("ssh2vpn_lang", cur); } catch(e) {}
 }
+
+// Localized link labels (small vocabulary, ru last by design not needed here)
+const LINKL = {
+  en:{p:"Privacy Policy",t:"Terms of Use",h:"Home"},
+  ru:{p:"\u041f\u043e\u043b\u0438\u0442\u0438\u043a\u0430 \u043a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u0438",t:"\u0423\u0441\u043b\u043e\u0432\u0438\u044f \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f",h:"\u041d\u0430 \u0433\u043b\u0430\u0432\u043d\u0443\u044e"},
+  es:{p:"Pol\u00edtica de Privacidad",t:"T\u00e9rminos de Uso",h:"Inicio"},
+  de:{p:"Datenschutzerkl\u00e4rung",t:"Nutzungsbedingungen",h:"Startseite"},
+  fr:{p:"Politique de Confidentialit\u00e9",t:"Conditions d'Utilisation",h:"Accueil"},
+  it:{p:"Informativa sulla Privacy",t:"Termini di Utilizzo",h:"Home"},
+  pt:{p:"Pol\u00edtica de Privacidade",t:"Termos de Uso",h:"In\u00edcio"},
+  ja:{p:"\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc",t:"\u5229\u7528\u898f\u7d04",h:"\u30db\u30fc\u30e0"},
+  zh:{p:"\u9690\u79c1\u653f\u7b56",t:"\u4f7f\u7528\u6761\u6b3e",h:"\u9996\u9875"},
+  ko:{p:"\uac1c\uc778\uc815\ubcf4 \ucc98\ub9ac\ubc29\uce68",t:"\uc774\uc6a9 \uc57d\uad00",h:"\ud648"},
+  ar:{p:"\u0633\u064a\u0627\u0633\u0629 \u0627\u0644\u062e\u0635\u0648\u0635\u064a\u0629",t:"\u0634\u0631\u0648\u0637 \u0627\u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645",h:"\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629"},
+  hi:{p:"\u0917\u094b\u092a\u0928\u0940\u092f\u0924\u093e \u0928\u0940\u0924\u093f",t:"\u0909\u092a\u092f\u094b\u0917 \u0936\u0930\u094d\u0924\u0947\u0902",h:"\u0939\u094b\u092e"},
+  th:{p:"\u0e19\u0e42\u0e22\u0e1a\u0e32\u0e22\u0e04\u0e27\u0e32\u0e21\u0e40\u0e1b\u0e47\u0e19\u0e2a\u0e48\u0e27\u0e19\u0e15\u0e31\u0e27",t:"\u0e40\u0e07\u0e37\u0e48\u0e2d\u0e19\u0e44\u0e02\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19",h:"\u0e2b\u0e19\u0e49\u0e32\u0e2b\u0e25\u0e31\u0e01"},
+  tr:{p:"Gizlilik Politikas\u0131",t:"Kullan\u0131m Ko\u015fullar\u0131",h:"Ana Sayfa"},
+  pl:{p:"Polityka prywatno\u015bci",t:"Warunki u\u017cytkowania",h:"Strona g\u0142\u00f3wna"},
+  nl:{p:"Privacybeleid",t:"Gebruiksvoorwaarden",h:"Home"},
+  vi:{p:"Ch\u00ednh s\u00e1ch B\u1ea3o m\u1eadt",t:"\u0110i\u1ec1u kho\u1ea3n S\u1eed d\u1ee5ng",h:"Trang ch\u1ee7"}
+};
+function privName(k){ return (LINKL[k] && LINKL[k].p) || LINKL.en.p; }
+function termsName(k){ return (LINKL[k] && LINKL[k].t) || LINKL.en.t; }
+function homeName(k){ return (LINKL[k] && LINKL[k].h) || LINKL.en.h; }
+
 (function init(){
-  const sel = document.getElementById("lang");
+  const bar = document.getElementById("langBar");
   for (const k of ORDER) {
-    const o = document.createElement("option");
-    o.value = k; o.textContent = (FLAGS[k]||"") + " " + NAMES[k];
-    sel.appendChild(o);
+    if (typeof T[k] !== "object") continue;
+    const b = document.createElement("button");
+    b.className = "lang-btn"; b.dataset.lang = k;
+    b.textContent = FLAGS[k] || ""; b.title = NAMES[k] || k;
+    b.addEventListener("click", function(){ cur = k; apply(); });
+    bar.appendChild(b);
   }
-  sel.value = cur;
   apply();
 })();
 </script>
