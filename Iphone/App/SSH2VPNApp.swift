@@ -19,6 +19,10 @@ struct SSH2VPNApp: App {
 @MainActor
 final class AppModel: ObservableObject {
     @Published var selectedLanguage: AppLanguage? = LanguageStore.current
+    /// True while the first-launch language screen waits for the device +
+    /// IP-country language hints (max 10s — then the plain list is shown,
+    /// the user picks by hand).
+    @Published var languageHintsResolving = false
     @Published var connection = ConnectionPresentation.disconnected {
         didSet {
             updateIdleTimer()
@@ -50,6 +54,10 @@ final class AppModel: ObservableObject {
     @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
     /// True while the ad stub is "playing" (disables the button).
     @Published var adPlaying = false
+    /// Short-lived in-button notice after a failed rewarded attempt
+    /// (no fill / early dismissal). Shown by the button for ~5s.
+    @Published var adNoticeKey: CopyKey?
+    @Published var adNoticeUntil = Date.distantPast
     /// Real user country (detected while the tunnel is DOWN so the ad SDK
     /// gets honest geo targeting). Ads are blocked whenever the tunnel is
     /// up or connecting — the exit country would skew the campaign.
@@ -230,6 +238,11 @@ final class AppModel: ObservableObject {
         servers = all
         let sel = localStore.selectedID()
         selectedServer = all.first { $0.id == sel } ?? all.first
+        // First launch only: resolve the device + IP-country language hints
+        // for the overlay's pinned entries (10s cap — never block the user).
+        if needsLanguageSelection {
+            resolveLanguageHints()
+        }
         refreshServerMetadata()
         refreshAllServerMetadata()
     }
@@ -723,6 +736,33 @@ final class AppModel: ObservableObject {
     var copy: AppCopy { AppCopy(language: selectedLanguage ?? .english) }
 
     var needsLanguageSelection: Bool { selectedLanguage == nil }
+
+    /// Resolves the device-language + IP-country hints for the first-launch
+    /// language overlay. 10s hard cap: the overlay shows a loader meanwhile,
+    /// then renders whatever is known (device language alone is enough —
+    /// the IP hint is a bonus).
+    func resolveLanguageHints() {
+        guard userCountryCode == nil else { return }
+        languageHintsResolving = true
+        Task { @MainActor [weak self] in
+            let country = await withTaskGroup(of: String?.self) { group in
+                group.addTask { await ServerMetadataResolver.resolveOwnCountry() }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(10))
+                    return nil
+                }
+                let first = await group.next() ?? nil
+                group.cancelAll()
+                return first
+            }
+            guard let self else { return }
+            if let country {
+                self.userCountryCode = country
+                ConsoleLogStore.shared.log(level: .info, tag: "LANG", message: "language hint: IP country \(country)")
+            }
+            self.languageHintsResolving = false
+        }
+    }
 
     func choose(_ language: AppLanguage) {
         selectedLanguage = language
@@ -1383,13 +1423,20 @@ final class AppModel: ObservableObject {
                 self?.userCountryCode = code
                 ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "ad geo targeting: user country \(code) (tunnel down)")
             }
-            let earned = await RewardedAdRouter.presentRewarded()
+            let outcome = await RewardedAdRouter.presentRewarded()
             guard let self else { return }
             self.adPlaying = false
-            guard earned else {
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early or no fill)")
-                return
+            switch outcome {
+            case .earned:
+                break
+            case .noFill:
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate)")
+                self.showAdNotice(.adNoFillShort)
+            case .dismissedEarly:
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early)")
+                self.showAdNotice(.adRewardNotCredited)
             }
+            guard outcome == .earned else { return }
             let now = Date()
             var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
             if let credited = ledger.creditingAdView(now: now) {
@@ -1400,6 +1447,17 @@ final class AppModel: ObservableObject {
             } else {
                 ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (unlimited or bank full)")
             }
+        }
+    }
+
+    /// Shows a short in-button notice (5s) explaining why no reward came.
+    func showAdNotice(_ key: CopyKey) {
+        adNoticeKey = key
+        adNoticeUntil = Date().addingTimeInterval(5)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5.1))
+            guard let self, Date() >= self.adNoticeUntil else { return }
+            self.adNoticeKey = nil
         }
     }
 

@@ -624,6 +624,7 @@ struct ConnectView: View {
                     Text(model.adPlaying ? "…" : adButtonText)
                         .font(.openSans(12, weight: .semibold))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
@@ -634,7 +635,7 @@ struct ConnectView: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!model.canWatchAd)
+            .disabled(!model.canWatchAd || model.adPlaying)
             .accessibilityLabel(model.adsAvailable ? model.copy.text(.watchAdPlus3h) : model.copy.text(.adUnavailableVPNOn))
             // Explain the VPN-on state via a tap hint instead of cramming
             // a long sentence into the button label.
@@ -651,6 +652,12 @@ struct ConnectView: View {
     /// a SHORT locked state (icon + word) — the .help hint carries the full
     /// explanation, so the pill never renders gray-on-gray mush.
     private var adButtonText: String {
+        // Active failure notice (no fill / early dismissal) outranks all
+        // states for its ~5s lifetime — the user just tapped and needs to
+        // see WHY nothing came.
+        if Date() < model.adNoticeUntil, let key = model.adNoticeKey {
+            return model.copy.text(key)
+        }
         if !model.adsAvailable { return model.copy.text(.adUnavailableVPNOnShort) }
         if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
         let s = Int(model.adCooldownRemaining)
@@ -1383,7 +1390,11 @@ struct LanguagePickerSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(AppLanguage.allCases) { language in
+                    let order = LanguageOrdering.displayOrder(
+                        deviceLanguages: Locale.preferredLanguages,
+                        ipCountry: model.userCountryCode
+                    )
+                    ForEach(order.pinned + order.rest) { language in
                         Button {
                             onSelect(language)
                         } label: {
@@ -1397,7 +1408,6 @@ struct LanguagePickerSheet: View {
                                 if selected == language {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(Color.sec50)
                                         .foregroundStyle(Color.sec50)
                                 }
                             }
@@ -1413,8 +1423,14 @@ struct LanguagePickerSheet: View {
                         }
                         .buttonStyle(.plain)
 
-                        if language != AppLanguage.allCases.last {
+                        // Separator after the pinned block (device + IP
+                        // language float to the top); normal dividers
+                        // between the rest.
+                        if language != (order.pinned + order.rest).last {
                             Divider().background(Color.octGray05).padding(.leading, 52)
+                        }
+                        if language == order.pinned.last, !order.rest.isEmpty {
+                            Divider().background(Color.sec50.opacity(0.35)).padding(.leading, 20)
                         }
                     }
                 }
@@ -1452,7 +1468,24 @@ struct LanguageOverlay: View {
                     .foregroundStyle(.secondary)
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(AppLanguage.allCases) { language in
+                        if model.languageHintsResolving {
+                            // Loader while the IP-country hint resolves
+                            // (10s cap); the device-language entry may show
+                            // up together with it.
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text(model.copy.text(.selectLanguageHint))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(10)
+                        }
+                        let order = LanguageOrdering.displayOrder(
+                            deviceLanguages: Locale.preferredLanguages,
+                            ipCountry: model.userCountryCode
+                        )
+                        ForEach(order.pinned + order.rest) { language in
                             Button {
                                 model.choose(language)
                             } label: {
@@ -1471,6 +1504,9 @@ struct LanguageOverlay: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(language.title)
+                            if language == order.pinned.last, !order.rest.isEmpty {
+                                Divider().overlay(Color.sec50.opacity(0.5)).padding(.horizontal, 4)
+                            }
                         }
                     }
                 }
@@ -2505,13 +2541,13 @@ struct FlowLayout: Layout {
         var y = bounds.minY
         for row in rows {
             var x = bounds.minX
-            for index in row.indices {
+            for (offset, index) in row.indices.enumerated() {
                 subviews[index].place(
                     at: CGPoint(x: x, y: y),
                     anchor: .topLeading,
-                    proposal: ProposedViewSize(row.sizes[index])
+                    proposal: ProposedViewSize(row.sizes[offset])
                 )
-                x += row.sizes[index].width + spacing
+                x += row.sizes[offset].width + spacing
             }
             y += row.height + spacing
         }

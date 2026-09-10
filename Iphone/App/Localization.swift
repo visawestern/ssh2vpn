@@ -75,3 +75,70 @@ enum LanguageStore {
         set { UserDefaults.standard.set(newValue?.rawValue, forKey: key) }
     }
 }
+
+/// Display order for the language lists (first-launch overlay + settings
+/// picker). Device language and IP-country language float to the top;
+/// everything else keeps the enum order (Russian stays last by design).
+enum LanguageOrdering {
+    /// Country code (e.g. "TH", "DE") → the app language most likely wanted
+    /// there. Only countries whose language the app actually ships.
+    static func language(forCountry code: String) -> AppLanguage? {
+        switch code.uppercased() {
+        case "US", "GB", "AU", "CA", "NZ", "IE", "SG", "PH", "IN": return .english
+        case "ES", "MX", "AR", "CL", "CO", "PE": return .spanish
+        case "DE", "AT", "CH", "LI": return .german
+        case "FR", "BE", "LU", "MC": return .french
+        case "IT", "SM", "VA": return .italian
+        case "BR", "PT": return .portuguese
+        case "JP": return .japanese
+        case "CN", "HK", "TW": return .chinese
+        case "KR", "KP": return .korean
+        case "SA", "AE", "EG", "QA", "KW", "OM", "BH", "JO": return .arabic
+        case "IN": return .hindi
+        case "TH": return .thai
+        case "TR": return .turkish
+        case "PL": return .polish
+        case "NL": return .dutch
+        case "VN": return .vietnamese
+        case "RU", "BY", "KZ", "KG": return .russian
+        default: return nil
+        }
+    }
+
+    /// Matches a device language identifier ("pt-BR", "zh-Hans-CN", "en")
+    /// against the app's languages. Longest-prefix wins so "pt-BR" beats
+    /// a bare "pt" and "zh-Hans" is recognized before plain "zh".
+    static func language(forDeviceIdentifier identifier: String) -> AppLanguage? {
+        let normalized = identifier.replacingOccurrences(of: "_", with: "-").lowercased()
+        var best: (AppLanguage, Int)?
+        for language in AppLanguage.allCases {
+            let raw = language.rawValue.lowercased()
+            if normalized == raw {
+                return language
+            }
+            if normalized.hasPrefix(raw + "-"), let b = best, b.1 >= raw.count { continue }
+            if normalized.hasPrefix(raw + "-") || normalized.hasPrefix(raw) && !normalized.contains("-") {
+                if raw.count > (best?.1 ?? 0) { best = (language, raw.count) }
+            }
+        }
+        return best?.0
+    }
+
+    /// The list the pickers render: pinned entries first (device language,
+    /// then IP-country language, no duplicates), then a divider, then the
+    /// rest in enum order (Russian last).
+    static func displayOrder(deviceLanguages: [String], ipCountry: String?) -> (pinned: [AppLanguage], rest: [AppLanguage]) {
+        var pinned: [AppLanguage] = []
+        for id in deviceLanguages {
+            if let l = language(forDeviceIdentifier: id), !pinned.contains(l) {
+                pinned.append(l)
+                break
+            }
+        }
+        if let code = ipCountry, let l = language(forCountry: code), !pinned.contains(l) {
+            pinned.append(l)
+        }
+        let rest = AppLanguage.allCases.filter { !pinned.contains($0) }
+        return (pinned, rest)
+    }
+}

@@ -214,6 +214,8 @@ details.faq[open] .abody p{opacity:1; transform:none}
 .shot{display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center}
 .shot figcaption{color:var(--soft); font-size:12.5px; max-width:230px}
 .device svg{max-width:100%; height:auto; border-radius:26px; box-shadow:0 22px 50px rgba(12,20,40,.25)}
+.device img{max-width:100%; height:auto; border-radius:26px; display:block; box-shadow:0 22px 50px rgba(12,20,40,.25)}
+@media (prefers-color-scheme: dark){ .device img{outline:1px solid var(--line)} }
 
 kbd{font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--surface2); border:1px solid var(--line);
   border-radius:7px; padding:2px 7px; color:var(--ink); box-shadow:0 1px 0 var(--line)}
@@ -621,9 +623,9 @@ const MOCKS = {
 
 "use strict";
 const SEL = [
- ["en","English"],["ru","Русский"],["es","Español"],["de","Deutsch"],["ja","日本語"],["zh","中文"],
+ ["en","English"],["es","Español"],["de","Deutsch"],["ja","日本語"],["zh","中文"],
  ["fr","Français"],["it","Italiano"],["pt","Português"],["ko","한국어"],["ar","العربية"],["hi","हिन्दी"],
- ["th","ไทย"],["tr","Türkçe"],["pl","Polski"],["nl","Nederlands"],["vi","Tiếng Việt"]
+ ["th","ไทย"],["tr","Türkçe"],["pl","Polski"],["nl","Nederlands"],["vi","Tiếng Việt"],["ru","Русский"]
 ];
 const FLAG = {
  "en":"🇬🇧","ru":"🇷🇺","es":"🇪🇸","de":"🇩🇪","ja":"🇯🇵","zh":"🇨🇳",
@@ -737,6 +739,12 @@ const MOCK_TEXT = {
   "nl": {"UNPROTECTED": "NIET BESCHERMD", "PROTECTED": "BESCHERMD", "FREE TIME": "GRATIS TIJD", "+3h AD": "+3U ADVERTENTIE", "Tap to connect": "Tik om te verbinden", "Tap to disconnect": "Tik om te verbreken", "UNLIMITED": "ONBEPERKT", "No ads · No limits · Forever": "Geen advertenties · Geen limieten · Voor altijd", "IDLE · 0 B/s": "INACTIEF · 0 B/s"},
   "vi": {"UNPROTECTED": "CHƯA ĐƯỢC BẢO VỆ", "PROTECTED": "ĐÃ BẢO VỆ", "FREE TIME": "THỜI GIAN MIỄN PHÍ", "+3h AD": "+3 GIỜ QUẢNG CÁO", "Tap to connect": "Chạm để kết nối", "Tap to disconnect": "Chạm để ngắt kết nối", "UNLIMITED": "KHÔNG GIỚI HẠN", "No ads · No limits · Forever": "Không quảng cáo · Không giới hạn · Mãi mãi", "IDLE · 0 B/s": "RẢNH · 0 B/s"},
 };
+// Real device screenshots. Only kinds listed here use a PNG; every other
+// kind falls back to the localized SVG mock (MOCKS/locMock below) until its
+// screenshot lands in the bundle.
+const SHOTS = {
+  "connected": "shot-connected.png"
+};
 function locMock(kind){
   const t = MOCK_TEXT[cur] || MOCK_TEXT.en || {};
   let svg = MOCKS[kind] || '';
@@ -744,7 +752,10 @@ function locMock(kind){
   return svg;
 }
 function mock(kind, cap){
-  return '<figure class="shot"><div class="device">'+locMock(kind)+'</div>'+(cap?'<figcaption>'+cap+'</figcaption>':'')+'</figure>';
+  const art = SHOTS[kind]
+    ? '<img src="'+SHOTS[kind]+'" alt="" loading="lazy">'
+    : locMock(kind);
+  return '<figure class="shot"><div class="device">'+art+'</div>'+(cap?'<figcaption>'+cap+'</figcaption>':'')+'</figure>';
 }
 
 function spy(){

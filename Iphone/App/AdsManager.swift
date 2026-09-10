@@ -96,12 +96,24 @@ final class AdLoadBox: @unchecked Sendable {
     }
 }
 
+/// Why the rewarded flow ended. The button shows a short in-place notice
+/// for the failure cases (5s) instead of silently re-enabling.
+enum RewardedOutcome {
+    /// Watched to the end — reward credited.
+    case earned
+    /// No ad came up (no fill, UMP consent gate, load timeout) — nothing
+    /// to watch, the user did nothing wrong.
+    case noFill
+    /// An ad played but was dismissed before the earn callback — no
+    /// reward this time.
+    case dismissedEarly
+}
+
 /// Common entry the app calls: initializes the ACTIVE provider and runs the
-/// full rewarded flow (consent → load → present). Returns true when the
-/// user completed the view and earned the reward.
+/// full rewarded flow (consent → load → present).
 enum RewardedAdRouter {
     @MainActor
-    static func presentRewarded() async -> Bool {
+    static func presentRewarded() async -> RewardedOutcome {
         switch AdsProvider.active {
         case .admob:
             await AdMobRewardedProvider.shared.initialize()
@@ -109,7 +121,7 @@ enum RewardedAdRouter {
         case .applovinMax:
             guard AdsConfig.maxSDKKey != "PENDING" else {
                 ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "MAX asleep: SDK key pending account approval")
-                return false
+                return .noFill
             }
             MaxRewardedProvider.shared.initialize()
             return await MaxRewardedProvider.shared.presentRewarded()
@@ -150,12 +162,12 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
             let ok = status.adapterStatusesByClassName.values.allSatisfy { $0.state == .ready }
             ConsoleLogStore.shared.log(level: ok ? .success : .warning, tag: "ADS", message: "GMA start: \(ok ? "ready" : "some adapters not ready")")
         }
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "AdMob rewarded ready (TEST app ID, test ad unit)")
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "AdMob rewarded ready (production ad unit)")
     }
 
-    /// Full rewarded flow: consent → load → present. True = earned.
+    /// Full rewarded flow: consent → load → present.
     @MainActor
-    func presentRewarded() async -> Bool {
+    func presentRewarded() async -> RewardedOutcome {
         // 1. UMP consent (GDPR regions). Safety timeout like the CAS flow.
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             let box = ResumeOnceBox(c)
@@ -182,7 +194,7 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
 
         guard ConsentInformation.shared.canRequestAds else {
             ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "UMP: canRequestAds false after consent flow")
-            return false
+            return .noFill
         }
 
         // 2. Load (20s no-fill timeout). AdLoadBox parks the ad behind
@@ -204,7 +216,7 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
                 loadBox.resume(nil)
             }
         }
-        guard loaded, let ad = loadBox.takeAd() else { return false }
+        guard loaded, let ad = loadBox.takeAd() else { return .noFill }
         self.rewardedAd = ad
 
         // 3. Present over the top view controller; earn handler fires the
@@ -226,7 +238,9 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
             }
         }
         self.rewardedAd = nil
-        return earnFlag.read
+        // earnFlag true = watched to the end; false = dismissed early
+        // (the ad DID play, so not a no-fill).
+        return earnFlag.read ? .earned : .dismissedEarly
     }
 
     /// Top-most view controller for fullscreen ad presentation.
@@ -345,8 +359,8 @@ final class MaxRewardedProvider: NSObject, @unchecked Sendable {
     }
 
     @MainActor
-    func presentRewarded() async -> Bool {
-        guard let rewarded else { return false }
+    func presentRewarded() async -> RewardedOutcome {
+        guard let rewarded else { return .noFill }
         // MAX shows consent internally per network; load → show with the
         // same safety-timeout discipline.
         let loaded = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
@@ -357,7 +371,7 @@ final class MaxRewardedProvider: NSObject, @unchecked Sendable {
                 MaxLoadBox.shared.timeout()
             }
         }
-        guard loaded else { return false }
+        guard loaded else { return .noFill }
         let presentingVC = await TopVCFinder.find()
         var earned = false
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
@@ -372,7 +386,8 @@ final class MaxRewardedProvider: NSObject, @unchecked Sendable {
                 box.resume()
             }
         }
-        return earned
+        // Ad shown: earned = watched to the end, false = early dismiss.
+        return earned ? .earned : .dismissedEarly
     }
 }
 
@@ -545,8 +560,8 @@ final class RewardedAdCoordinator: NSObject, ObservableObject {
     /// user completed the view (SDK earn callback), false on any failure,
     /// no-fill timeout, or early dismissal.
     @MainActor
-    func presentRewarded() async -> Bool {
-        guard let rewarded else { return false }
+    func presentRewarded() async -> RewardedOutcome {
+        guard let rewarded else { return .noFill }
 
         // 1. Consent form first (GDPR regions). If it shows, the user
         //    answers it; the completion fires regardless. Safety timeout:
@@ -575,13 +590,13 @@ final class RewardedAdCoordinator: NSObject, ObservableObject {
                 self?.finishLoadHandler(false, reason: "load timeout (20s)")
             }
         }
-        guard loaded else { return false }
+        guard loaded else { return .noFill }
 
         // 3. Present and wait for earn + dismissal. Present over the app's
         //    top view controller — passing nil leaves some networks unable
         //    to attach their fullscreen view, which stalled the flow.
         let presentingVC = await topViewController()
-        return await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+        let earned = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
             earnHandler = { earned in c.resume(returning: earned) }
             rewarded.present(from: presentingVC) { [weak self] _ in
                 // Earned fires before dismissal; remember it, the dismiss
@@ -589,6 +604,7 @@ final class RewardedAdCoordinator: NSObject, ObservableObject {
                 self?.markRewardEarned()
             }
         }
+        return earned ? .earned : .dismissedEarly
     }
 
     /// Top-most view controller for fullscreen ad presentation.
