@@ -4,495 +4,173 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSH2VPN — Your VPS, Your VPN</title>
-    <meta name="description" content="Turn your own VPS into a fast, private VPN. SSH2VPN routes your iPhone traffic through your own server via SSH. No third-party infrastructure.">
-    <meta name="keywords" content="SSH, VPN, VPS, self-hosted, privacy, iOS, iPhone">
+    <meta name="description" content="Turn your own VPS into a fast, private VPN. SSH2VPN routes your iPhone traffic through your own server via SSH.">
     <link rel="icon" type="image/png" href="screenshots/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#0a0e17;--bg-card:#111827;--bg-card-hover:#1a2332;--border:#1e293b;--text:#f1f5f9;--text-muted:#94a3b8;--accent:#3b82f6;--accent-glow:rgba(59,130,246,0.3);--green:#10b981;--green-glow:rgba(16,185,129,0.3)}
+        html{scroll-behavior:smooth}
+        body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
 
-        :root {
-            --bg: #0a0e17;
-            --bg-card: #111827;
-            --bg-card-hover: #1a2332;
-            --border: #1e293b;
-            --text: #f1f5f9;
-            --text-muted: #94a3b8;
-            --accent: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.3);
-            --green: #10b981;
-            --green-glow: rgba(16, 185, 129, 0.3);
-        }
-
-        html { scroll-behavior: smooth; }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
+        /* LANG SWITCHER */
+        .lang-bar{position:fixed;top:0;width:100%;z-index:200;background:rgba(10,14,23,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0.5rem 1rem}
+        .lang-bar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:flex-end;gap:0.25rem;flex-wrap:wrap}
+        .lang-btn{background:none;border:2px solid transparent;color:var(--text-muted);font-size:1.15rem;padding:0.2rem 0.35rem;border-radius:6px;cursor:pointer;transition:all 0.2s;line-height:1}
+        .lang-btn:hover{background:rgba(255,255,255,0.05)}
+        .lang-btn.active{border-color:var(--accent);background:rgba(59,130,246,0.1);color:var(--text)}
 
         /* NAV */
-        nav {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 100;
-            padding: 1rem 2rem;
-            background: rgba(10, 14, 23, 0.85);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .nav-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: var(--text);
-        }
-        .nav-brand img {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-        }
-        .nav-brand span {
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-        }
-        .nav-links a {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: color 0.2s;
-        }
-        .nav-links a:hover { color: var(--text); }
-        .nav-cta {
-            background: var(--accent);
-            color: #fff !important;
-            padding: 0.5rem 1.25rem;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background 0.2s, box-shadow 0.2s;
-        }
-        .nav-cta:hover {
-            background: #2563eb;
-            box-shadow: 0 0 20px var(--accent-glow);
-        }
+        nav{position:fixed;top:44px;width:100%;z-index:100;padding:0.75rem 2rem;background:rgba(10,14,23,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+        .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+        .nav-brand{display:flex;align-items:center;gap:0.75rem;text-decoration:none;color:var(--text)}
+        .nav-brand img{width:32px;height:32px;border-radius:8px}
+        .nav-brand span{font-weight:700;font-size:1rem}
+        .nav-links{display:flex;gap:2rem;list-style:none}
+        .nav-links a{color:var(--text-muted);text-decoration:none;font-size:0.85rem;font-weight:500;transition:color 0.2s}
+        .nav-links a:hover{color:var(--text)}
+        .nav-cta{background:var(--accent);color:#fff!important;padding:0.45rem 1.1rem;border-radius:8px;font-weight:600;transition:background 0.2s,box-shadow 0.2s}
+        .nav-cta:hover{background:#2563eb;box-shadow:0 0 20px var(--accent-glow)}
 
         /* HERO */
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            padding: 8rem 2rem 4rem;
-            position: relative;
-        }
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 800px;
-            height: 800px;
-            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-            opacity: 0.4;
-            pointer-events: none;
-        }
-        .hero-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
-            width: 100%;
-            position: relative;
-        }
-        .hero-content { max-width: 560px; }
-        .hero-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            color: var(--accent);
-            padding: 0.35rem 1rem;
-            border-radius: 100px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-        }
-        .hero-badge::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            background: var(--green);
-            border-radius: 50%;
-            animation: pulse-dot 2s infinite;
-        }
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-        .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            line-height: 1.1;
-            margin-bottom: 1.25rem;
-            letter-spacing: -0.03em;
-        }
-        .hero h1 .gradient {
-            background: linear-gradient(135deg, var(--accent), var(--green));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .hero p {
-            font-size: 1.2rem;
-            color: var(--text-muted);
-            margin-bottom: 2rem;
-            line-height: 1.7;
-        }
-        .hero-buttons {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-        .btn-appstore {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.75rem;
-            background: #fff;
-            color: #000;
-            padding: 0.85rem 1.5rem;
-            border-radius: 12px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.95rem;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .btn-appstore:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(255,255,255,0.15);
-        }
-        .btn-appstore svg { width: 22px; height: 22px; }
-        .btn-learn {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: color 0.2s;
-        }
-        .btn-learn:hover { color: var(--text); }
-
-        /* PHONE MOCKUP */
-        .hero-phones {
-            display: flex;
-            justify-content: center;
-            position: relative;
-        }
-        .phone-mockup {
-            width: 280px;
-            border-radius: 36px;
-            border: 3px solid #1e293b;
-            overflow: hidden;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 40px var(--accent-glow);
-            transition: transform 0.4s;
-        }
-        .phone-mockup:hover { transform: translateY(-8px) scale(1.02); }
-        .phone-mockup img {
-            width: 100%;
-            display: block;
-        }
-        .phone-mockup.secondary {
-            position: absolute;
-            right: -60px;
-            top: 40px;
-            width: 220px;
-            opacity: 0.7;
-            transform: rotate(3deg);
-            z-index: -1;
-        }
-        .phone-mockup.secondary:hover { transform: rotate(3deg) translateY(-8px) scale(1.02); }
+        .hero{min-height:100vh;display:flex;align-items:center;padding:8rem 2rem 4rem;position:relative}
+        .hero::before{content:'';position:absolute;top:-50%;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,var(--accent-glow) 0%,transparent 70%);opacity:0.4;pointer-events:none}
+        .hero-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;width:100%;position:relative}
+        .hero-content{max-width:560px}
+        .hero-badge{display:inline-flex;align-items:center;gap:0.5rem;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:var(--accent);padding:0.35rem 1rem;border-radius:100px;font-size:0.8rem;font-weight:600;margin-bottom:1.5rem}
+        .hero-badge::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse-dot 2s infinite}
+        @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.4}}
+        .hero h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1.25rem;letter-spacing:-0.03em}
+        .hero h1 .gradient{background:linear-gradient(135deg,var(--accent),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .hero p{font-size:1.15rem;color:var(--text-muted);margin-bottom:2rem;line-height:1.7}
+        .hero-buttons{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+        .btn-appstore{display:inline-flex;align-items:center;gap:0.75rem;background:#fff;color:#000;padding:0.85rem 1.5rem;border-radius:12px;text-decoration:none;font-weight:600;font-size:0.95rem;transition:transform 0.2s,box-shadow 0.2s}
+        .btn-appstore:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,255,255,0.15)}
+        .btn-appstore svg{width:22px;height:22px}
+        .btn-learn{color:var(--text-muted);text-decoration:none;font-weight:500;font-size:0.95rem;transition:color 0.2s}
+        .btn-learn:hover{color:var(--text)}
+        .hero-phones{display:flex;justify-content:center;position:relative}
+        .phone-mockup{width:280px;border-radius:36px;border:3px solid #1e293b;overflow:hidden;box-shadow:0 25px 80px rgba(0,0,0,0.5),0 0 40px var(--accent-glow);transition:transform 0.4s}
+        .phone-mockup:hover{transform:translateY(-8px) scale(1.02)}
+        .phone-mockup img{width:100%;display:block}
+        .phone-mockup.secondary{position:absolute;right:-60px;top:40px;width:220px;opacity:0.7;transform:rotate(3deg);z-index:-1}
+        .phone-mockup.secondary:hover{transform:rotate(3deg) translateY(-8px) scale(1.02)}
 
         /* SECTIONS */
-        section {
-            padding: 6rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .section-label {
-            color: var(--accent);
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 0.75rem;
-        }
-        .section-title {
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-            letter-spacing: -0.02em;
-        }
-        .section-desc {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            max-width: 600px;
-            margin-bottom: 3rem;
-        }
+        section{padding:6rem 2rem;max-width:1200px;margin:0 auto}
+        .section-label{color:var(--accent);font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.75rem}
+        .section-title{font-size:2.5rem;font-weight:800;margin-bottom:1rem;letter-spacing:-0.02em}
+        .section-desc{color:var(--text-muted);font-size:1.1rem;max-width:600px;margin-bottom:3rem}
 
         /* FEATURES */
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1.5rem;
-        }
-        .feature-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 2rem;
-            transition: border-color 0.3s, background 0.3s, transform 0.3s;
-        }
-        .feature-card:hover {
-            border-color: var(--accent);
-            background: var(--bg-card-hover);
-            transform: translateY(-4px);
-        }
-        .feature-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            margin-bottom: 1.25rem;
-        }
-        .feature-icon.blue { background: rgba(59, 130, 246, 0.15); }
-        .feature-icon.green { background: rgba(16, 185, 129, 0.15); }
-        .feature-icon.purple { background: rgba(139, 92, 246, 0.15); }
-        .feature-icon.orange { background: rgba(249, 115, 22, 0.15); }
-        .feature-icon.pink { background: rgba(236, 72, 153, 0.15); }
-        .feature-icon.teal { background: rgba(20, 184, 166, 0.15); }
-        .feature-card h3 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-        .feature-card p {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
+        .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+        .feature-card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;transition:border-color 0.3s,background 0.3s,transform 0.3s}
+        .feature-card:hover{border-color:var(--accent);background:var(--bg-card-hover);transform:translateY(-4px)}
+        .feature-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1.25rem}
+        .feature-icon.blue{background:rgba(59,130,246,0.15)}
+        .feature-icon.green{background:rgba(16,185,129,0.15)}
+        .feature-icon.purple{background:rgba(139,92,246,0.15)}
+        .feature-icon.orange{background:rgba(249,115,22,0.15)}
+        .feature-icon.pink{background:rgba(236,72,153,0.15)}
+        .feature-icon.teal{background:rgba(20,184,166,0.15)}
+        .feature-card h3{font-size:1.1rem;font-weight:700;margin-bottom:0.5rem}
+        .feature-card p{color:var(--text-muted);font-size:0.9rem;line-height:1.6}
 
         /* SCREENSHOTS */
-        .screenshots-section {
-            padding: 6rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-            text-align: center;
-        }
-        .screenshots-scroll {
-            display: flex;
-            gap: 1.5rem;
-            overflow-x: auto;
-            padding: 2rem 0;
-            scroll-snap-type: x mandatory;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
-        }
-        .screenshots-scroll::-webkit-scrollbar { height: 6px; }
-        .screenshots-scroll::-webkit-scrollbar-track { background: transparent; }
-        .screenshots-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        .screenshot-item {
-            flex: 0 0 auto;
-            scroll-snap-align: center;
-        }
-        .screenshot-item img {
-            height: 500px;
-            border-radius: 24px;
-            border: 2px solid var(--border);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        .screenshot-item img:hover {
-            transform: scale(1.03);
-            box-shadow: 0 15px 50px rgba(0,0,0,0.4);
-        }
+        .screenshots-section{text-align:center;padding:6rem 2rem;max-width:1200px;margin:0 auto}
+        .screenshots-scroll{display:flex;gap:1.5rem;overflow-x:auto;padding:2rem 0;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+        .screenshots-scroll::-webkit-scrollbar{height:6px}
+        .screenshots-scroll::-webkit-scrollbar-track{background:transparent}
+        .screenshots-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+        .screenshot-item{flex:0 0 auto;scroll-snap-align:center}
+        .screenshot-item img{height:500px;border-radius:24px;border:2px solid var(--border);transition:transform 0.3s,box-shadow 0.3s}
+        .screenshot-item img:hover{transform:scale(1.03);box-shadow:0 15px 50px rgba(0,0,0,0.4)}
 
-        /* HOW IT WORKS */
-        .steps {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 2rem;
-            counter-reset: step;
-        }
-        .step {
-            position: relative;
-            padding: 2rem;
-            counter-increment: step;
-        }
-        .step::before {
-            content: counter(step);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent), #2563eb);
-            color: #fff;
-            font-weight: 800;
-            font-size: 1.2rem;
-            margin-bottom: 1.25rem;
-            box-shadow: 0 0 25px var(--accent-glow);
-        }
-        .step h3 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-        .step p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-        .step-connector {
-            display: none;
-        }
+        /* STEPS */
+        .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;counter-reset:step}
+        .step{position:relative;padding:2rem;counter-increment:step}
+        .step::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff;font-weight:800;font-size:1.2rem;margin-bottom:1.25rem;box-shadow:0 0 25px var(--accent-glow)}
+        .step h3{font-size:1.15rem;font-weight:700;margin-bottom:0.5rem}
+        .step p{color:var(--text-muted);font-size:0.95rem;line-height:1.6}
 
         /* PRIVACY */
-        .privacy-banner {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 3rem;
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 2.5rem;
-            align-items: center;
-            margin-top: 2rem;
-        }
-        .privacy-icon {
-            width: 80px;
-            height: 80px;
-            border-radius: 20px;
-            background: rgba(16, 185, 129, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5rem;
-        }
-        .privacy-banner h3 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-        .privacy-banner p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.7;
-        }
-        .privacy-list {
-            display: flex;
-            gap: 1.5rem;
-            margin-top: 1rem;
-            flex-wrap: wrap;
-        }
-        .privacy-list span {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            color: var(--green);
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
+        .privacy-banner{background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:3rem;display:grid;grid-template-columns:auto 1fr;gap:2.5rem;align-items:center;margin-top:2rem}
+        .privacy-icon{width:80px;height:80px;border-radius:20px;background:rgba(16,185,129,0.1);display:flex;align-items:center;justify-content:center;font-size:2.5rem}
+        .privacy-banner h3{font-size:1.3rem;font-weight:700;margin-bottom:0.5rem}
+        .privacy-banner p{color:var(--text-muted);font-size:0.95rem;line-height:1.7}
+        .privacy-list{display:flex;gap:1.5rem;margin-top:1rem;flex-wrap:wrap}
+        .privacy-list span{display:inline-flex;align-items:center;gap:0.4rem;color:var(--green);font-size:0.85rem;font-weight:500}
 
         /* CTA */
-        .cta-section {
-            text-align: center;
-            padding: 8rem 2rem;
-        }
-        .cta-section h2 {
-            font-size: 2.8rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-            letter-spacing: -0.02em;
-        }
-        .cta-section p {
-            color: var(--text-muted);
-            font-size: 1.15rem;
-            margin-bottom: 2.5rem;
-            max-width: 500px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .cta-section .btn-appstore {
-            font-size: 1.05rem;
-            padding: 1rem 2rem;
-        }
+        .cta-section{text-align:center;padding:8rem 2rem}
+        .cta-section h2{font-size:2.8rem;font-weight:800;margin-bottom:1rem;letter-spacing:-0.02em}
+        .cta-section p{color:var(--text-muted);font-size:1.15rem;margin-bottom:2.5rem;max-width:500px;margin-left:auto;margin-right:auto}
+        .cta-section .btn-appstore{font-size:1.05rem;padding:1rem 2rem}
 
         /* FOOTER */
-        footer {
-            border-top: 1px solid var(--border);
-            padding: 2rem;
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-        footer a {
-            color: var(--text-muted);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        footer a:hover { color: var(--text); }
+        footer{border-top:1px solid var(--border);padding:2rem;text-align:center;color:var(--text-muted);font-size:0.85rem}
+        footer a{color:var(--text-muted);text-decoration:none;transition:color 0.2s}
+        footer a:hover{color:var(--text)}
+
+        /* HIDDEN */
+        [data-lang]{display:none}
+        [data-lang].active{display:block}
+        span[data-lang],a[data-lang]{display:none}
+        span[data-lang].active,a[data-lang].active{display:inline}
+        li[data-lang]{display:none}
+        li[data-lang].active{display:list-item}
 
         /* RESPONSIVE */
-        @media (max-width: 900px) {
-            .hero-inner { grid-template-columns: 1fr; text-align: center; }
-            .hero-content { max-width: 100%; }
-            .hero-buttons { justify-content: center; }
-            .hero-phones { margin-top: 3rem; }
-            .phone-mockup.secondary { display: none; }
-            .features-grid { grid-template-columns: 1fr; }
-            .steps { grid-template-columns: 1fr; }
-            .privacy-banner { grid-template-columns: 1fr; text-align: center; justify-items: center; }
-            .privacy-list { justify-content: center; }
-            .nav-links { display: none; }
-            .hero h1 { font-size: 2.5rem; }
-            .section-title { font-size: 2rem; }
+        @media(max-width:900px){
+            .hero-inner{grid-template-columns:1fr;text-align:center}
+            .hero-content{max-width:100%}
+            .hero-buttons{justify-content:center}
+            .hero-phones{margin-top:3rem}
+            .phone-mockup.secondary{display:none}
+            .features-grid{grid-template-columns:1fr}
+            .steps{grid-template-columns:1fr}
+            .privacy-banner{grid-template-columns:1fr;text-align:center;justify-items:center}
+            .privacy-list{justify-content:center}
+            .nav-links{display:none}
+            .hero h1{font-size:2.5rem}
+            .section-title{font-size:2rem}
         }
-
-        @media (max-width: 600px) {
-            .hero { padding: 6rem 1.5rem 3rem; }
-            .hero h1 { font-size: 2rem; }
-            .hero p { font-size: 1rem; }
-            .phone-mockup { width: 240px; }
-            .screenshot-item img { height: 380px; }
+        @media(max-width:600px){
+            .hero{padding:6rem 1.5rem 3rem}
+            .hero h1{font-size:2rem}
+            .hero p{font-size:1rem}
+            .phone-mockup{width:240px}
+            .screenshot-item img{height:380px}
+            .lang-bar-inner{justify-content:center}
         }
     </style>
 </head>
 <body>
+
+<!-- LANG BAR -->
+<div class="lang-bar">
+    <div class="lang-bar-inner">
+        <button class="lang-btn active" data-set-lang="en" title="English">🇬🇧</button>
+        <button class="lang-btn" data-set-lang="ru" title="Русский">🇷🇺</button>
+        <button class="lang-btn" data-set-lang="es" title="Español">🇪🇸</button>
+        <button class="lang-btn" data-set-lang="de" title="Deutsch">🇩🇪</button>
+        <button class="lang-btn" data-set-lang="fr" title="Français">🇫🇷</button>
+        <button class="lang-btn" data-set-lang="it" title="Italiano">🇮🇹</button>
+        <button class="lang-btn" data-set-lang="pt" title="Português">🇧🇷</button>
+        <button class="lang-btn" data-set-lang="ja" title="日本語">🇯🇵</button>
+        <button class="lang-btn" data-set-lang="zh" title="中文">🇨🇳</button>
+        <button class="lang-btn" data-set-lang="ko" title="한국어">🇰🇷</button>
+        <button class="lang-btn" data-set-lang="ar" title="العربية">🇸🇦</button>
+        <button class="lang-btn" data-set-lang="hi" title="हिन्दी">🇮🇳</button>
+        <button class="lang-btn" data-set-lang="th" title="ไทย">🇹🇭</button>
+        <button class="lang-btn" data-set-lang="tr" title="Türkçe">🇹🇷</button>
+        <button class="lang-btn" data-set-lang="pl" title="Polski">🇵🇱</button>
+        <button class="lang-btn" data-set-lang="nl" title="Nederlands">🇳🇱</button>
+        <button class="lang-btn" data-set-lang="vi" title="Tiếng Việt">🇻🇳</button>
+    </div>
+</div>
 
 <!-- NAV -->
 <nav>
@@ -502,10 +180,10 @@
             <span>SSH2VPN</span>
         </a>
         <ul class="nav-links">
-            <li><a href="#features">Features</a></li>
-            <li><a href="#how-it-works">How It Works</a></li>
-            <li><a href="#privacy">Privacy</a></li>
-            <li><a href="https://apps.apple.com/app/ssh2vpn/id6809367474" class="nav-cta">Download</a></li>
+            <li><a href="#features" data-i18n="nav_features">Features</a></li>
+            <li><a href="#how-it-works" data-i18n="nav_how">How It Works</a></li>
+            <li><a href="#privacy" data-i18n="nav_privacy">Privacy</a></li>
+            <li><a href="https://apps.apple.com/app/ssh2vpn/id6809367474" class="nav-cta" data-i18n="nav_download">Download</a></li>
         </ul>
     </div>
 </nav>
@@ -514,20 +192,20 @@
 <section class="hero">
     <div class="hero-inner">
         <div class="hero-content">
-            <div class="hero-badge">Available on iOS</div>
-            <h1>Your VPS.<br><span class="gradient">Your VPN.</span></h1>
-            <p>Turn your own VPS into a fast, private VPN — in one tap. SSH2VPN routes your iPhone traffic through your own server via SSH. No third-party network between you and your data.</p>
+            <div class="hero-badge" data-i18n="hero_badge">Available on iOS</div>
+            <h1><span data-i18n="hero_title_1">Your VPS.</span><br><span class="gradient" data-i18n="hero_title_2">Your VPN.</span></h1>
+            <p data-i18n="hero_desc">Turn your own VPS into a fast, private VPN — in one tap. SSH2VPN routes your iPhone traffic through your own server via SSH. No third-party network between you and your data.</p>
             <div class="hero-buttons">
                 <a href="https://apps.apple.com/app/ssh2vpn/id6809367474" class="btn-appstore">
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                    Download on the App Store
+                    <span data-i18n="hero_appstore">Download on the App Store</span>
                 </a>
-                <a href="#how-it-works" class="btn-learn">How it works →</a>
+                <a href="#how-it-works" class="btn-learn" data-i18n="hero_learn">How it works →</a>
             </div>
         </div>
         <div class="hero-phones">
             <div class="phone-mockup">
-                <img src="screenshots/01-connect.png" alt="SSH2VPN Connect Screen">
+                <img src="screenshots/01-connect.png" alt="SSH2VPN">
             </div>
             <div class="phone-mockup secondary">
                 <img src="screenshots/05-connected.png" alt="SSH2VPN Connected">
@@ -538,107 +216,93 @@
 
 <!-- FEATURES -->
 <section id="features">
-    <div class="section-label">Features</div>
-    <h2 class="section-title">Everything you need,<br>nothing you don't</h2>
-    <p class="section-desc">SSH2VPN is a system-level VPN client that works with every app on your iPhone. Built-in DNS, multi-server support, and a hacker console — all under the hood.</p>
-
+    <div class="section-label" data-i18n="feat_label">Features</div>
+    <h2 class="section-title" data-i18n="feat_title">Everything you need,<br>nothing you don't</h2>
+    <p class="section-desc" data-i18n="feat_desc">SSH2VPN is a system-level VPN client that works with every app on your iPhone. Built-in DNS, multi-server support, and a hacker console — all under the hood.</p>
     <div class="features-grid">
         <div class="feature-card">
             <div class="feature-icon blue">🔒</div>
-            <h3>True System VPN</h3>
-            <p>NetworkExtension-based tunnel routes traffic from every app on your iPhone. Not a proxy — a real system VPN.</p>
+            <h3 data-i18n="f1_title">True System VPN</h3>
+            <p data-i18n="f1_desc">NetworkExtension-based tunnel routes traffic from every app on your iPhone. Not a proxy — a real system VPN.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon green">🖥️</div>
-            <h3>Zero Server Setup</h3>
-            <p>Nothing to install on your VPS. A stock sshd is enough. No root, no TUN device, no scripts, no containers.</p>
+            <h3 data-i18n="f2_title">Zero Server Setup</h3>
+            <p data-i18n="f2_desc">Nothing to install on your VPS. A stock sshd is enough. No root, no TUN device, no scripts, no containers.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon purple">🌍</div>
-            <h3>19 DNS Presets</h3>
-            <p>Cloudflare, Google, AdGuard, Quad9 and more. One tap to switch. Custom DNS servers supported too.</p>
+            <h3 data-i18n="f3_title">19 DNS Presets</h3>
+            <p data-i18n="f3_desc">Cloudflare, Google, AdGuard, Quad9 and more. One tap to switch. Custom DNS servers supported too.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon orange">🛡️</div>
-            <h3>DNS Block List</h3>
-            <p>Block domains or override IPs locally. Rules apply on-device before any upstream query leaves your phone.</p>
+            <h3 data-i18n="f4_title">DNS Block List</h3>
+            <p data-i18n="f4_desc">Block domains or override IPs locally. Rules apply on-device before any upstream query leaves your phone.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon pink">📊</div>
-            <h3>Live Stats</h3>
-            <p>SSH connections, channels, flows, data transferred, protocol split — all visible in real-time.</p>
+            <h3 data-i18n="f5_title">Live Stats</h3>
+            <p data-i18n="f5_desc">SSH connections, channels, flows, data transferred, protocol split — all visible in real-time.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon teal">⚡</div>
-            <h3>Auto-Reconnect</h3>
-            <p>Path monitoring with exponential backoff. SSH keepalive, zombie-tunnel watchdog, and stall detection built in.</p>
+            <h3 data-i18n="f6_title">Auto-Reconnect</h3>
+            <p data-i18n="f6_desc">Path monitoring with exponential backoff. SSH keepalive, zombie-tunnel watchdog, and stall detection built in.</p>
         </div>
     </div>
 </section>
 
 <!-- SCREENSHOTS -->
 <section class="screenshots-section" id="screenshots">
-    <div class="section-label">Screenshots</div>
-    <h2 class="section-title">See it in action</h2>
-    <p class="section-desc" style="margin-left:auto;margin-right:auto;">Clean, intuitive interface. One-tap connect. Everything just works.</p>
-
+    <div class="section-label" data-i18n="scr_label">Screenshots</div>
+    <h2 class="section-title" data-i18n="scr_title">See it in action</h2>
+    <p class="section-desc" style="margin-left:auto;margin-right:auto" data-i18n="scr_desc">Clean, intuitive interface. One-tap connect. Everything just works.</p>
     <div class="screenshots-scroll">
-        <div class="screenshot-item">
-            <img src="screenshots/01-connect.png" alt="Connect Screen">
-        </div>
-        <div class="screenshot-item">
-            <img src="screenshots/05-connected.png" alt="Connected State">
-        </div>
-        <div class="screenshot-item">
-            <img src="screenshots/02-settings.png" alt="Settings">
-        </div>
-        <div class="screenshot-item">
-            <img src="screenshots/03-dns.png" alt="DNS Settings">
-        </div>
-        <div class="screenshot-item">
-            <img src="screenshots/04-dns-filter.png" alt="DNS Block List">
-        </div>
+        <div class="screenshot-item"><img src="screenshots/01-connect.png" alt="Connect"></div>
+        <div class="screenshot-item"><img src="screenshots/05-connected.png" alt="Connected"></div>
+        <div class="screenshot-item"><img src="screenshots/02-settings.png" alt="Settings"></div>
+        <div class="screenshot-item"><img src="screenshots/03-dns.png" alt="DNS"></div>
+        <div class="screenshot-item"><img src="screenshots/04-dns-filter.png" alt="Filter"></div>
     </div>
 </section>
 
 <!-- HOW IT WORKS -->
 <section id="how-it-works">
-    <div class="section-label">How It Works</div>
-    <h2 class="section-title">Three steps to your own VPN</h2>
-    <p class="section-desc">No accounts. No sign-ups. Just add your server and tap Connect.</p>
-
+    <div class="section-label" data-i18n="how_label">How It Works</div>
+    <h2 class="section-title" data-i18n="how_title">Three steps to your own VPN</h2>
+    <p class="section-desc" data-i18n="how_desc">No accounts. No sign-ups. Just add your server and tap Connect.</p>
     <div class="steps">
         <div class="step">
-            <h3>Add your VPS</h3>
-            <p>Enter your server's host, username, and password — or import an Ed25519 private key. SSH2VPN tests the connection before saving.</p>
+            <h3 data-i18n="s1_title">Add your VPS</h3>
+            <p data-i18n="s1_desc">Enter your server's host, username, and password — or import an Ed25519 private key. SSH2VPN tests the connection before saving.</p>
         </div>
         <div class="step">
-            <h3>Tap Connect</h3>
-            <p>SSH2VPN raises a system VPN and routes all your iPhone traffic through an encrypted SSH tunnel to your server.</p>
+            <h3 data-i18n="s2_title">Tap Connect</h3>
+            <p data-i18n="s2_desc">SSH2VPN raises a system VPN and routes all your iPhone traffic through an encrypted SSH tunnel to your server.</p>
         </div>
         <div class="step">
-            <h3>Browse freely</h3>
-            <p>Your IP becomes your server's. Your traffic exits from your own machine. No third-party sees your data.</p>
+            <h3 data-i18n="s3_title">Browse freely</h3>
+            <p data-i18n="s3_desc">Your IP becomes your server's. Your traffic exits from your own machine. No third-party sees your data.</p>
         </div>
     </div>
 </section>
 
 <!-- PRIVACY -->
 <section id="privacy">
-    <div class="section-label">Privacy</div>
-    <h2 class="section-title">Your data stays yours</h2>
-    <p class="section-desc">SSH2VPN operates no servers and never sees your traffic. Period.</p>
-
+    <div class="section-label" data-i18n="priv_label">Privacy</div>
+    <h2 class="section-title" data-i18n="priv_title">Your data stays yours</h2>
+    <p class="section-desc" data-i18n="priv_desc">SSH2VPN operates no servers and never sees your traffic. Period.</p>
     <div class="privacy-banner">
         <div class="privacy-icon">🔐</div>
         <div>
-            <h3>No logs. No servers. No intermediaries.</h3>
-            <p>Credentials and keys stay on your device. The tunnel runs strictly between you and your server. We have zero access to your browsing data, connection history, or any personal information.</p>
+            <h3 data-i18n="priv_banner_title">No logs. No servers. No intermediaries.</h3>
+            <p data-i18n="priv_banner_desc">Credentials and keys stay on your device. The tunnel runs strictly between you and your server. We have zero access to your browsing data, connection history, or any personal information.</p>
             <div class="privacy-list">
-                <span>✓ No data collection</span>
-                <span>✓ No account required</span>
-                <span>✓ On-device credentials</span>
-                <span>✓ Open SSH protocol</span>
+                <span>✓ <span data-i18n="priv_p1">No data collection</span></span>
+                <span>✓ <span data-i18n="priv_p2">No account required</span></span>
+                <span>✓ <span data-i18n="priv_p3">On-device credentials</span></span>
+                <span>✓ <span data-i18n="priv_p4">Open SSH protocol</span></span>
             </div>
         </div>
     </div>
@@ -646,18 +310,494 @@
 
 <!-- CTA -->
 <section class="cta-section">
-    <h2>Ready to take control<br>of your privacy?</h2>
-    <p>Download SSH2VPN and turn your VPS into a personal VPN in under a minute.</p>
+    <h2 data-i18n="cta_title">Ready to take control<br>of your privacy?</h2>
+    <p data-i18n="cta_desc">Download SSH2VPN and turn your VPS into a personal VPN in under a minute.</p>
     <a href="https://apps.apple.com/app/ssh2vpn/id6809367474" class="btn-appstore">
         <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-        Download on the App Store
+        <span data-i18n="hero_appstore">Download on the App Store</span>
     </a>
 </section>
 
 <!-- FOOTER -->
 <footer>
-    <p>&copy; 2026 SSH2VPN. All rights reserved. &nbsp;|&nbsp; <a href="https://apps.apple.com/app/ssh2vpn/id6809367474">App Store</a></p>
+    <p>&copy; 2026 SSH2VPN. <span data-i18n="footer_rights">All rights reserved.</span> &nbsp;|&nbsp; <a href="https://apps.apple.com/app/ssh2vpn/id6809367474">App Store</a></p>
 </footer>
+
+<script>
+const I18N = {
+    en: {
+        nav_features:"Features",nav_how:"How It Works",nav_privacy:"Privacy",nav_download:"Download",
+        hero_badge:"Available on iOS",hero_title_1:"Your VPS.",hero_title_2:"Your VPN.",
+        hero_desc:"Turn your own VPS into a fast, private VPN — in one tap. SSH2VPN routes your iPhone traffic through your own server via SSH. No third-party network between you and your data.",
+        hero_appstore:"Download on the App Store",hero_learn:"How it works →",
+        feat_label:"Features",feat_title:"Everything you need,<br>nothing you don't",
+        feat_desc:"SSH2VPN is a system-level VPN client that works with every app on your iPhone. Built-in DNS, multi-server support, and a hacker console — all under the hood.",
+        f1_title:"True System VPN",f1_desc:"NetworkExtension-based tunnel routes traffic from every app on your iPhone. Not a proxy — a real system VPN.",
+        f2_title:"Zero Server Setup",f2_desc:"Nothing to install on your VPS. A stock sshd is enough. No root, no TUN device, no scripts, no containers.",
+        f3_title:"19 DNS Presets",f3_desc:"Cloudflare, Google, AdGuard, Quad9 and more. One tap to switch. Custom DNS servers supported too.",
+        f4_title:"DNS Block List",f4_desc:"Block domains or override IPs locally. Rules apply on-device before any upstream query leaves your phone.",
+        f5_title:"Live Stats",f5_desc:"SSH connections, channels, flows, data transferred, protocol split — all visible in real-time.",
+        f6_title:"Auto-Reconnect",f6_desc:"Path monitoring with exponential backoff. SSH keepalive, zombie-tunnel watchdog, and stall detection built in.",
+        scr_label:"Screenshots",scr_title:"See it in action",scr_desc:"Clean, intuitive interface. One-tap connect. Everything just works.",
+        how_label:"How It Works",how_title:"Three steps to your own VPN",how_desc:"No accounts. No sign-ups. Just add your server and tap Connect.",
+        s1_title:"Add your VPS",s1_desc:"Enter your server's host, username, and password — or import an Ed25519 private key. SSH2VPN tests the connection before saving.",
+        s2_title:"Tap Connect",s2_desc:"SSH2VPN raises a system VPN and routes all your iPhone traffic through an encrypted SSH tunnel to your server.",
+        s3_title:"Browse freely",s3_desc:"Your IP becomes your server's. Your traffic exits from your own machine. No third-party sees your data.",
+        priv_label:"Privacy",priv_title:"Your data stays yours",priv_desc:"SSH2VPN operates no servers and never sees your traffic. Period.",
+        priv_banner_title:"No logs. No servers. No intermediaries.",
+        priv_banner_desc:"Credentials and keys stay on your device. The tunnel runs strictly between you and your server. We have zero access to your browsing data, connection history, or any personal information.",
+        priv_p1:"No data collection",priv_p2:"No account required",priv_p3:"On-device credentials",priv_p4:"Open SSH protocol",
+        cta_title:"Ready to take control<br>of your privacy?",cta_desc:"Download SSH2VPN and turn your VPS into a personal VPN in under a minute.",
+        footer_rights:"All rights reserved."
+    },
+    ru: {
+        nav_features:"Возможности",nav_how:"Как работает",nav_privacy:"Приватность",nav_download:"Скачать",
+        hero_badge:"Доступно в iOS",hero_title_1:"Ваш VPS.",hero_title_2:"Ваш VPN.",
+        hero_desc:"Превратите свой VPS в быстрый личный VPN — одним касанием. SSH2VPN ведёт трафик iPhone через ваш собственный сервер по SSH. Никаких сторонних сетей между вами и вашими данными.",
+        hero_appstore:"Загрузить в App Store",hero_learn:"Как это работает →",
+        feat_label:"Возможности",feat_title:"Всё что нужно,<br>ничего лишнего",
+        feat_desc:"SSH2VPN — системный VPN-клиент, который работает со всеми приложениями iPhone. Встроенный DNS, несколько серверов и хакерская консоль — всё под капотом.",
+        f1_title:"Настоящий системный VPN",f1_desc:"Туннель на NetworkExtension ведёт трафик от всех приложений iPhone. Не прокси — настоящий системный VPN.",
+        f2_title:"Ноль настройки сервера",f2_desc:"На сервере ставить нечего: достаточно sshd. Без root, TUN, скриптов и контейнеров.",
+        f3_title:"19 DNS-пресетов",f3_desc:"Cloudflare, Google, AdGuard, Quad9 и другие. Переключение одним касанием. Поддерживаются пользовательские DNS.",
+        f4_title:"DNS-фильтр",f4_desc:"Блокируйте домены или перенаправляйте IP локально. Правила работают на устройстве до отправки запроса.",
+        f5_title:"Живая статистика",f5_desc:"SSH-соединения, каналы, потоки, объём данных, разбивка по протоколам — всё в реальном времени.",
+        f6_title:"Автопереподключение",f6_desc:"Мониторинг маршрута с экспоненциальным отступом. SSH keepalive, watchdog и детекция зависаний.",
+        scr_label:"Скриншоты",scr_title:"Посмотрите в действии",scr_desc:"Чистый, понятный интерфейс. Подключение одним касанием. Всё просто работает.",
+        how_label:"Как это работает",how_title:"Три шага до вашего VPN",how_desc:"Без аккаунтов. Без регистраций. Просто добавьте сервер и нажмите Подключить.",
+        s1_title:"Добавьте VPS",s1_desc:"Введите хост, логин, пароль сервера — или импортируйте приватный ключ Ed25519. SSH2VPN проверяет соединение перед сохранением.",
+        s2_title:"Нажмите Подключить",s2_desc:"SSH2VPN поднимает системный VPN и ведёт весь трафик iPhone через зашифрованный SSH-туннель на ваш сервер.",
+        s3_title:"Работайте свободно",s3_desc:"Ваш IP становится IP вашего сервера. Трафик выходит с вашей же машины. Никто третий не видит ваши данные.",
+        priv_label:"Приватность",priv_title:"Ваши данные остаются вашими",priv_desc:"У SSH2VPN нет своих серверов, и он не видит ваш трафик. Точка.",
+        priv_banner_title:"Нет логов. Нет серверов. Нет посредников.",
+        priv_banner_desc:"Пароли и ключи остаются на устройстве. Туннель работает строго между вами и вашим сервером. У нас нулевой доступ к вашим данным, истории или личной информации.",
+        priv_p1:"Нет сбора данных",priv_p2:"Аккаунт не нужен",priv_p3:"Ключи на устройстве",priv_p4:"Открытый протокол SSH",
+        cta_title:"Готовы взять приватность<br>в свои руки?",cta_desc:"Скачайте SSH2VPN и превратите ваш VPS в личный VPN меньше чем за минуту.",
+        footer_rights:"Все права защищены."
+    },
+    es: {
+        nav_features:"Características",nav_how:"Cómo funciona",nav_privacy:"Privacidad",nav_download:"Descargar",
+        hero_badge:"Disponible en iOS",hero_title_1:"Tu VPS.",hero_title_2:"Tu VPN.",
+        hero_desc:"Convierte tu propio VPS en una VPN rápida y privada — con un toque. SSH2VPN envía el tráfico de tu iPhone por tu propio servidor vía SSH. Sin red de terceros entre tú y tus datos.",
+        hero_appstore:"Descargar en App Store",hero_learn:"Cómo funciona →",
+        feat_label:"Características",feat_title:"Todo lo que necesitas,<br>nada que no",
+        feat_desc:"SSH2VPN es un cliente VPN a nivel de sistema que funciona con todas tus apps. DNS integrado, multiservidor y consola hacker — todo incluido.",
+        f1_title:"VPN del sistema real",f1_desc:"Túnel basado en NetworkExtension que enruta el tráfico de todas tus apps. No es un proxy — es una VPN del sistema.",
+        f2_title:"Cero configuración",f2_desc:"Nada que instalar en el servidor. sshd basta. Sin root, sin TUN, sin scripts, sin contenedores.",
+        f3_title:"19 presets DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 y más. Un toque para cambiar. DNS personalizados soportados.",
+        f4_title:"Lista de bloqueo DNS",f4_desc:"Bloquea dominios o sobreescribe IPs localmente. Las reglas aplican en el dispositivo antes de salir.",
+        f5_title:"Estadísticas en vivo",f5_desc:"Conexiones SSH, canales, flujos, datos transferidos — todo visible en tiempo real.",
+        f6_title:"Auto-reconexión",f6_desc:"Monitoreo de ruta con backoff exponencial. Keepalive SSH, watchdog y detección de bloqueos.",
+        scr_label:"Capturas",scr_title:"Míralo en acción",scr_desc:"Interfaz limpia e intuitiva. Conexión en un toque. Todo funciona.",
+        how_label:"Cómo funciona",how_title:"Tres pasos para tu propio VPN",how_desc:"Sin cuentas. Sin registros. Solo agrega tu servidor y toca Conectar.",
+        s1_title:"Agrega tu VPS",s1_desc:"Ingresa host, usuario y contraseña — o importa una clave privada Ed25519. SSH2VPN prueba la conexión antes de guardar.",
+        s2_title:"Toca Conectar",s2_desc:"SSH2VPN levanta una VPN del sistema y enruta todo el tráfico por un túnel SSH cifrado a tu servidor.",
+        s3_title:"Navega libremente",s3_desc:"Tu IP pasa a ser la de tu servidor. Tu tráfico sale desde tu propia máquina. Nadie ve tus datos.",
+        priv_label:"Privacidad",priv_title:"Tus datos son tuyos",priv_desc:"SSH2VPN no opera servidores y nunca ve tu tráfico. Punto.",
+        priv_banner_title:"Sin logs. Sin servidores. Sin intermediarios.",
+        priv_banner_desc:"Credenciales y claves permanecen en tu dispositivo. El túnel corre estrictamente entre tú y tu servidor. Cero acceso a tus datos o historial.",
+        priv_p1:"Sin recolección de datos",priv_p2:"Sin cuenta requerida",priv_p3:"Credenciales en el dispositivo",priv_p4:"Protocolo SSH abierto",
+        cta_title:"¿Listo para tomar el control<br>de tu privacidad?",cta_desc:"Descarga SSH2VPN y convierte tu VPS en una VPN personal en menos de un minuto.",
+        footer_rights:"Todos los derechos reservados."
+    },
+    de: {
+        nav_features:"Funktionen",nav_how:"So funktioniert's",nav_privacy:"Datenschutz",nav_download:"Download",
+        hero_badge:"Verfügbar auf iOS",hero_title_1:"Dein VPS.",hero_title_2:"Dein VPN.",
+        hero_desc:"Mach aus deinem eigenen VPS ein schnelles, privates VPN — mit einem Tipp. SSH2VPN leitet den iPhone-Traffic über deinen eigenen Server per SSH. Kein fremdes Netzwerk zwischen dir und deinen Daten.",
+        hero_appstore:"Im App Store laden",hero_learn:"So funktioniert's →",
+        feat_label:"Funktionen",feat_title:"Alles was du brauchst,<br>nichts was du nicht brauchst",
+        feat_desc:"SSH2VPN ist ein VPN-Client auf Systemebene, der mit jeder App funktioniert. Eingebautes DNS, Multi-Server und Hacker-Konsole — alles dabei.",
+        f1_title:"Echtes System-VPN",f1_desc:"NetworkExtension-Tunnel leitet Traffic jeder App. Kein Proxy — ein echtes System-VPN.",
+        f2_title:"Null Einrichtung",f2_desc:"Nichts zu installieren. sshd reicht. Kein Root, kein TUN, keine Skripte, keine Container.",
+        f3_title:"19 DNS-Voreinstellungen",f3_desc:"Cloudflare, Google, AdGuard, Quad9 und mehr. Ein Tipp zum Wechseln. Eigene DNS-Server möglich.",
+        f4_title:"DNS-Blockliste",f4_desc:"Domänen blockieren oder IPs lokal überschreiben. Regeln wirken auf dem Gerät, bevor etwas nach draußen geht.",
+        f5_title:"Live-Statistiken",f5_desc:"SSH-Verbindungen, Kanäle, Flows, Daten — alles in Echtzeit sichtbar.",
+        f6_title:"Auto-Reconnect",f6_desc:"Routen-Monitoring mit exponentiellem Backoff. SSH-Keepalive, Zombie-Watchdog und Stall-Erkennung.",
+        scr_label:"Screenshots",scr_title:"Sieh es in Aktion",scr_desc:"Saubere, intuitive Oberfläche. Ein-Tipp-Verbindung. Es funktioniert einfach.",
+        how_label:"So funktioniert's",how_title:"Drei Schritte zu deinem VPN",how_desc:"Keine Konten. Keine Anmeldung. Server hinzufügen und Verbinden tippen.",
+        s1_title:"VPS hinzufügen",s1_desc:"Host, Benutzer und Passwort eingeben — oder Ed25519-Privatschlüssel importieren. SSH2VPN testet die Verbindung vor dem Speichern.",
+        s2_title:"Verbinden tippen",s2_desc:"SSH2VPN baut ein System-VPN auf und leitet den Traffic durch einen verschlüsselten SSH-Tunnel zu deinem Server.",
+        s3_title:"Frei surfen",s3_desc:"Deine IP ist die deines Servers. Dein Traffic verlässt dein eigenes Gerät. Niemand sieht deine Daten.",
+        priv_label:"Datenschutz",priv_title:"Deine Daten bleiben deine",priv_desc:"SSH2VPN betreibt keine Server und sieht deinen Traffic nie. Punkt.",
+        priv_banner_title:"Keine Logs. Keine Server. Keine Vermittler.",
+        priv_banner_desc:"Zugangsdaten und Schlüssel bleiben auf deinem Gerät. Der Tunnel läuft nur zwischen dir und deinem Server. Null Zugriff auf deine Daten.",
+        priv_p1:"Keine Datenerfassung",priv_p2:"Kein Konto nötig",priv_p3:"Schlüssel auf dem Gerät",priv_p4:"Offenes SSH-Protokoll",
+        cta_title:"Bereit, die Kontrolle über<br>deinen Datenschutz zu übernehmen?",cta_desc:"Lade SSH2VPN und mach deinen VPS in unter einer Minute zu einem persönlichen VPN.",
+        footer_rights:"Alle Rechte vorbehalten."
+    },
+    fr: {
+        nav_features:"Fonctionnalités",nav_how:"Comment ça marche",nav_privacy:"Confidentialité",nav_download:"Télécharger",
+        hero_badge:"Disponible sur iOS",hero_title_1:"Ton VPS.",hero_title_2:"Ton VPN.",
+        hero_desc:"Transforme ton propre VPS en VPN rapide et privé — en un geste. SSH2VPN fait passer le trafic de ton iPhone par ton serveur en SSH. Aucun réseau tiers entre toi et tes données.",
+        hero_appstore:"Télécharger sur l'App Store",hero_learn:"Comment ça marche →",
+        feat_label:"Fonctionnalités",feat_title:"Tout ce qu'il faut,<br>rien de plus",
+        feat_desc:"SSH2VPN est un client VPN système qui fonctionne avec toutes tes apps. DNS intégré, multi-serveurs et console hacker — le tout inclus.",
+        f1_title:"Vrai VPN système",f1_desc:"Tunnel basé sur NetworkExtension pour tout le trafic de tes apps. Pas un proxy — un vrai VPN système.",
+        f2_title:"Zéro configuration",f2_desc:"Rien à installer côté serveur. sshd suffit. Pas de root, pas de TUN, pas de scripts, pas de conteneurs.",
+        f3_title:"19 presets DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 et plus. Un toucher pour basculer. DNS personnalisés supportés.",
+        f4_title:"Liste de blocage DNS",f4_desc:"Bloque des domaines ou redirige des IPs localement. Les règles s'appliquent sur l'appareil avant tout envoi.",
+        f5_title:"Stats en direct",f5_desc:"Connexions SSH, canaux, flux, données transférées — tout visible en temps réel.",
+        f6_title:"Reconnexion auto",f6_desc:"Surveillance de route avec backoff exponentiel. SSH keepalive, watchdog et détection de blocage.",
+        scr_label:"Captures",scr_title:"Voyage en action",scr_desc:"Interface propre et intuitive. Connexion en un toucher. Tout fonctionne.",
+        how_label:"Comment ça marche",how_title:"Trois étapes vers ton VPN",how_desc:"Pas de comptes. Pas d'inscription. Ajoute ton serveur et touche Connecter.",
+        s1_title:"Ajoute ton VPS",s1_desc:"Entre hôte, utilisateur et mot de passe — ou importe une clé privée Ed25519. SSH2VPN teste la connexion avant de sauvegarder.",
+        s2_title:"Touche Connecter",s2_desc:"SSH2VPN monte un VPN système et route le trafic via un tunnel SSH chiffré vers ton serveur.",
+        s3_title:"Navigue librement",s3_desc:"Ton IP devient celle de ton serveur. Ton trafic sort de ta machine. Personne ne voit tes données.",
+        priv_label:"Confidentialité",priv_title:"Tes données restent les tiennes",priv_desc:"SSH2VPN n'exploite aucun serveur et ne voit jamais ton trafic. Point.",
+        priv_banner_title:"Pas de logs. Pas de serveurs. Pas d'intermédiaires.",
+        priv_banner_desc:"Identifiants et clés restent sur ton appareil. Le tunnel passe uniquement entre toi et ton serveur. Zéro accès à tes données.",
+        priv_p1:"Pas de collecte de données",priv_p2:"Pas de compte requis",priv_p3:"Clés sur l'appareil",priv_p4:"Protocole SSH ouvert",
+        cta_title:"Pris à prendre le contrôle<br>de ta confidentialité ?",cta_desc:"Télécharge SSH2VPN et transforme ton VPS en VPN personnel en moins d'une minute.",
+        footer_rights:"Tous droits réservés."
+    },
+    it: {
+        nav_features:"Funzionalità",nav_how:"Come funziona",nav_privacy:"Privacy",nav_download:"Scarica",
+        hero_badge:"Disponibile su iOS",hero_title_1:"Il tuo VPS.",hero_title_2:"La tua VPN.",
+        hero_desc:"Trasforma il tuo VPS in una VPN veloce e privata — con un tocco. SSH2VPN instrada il traffico del tuo iPhone sul tuo server via SSH. Nessuna rete di terzi tra te e i tuoi dati.",
+        hero_appstore:"Scarica dall'App Store",hero_learn:"Come funziona →",
+        feat_label:"Funzionalità",feat_title:"Tutto ciò che serve,<br>niente in più",
+        feat_desc:"SSH2VPN è un client VPN a livello di sistema che funziona con ogni app. DNS integrato, multi-server e console hacker — tutto incluso.",
+        f1_title:"Vera VPN di sistema",f1_desc:"Tunnel basato su NetworkExtension per ogni app. Non un proxy — una vera VPN di sistema.",
+        f2_title:"Zero configurazione",f2_desc:"Niente da installare. sshd basta. No root, no TUN, no script, no container.",
+        f3_title:"19 preset DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 e altri. Un tocco per cambiare. DNS personalizzati supportati.",
+        f4_title:"Lista blocco DNS",f4_desc:"Blocca domini o sovrascrivi IP localmente. Le regole agiscono sul dispositivo prima di qualsiasi richiesta.",
+        f5_title:"Statistiche live",f5_desc:"Connessioni SSH, canali, flussi, dati trasferiti — tutto visibile in tempo reale.",
+        f6_title:"Auto-riconnessione",f6_desc:"Monitoraggio rotta con backoff esponenziale. SSH keepalive, watchdog e rilevamento stalli.",
+        scr_label:"Screenshot",scr_title:"Vedilo in azione",scr_desc:"Interfaccia pulita e intuitiva. Connessione in un tocco. Tutto funziona.",
+        how_label:"Come funziona",how_title:"Tre passi per la tua VPN",how_desc:"Nessun account. Nessuna registrazione. Aggiungi il tuo server e tocca Connetti.",
+        s1_title:"Aggiungi il VPS",s1_desc:"Inserisci host, utente e password — o importa una chiave privata Ed25519. SSH2VPN testa la connessione prima di salvare.",
+        s2_title:"Tocca Connetti",s2_desc:"SSH2VPN attiva una VPN di sistema e instrada il traffico attraverso un tunnel SSH cifrato verso il tuo server.",
+        s3_title:"Naviga liberamente",s3_desc:"Il tuo IP diventa quello del tuo server. Il traffico esce dalla tua macchina. Nessuno vede i tuoi dati.",
+        priv_label:"Privacy",priv_title:"I tuoi dati restano tuoi",priv_desc:"SSH2VPN non gestisce server e non vede mai il tuo traffic. Punto.",
+        priv_banner_title:"Nessun log. Nessun server. Nessun intermediario.",
+        priv_banner_desc:"Credenziali e chiavi restano sul dispositivo. Il tunnel corre esclusivamente tra te e il tuo server. Zero accesso ai tuoi dati.",
+        priv_p1:"Nessuna raccolta dati",priv_p2:"Nessun account richiesto",priv_p3:"Chiavi sul dispositivo",priv_p4:"Protocollo SSH aperto",
+        cta_title:"Pronto a prendere il controllo<br>della tua privacy?",cta_desc:"Scarica SSH2VPN e trasforma il tuo VPS in una VPN personale in meno di un minuto.",
+        footer_rights:"Tutti i diritti riservati."
+    },
+    pt: {
+        nav_features:"Recursos",nav_how:"Como funciona",nav_privacy:"Privacidade",nav_download:"Baixar",
+        hero_badge:"Disponível no iOS",hero_title_1:"Seu VPS.",hero_title_2:"Sua VPN.",
+        hero_desc:"Transforme seu próprio VPS em uma VPN rápida e privada — com um toque. O SSH2VPN roteia o tráfego do seu iPhone pelo seu próprio servidor via SSH. Nenhuma rede de terceiros entre você e seus dados.",
+        hero_appstore:"Baixar na App Store",hero_learn:"Como funciona →",
+        feat_label:"Recursos",feat_title:"Tudo que você precisa,<br>nada que não precisa",
+        feat_desc:"SSH2VPN é um cliente VPN em nível de sistema que funciona com todos os seus apps. DNS embutido, multiservidor e console hacker — tudo incluso.",
+        f1_title:"VPN de sistema de verdade",f1_desc:"Túnel baseado em NetworkExtension para todo o tráfego. Não é proxy — é uma VPN de sistema real.",
+        f2_title:"Zero configuração",f2_desc:"Nada para instalar no servidor. sshd basta. Sem root, sem TUN, sem scripts, sem containers.",
+        f3_title:"19 presets DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 e mais. Um toque para trocar. DNS personalizados suportados.",
+        f4_title:"Lista de bloqueio DNS",f4_desc:"Bloqueie domínios ou sobrescreva IPs localmente. As regras aplicam no dispositivo antes de qualquer consulta.",
+        f5_title:"Estatísticas ao vivo",f5_desc:"Conexões SSH, canais, fluxos, dados transferidos — tudo visível em tempo real.",
+        f6_title:"Auto-reconexão",f6_desc:"Monitoramento de rota com backoff exponencial. SSH keepalive, watchdog e detecção de travamento.",
+        scr_label:"Capturas",scr_title:"Veja em ação",scr_desc:"Interface limpa e intuitiva. Conexão em um toque. Tudo funciona.",
+        how_label:"Como funciona",how_title:"Três passos para sua VPN",how_desc:"Sem contas. Sem cadastro. Adicione seu servidor e toque em Conectar.",
+        s1_title:"Adicione seu VPS",s1_desc:"Insira host, usuário e senha — ou importe uma chave privada Ed25519. SSH2VPN testa a conexão antes de salvar.",
+        s2_title:"Toque em Conectar",s2_desc:"SSH2VPN levanta uma VPN do sistema e roteia todo o tráfego por um túnel SSH criptografado até o seu servidor.",
+        s3_title:"Navegue livremente",s3_desc:"Seu IP passa a ser o do seu servidor. Seu tráfego sai pela sua máquina. Ninguém vê seus dados.",
+        priv_label:"Privacidade",priv_title:"Seus dados continuam seus",priv_desc:"SSH2VPN não opera servidores e nunca vê seu tráfego. Ponto.",
+        priv_banner_title:"Sem logs. Sem servidores. Sem intermediários.",
+        priv_banner_desc:"Credenciais e chaves ficam no seu dispositivo. O túnel roda entre você e seu servidor. Zero acesso aos seus dados.",
+        priv_p1:"Sem coleta de dados",priv_p2:"Sem conta necessária",priv_p3:"Chaves no dispositivo",priv_p4:"Protocolo SSH aberto",
+        cta_title:"Pronto para tomar controle<br>da sua privacidade?",cta_desc:"Baixe o SSH2VPN e transforme seu VPS em uma VPN pessoal em menos de um minuto.",
+        footer_rights:"Todos os direitos reservados."
+    },
+    ja: {
+        nav_features:"機能",nav_how:"使い方",nav_privacy:"プライバシー",nav_download:"ダウンロード",
+        hero_badge:"iOS対応",hero_title_1:"あなたのVPS。",hero_title_2:"あなたのVPN。",
+        hero_desc:"あなた自身のVPSを、高速でプライベートなVPNに — ワンタップで。SSH2VPNはSSH経由であなた自身のサーバーにiPhoneの通信をルーティング。あなたとデータの間に第三者のネットワークはありません。",
+        hero_appstore:"App Storeでダウンロード",hero_learn:"使い方 →",
+        feat_label:"機能",feat_title:"必要なものすべて、<br>不要なものなし",
+        feat_desc:"SSH2VPNはシステムレベルのVPNクライアントで、すべてのアプリで動作。内蔵DNS、複数サーバー対応、ハッカーコンソール — すべて内蔵。",
+        f1_title:"本物のシステムVPN",f1_desc:"NetworkExtensionベースのトンネルがすべてのアプリの通信をルーティング。プロキシではなく、本物のシステムVPN。",
+        f2_title:"ゼロセットアップ",f2_desc:"サーバーにインストール不要。sshdだけで動作。root不要、TUN不要、スクリプト不要、コンテナ不要。",
+        f3_title:"19 DNSプリセット",f3_desc:"Cloudflare、Google、AdGuard、Quad9など。ワンタップで切替。カスタムDNSも対応。",
+        f4_title:"DNSブロックリスト",f4_desc:"ドメインのブロックやIPの上書きをローカルで実行。デバイス上でクエリ送出前に適用。",
+        f5_title:"リアルタイム統計",f5_desc:"SSH接続、チャネル、フロー、転送量 — すべてリアルタイムで表示。",
+        f6_title:"自動再接続",f6_desc:"指数バックオフ付きルート監視。SSHキープアライブ、ゾンビウォッチドッグ、スタール検知内蔵。",
+        scr_label:"スクリーンショット",scr_title:"実際の動作を確認",scr_desc:"クリーンで直感的なインターフェース。ワンタップで接続。すべてが簡単に。",
+        how_label:"使い方",how_title:"3ステップで自分のVPN",how_desc:"アカウント不要。登録不要。サーバーを追加して接続をタップするだけ。",
+        s1_title:"VPSを追加",s1_desc:"ホスト、ユーザー名、パスワードを入力 — またはEd25519秘密鍵をインポート。保存前に接続をテスト。",
+        s2_title:"接続をタップ",s2_desc:"SSH2VPNがシステムVPNを立ち上げ、暗号化されたSSHトンネル経由でサーバーへ通信をルーティング。",
+        s3_title:"自由にブラウズ",s3_desc:"あなたのIPはサーバーのIPに。通信は自分のマシンから。誰もあなたのデータを見ません。",
+        priv_label:"プライバシー",priv_title:"あなたのデータはあなたのもの",priv_desc:"SSH2VPNはサーバーを運用せず、通信を見ることはありません。",
+        priv_banner_title:"ログなし。サーバーなし。中間者なし。",
+        priv_banner_desc:"認証情報と鍵は端末内に留まり、トンネルはあなたとサーバーの間だけで動作。データへのアクセスはゼロ。",
+        priv_p1:"データ収集なし",priv_p2:"アカウント不要",priv_p3:"デバイス内鍵保存",priv_p4:"オープンSSHプロトコル",
+        cta_title:"プライバシーの支配権を<br>握る準備はできましたか？",cta_desc:"SSH2VPNをダウンロードして、1分以内にVPSを個人VPNに変換しましょう。",
+        footer_rights:"全著作権所有。"
+    },
+    zh: {
+        nav_features:"功能",nav_how:"使用方法",nav_privacy:"隐私",nav_download:"下载",
+        hero_badge:"iOS可用",hero_title_1:"你的VPS。",hero_title_2:"你的VPN。",
+        hero_desc:"把你自己的VPS变成快速、私密的VPN — 只需一次点击。SSH2VPN通过SSH把iPhone流量路由到你自己的服务器。你和数据之间没有任何第三方网络。",
+        hero_appstore:"在App Store下载",hero_learn:"使用方法 →",
+        feat_label:"功能",feat_title:"你需要的一切，<br>不需要的一点都没有",
+        feat_desc:"SSH2VPN是一款系统级VPN客户端，对所有应用生效。内置DNS、多服务器支持和黑客控制台 — 全部包含。",
+        f1_title:"真正的系统VPN",f1_desc:"基于NetworkExtension的隧道为所有应用路由流量。不是代理 — 是真正的系统VPN。",
+        f2_title:"零配置",f2_desc:"服务器端无需安装。有sshd就够了。不需要root、TUN、脚本或容器。",
+        f3_title:"19个DNS预设",f3_desc:"Cloudflare、Google、AdGuard、Quad9等。一键切换。支持自定义DNS。",
+        f4_title:"DNS拦截列表",f4_desc:"本地拦截域名或覆写IP。规则在设备上、查询发出前生效。",
+        f5_title:"实时统计",f5_desc:"SSH连接、通道、流、传输量 — 全部实时可见。",
+        f6_title:"自动重连",f6_desc:"指数退避的路径监控。SSH保活、僵尸隧道看门狗和卡顿检测。",
+        scr_label:"截图",scr_title:"看看实际效果",scr_desc:"简洁直观的界面。一键连接。一切就是这么简单。",
+        how_label:"使用方法",how_title:"三步拥有你的VPN",how_desc:"无需账号。无需注册。添加服务器，点击连接。",
+        s1_title:"添加VPS",s1_desc:"输入主机、用户名和密码 — 或导入Ed25519私钥。保存前会测试连接。",
+        s2_title:"点击连接",s2_desc:"SSH2VPN建立系统VPN，通过加密SSH隧道把流量路由到你的服务器。",
+        s3_title:"自由浏览",s3_desc:"你的IP变成服务器的IP。流量从你自己的机器出去。没人能看到你的数据。",
+        priv_label:"隐私",priv_title:"你的数据只属于你",priv_desc:"SSH2VPN不运营任何服务器，也绝不会看到你的流量。",
+        priv_banner_title:"无日志。无服务器。无中介。",
+        priv_banner_desc:"凭据和密钥只保存在你的设备上。隧道只在你和你的服务器之间运行。对你的数据零访问。",
+        priv_p1:"不收集数据",priv_p2:"无需账号",priv_p3:"密钥在设备上",priv_p4:"开放SSH协议",
+        cta_title:"准备好掌控<br>你的隐私了吗？",cta_desc:"下载SSH2VPN，在一分钟内把你的VPS变成个人VPN。",
+        footer_rights:"保留所有权利。"
+    },
+    ko: {
+        nav_features:"기능",nav_how:"사용 방법",nav_privacy:"개인정보 보호",nav_download:"다운로드",
+        hero_badge:"iOS에서 사용 가능",hero_title_1:"내 VPS.",hero_title_2:"내 VPN.",
+        hero_desc:"내 VPS를 빠르고 프라이빗한 VPN으로 — 한 번 터치로. SSH2VPN이 SSH로 iPhone 트래픽을 당신의 서버로 라우팅. 제3자 네트워크 없음.",
+        hero_appstore:"App Store에서 다운로드",hero_learn:"사용 방법 →",
+        feat_label:"기능",feat_title:"필요한 모든 것,<br>불필요한 것은 없음",
+        feat_desc:"SSH2VPN은 모든 앱에서 작동하는 시스템 레벨 VPN 클라이언트. 내장 DNS, 멀티 서버, 해커 콘솔 — 모두 포함.",
+        f1_title:"진짜 시스템 VPN",f1_desc:"NetworkExtension 기반 터널이 모든 앱의 트래픽을 라우팅. 프록시가 아닌 진짜 시스템 VPN.",
+        f2_title:"제로 설정",f2_desc:"서버에 설치할 것 없음. sshd면 충분. root, TUN, 스크립트, 컨테이너 불필요.",
+        f3_title:"19 DNS 프리셋",f3_desc:"Cloudflare, Google, AdGuard, Quad9 등. 원터치로 전환. 커스텀 DNS 지원.",
+        f4_title:"DNS 차단 목록",f4_desc:"도메인 차단 또는 IP 로컬 오버라이드. 쿼리 전송 전에 기기에 적용.",
+        f5_title:"실시간 통계",f5_desc:"SSH 연결, 채널, 플로우, 전송량 — 실시간으로 표시.",
+        f6_title:"자동 재연결",f6_desc:"지수 백오프 경로 모니터링. SSH keepalive, 좀비 감시, 정지 감지.",
+        scr_label:"스크린샷",scr_title:"실제 작동 확인",scr_desc:"깔끔하고 직관적인 인터페이스. 원터치 연결. 그냥 작동합니다.",
+        how_label:"사용 방법",how_title:"3단계로 나만의 VPN",how_desc:"계정 불필요. 가입 불필요. 서버를 추가하고 연결을 누르세요.",
+        s1_title:"VPS 추가",s1_desc:"호스트, 사용자명, 비밀번호 입력 — 또는 Ed25519 개인 키 가져오기. 저장 전 연결 테스트.",
+        s2_title:"연결 탭",s2_desc:"SSH2VPN이 시스템 VPN을 올리고 암호화된 SSH 터널로 서버로 라우팅.",
+        s3_title:"자유롭게 브라우징",s3_desc:"내 IP는 서버의 IP가 됨. 트래픽은 내 서버를 통해 나감. 아무도 내 데이터를 보지 않음.",
+        priv_label:"개인정보 보호",priv_title:"데이터는 내 것",priv_desc:"SSH2VPN은 서버를 운영하지 않고 트래픽을 절대 보지 않습니다.",
+        priv_banner_title:"로그 없음. 서버 없음. 중간자 없음.",
+        priv_banner_desc:"자격 증명과 키는 기기에만 남고, 터널은 나와 내 서버 사이에서만 작동. 데이터 접근 제로.",
+        priv_p1:"데이터 수집 없음",priv_p2:"계정 불필요",priv_p3:"키는 기기에",priv_p4:"오픈 SSH 프로토콜",
+        cta_title:"개인정보 보호를<br>내가 직접 결정할 준비가 되셨나요?",cta_desc:"SSH2VPN을 다운로드하여 1분 안에 VPS를 개인 VPN으로 변환하세요.",
+        footer_rights:"모든 권리 보유."
+    },
+    ar: {
+        nav_features:"المميزات",nav_how:"كيف يعمل",nav_privacy:"الخصوصية",nav_download:"تحميل",
+        hero_badge:"متوفر على iOS",hero_title_1:"خادمك.",hero_title_2:"شبكتك الافتراضية.",
+        hero_desc:"حوّل خادم VPS الخاص بك إلى VPN سريع وخاص — بلمسة واحدة. SSH2VPN يمرر حركة الآيفون عبر خادمك عبر SSH. لا شبكة طرف ثالث بينك وبين بياناتك.",
+        hero_appstore:"تحميل من App Store",hero_learn:"كيف يعمل →",
+        feat_label:"المميزات",feat_title:"كل ما تحتاجه،<br>ولا شيء زائد",
+        feat_desc:"SSH2VPN عميل VPN على مستوى النظام يعمل مع كل تطبيق. DNS مدمج، خوادم متعددة، ووحدة تحكم هاكرز — الكل م included.",
+        f1_title:"VPN نظامي حقيقي",f1_desc:"نفق مبني على NetworkExtension يمرر حركة كل تطبيق. ليس بروكسي — VPN نظامي حقيقي.",
+        f2_title:"صفر إعداد",f2_desc:"لا شيء لتثبيته على الخادم. sshd يكفي. بلا root، بلا TUN، بلا سكربتات، بلا حاويات.",
+        f3_title:"19 إعداد DNS مسبق",f3_desc:"Cloudflare، Google، AdGuard، Quad9 والمزيد. لمسة للتبديل. DNS مخصص مدعوم.",
+        f4_title:"قائمة حجب DNS",f2_desc:"احجب النطاقات أو عدل IPs محلياً. القواعد تُطبَّق على الجهاز قبل أي إرسال.",
+        f5_title:"إحصاءات مباشرة",f5_desc:"اتصالات SSH، قنوات، تدفقات، البيانات المنقولة — كلها مرئية في الوقت الفعلي.",
+        f6_title:"إعادة اتصال تلقائية",f6_desc:"مراقبة المسار مع تراجع أُسّي. SSH keepalive، وكيل منع الزومبي، واكتشاف التوقف.",
+        scr_label:"لقطات",scr_title:"شاهد التطبيق",scr_desc:"واجهة نظيفة وبديهية. اتصال بلمسة. كل شيء يعمل.",
+        how_label:"كيف يعمل",how_title:"ثلاث خطوات لـ VPN خاص",how_desc:"بلا حسابات. بلا تسجيلات. فقط أضف خادمك واضغط اتصال.",
+        s1_title:"أضف VPS",s1_desc:"أدخل المضيف واسم المستخدم وكلمة المرور — أو استورد مفتاحاً خاصاً. SSH2VPN يختبر الاتصال قبل الحفظ.",
+        s2_title:"اضغط اتصال",s2_desc:"SSH2VPN يرفع اتصال VPN على مستوى النظام ويمرر الحركة عبر نفق SSH مشفّر.",
+        s3_title:"تصفّح بحرية",s3_desc:"يصبح IP عنوان خادمك. حركتك تخرج من جهازك. لا أحد يرى بياناتك.",
+        priv_label:"الخصوصية",priv_title:"بياناتك تبقى لك",priv_desc:"SSH2VPN لا يدير خوادماً ولا يرى حركتك أبداً.",
+        priv_banner_title:"بدون سجلات. بدون خوادم. بدون وسطاء.",
+        priv_banner_desc:"بيانات الدخول والمفاتيح تبقى على جهازك. النفق يعمل فقط بينك وبين خادمك. وصول صفري لبياناتك.",
+        priv_p1:"بدون جمع بيانات",priv_p2:"بدون حساب مطلوب",priv_p3:"مفاتيح على الجهاز",priv_p4:"بروتوكول SSH مفتوح",
+        cta_title:"مستعد للسيطرة<br>على خصوصيتك؟",cta_desc:"حمّل SSH2VPN وحوّل VPS إلى VPN شخصي في أقل من دقيقة.",
+        footer_rights:"جميع الحقوق محفوظة."
+    },
+    hi: {
+        nav_features:"सुविधाएँ",nav_how:"कैसे काम करता है",nav_privacy:"गोपनीयता",nav_download:"डाउनलोड",
+        hero_badge:"iOS पर उपलब्ध",hero_title_1:"आपका VPS.",hero_title_2:"आपका VPN.",
+        hero_desc:"अपने ही VPS को एक तेज़, निजी VPN में बदलें — एक टैप में। SSH2VPN SSH के ज़रिए आपके iPhone के ट्रैफ़िक को आपके सर्वर तक ले जाता है। आपके और डेटा के बीच कोई तीसरा नेटवर्क नहीं।",
+        hero_appstore:"App Store से डाउनलोड करें",hero_learn:"कैसे काम करता है →",
+        feat_label:"सुविधाएँ",feat_title:"सब कुछ जो चाहिए,<br>कुछ भी नहीं जो नहीं चाहिए",
+        feat_desc:"SSH2VPN एक सिस्टम-लेवल VPN क्लाइंट है जो हर ऐप के साथ काम करता है। इन-बिल्ट DNS, मल्टी-सर्वर, हैकर कंसोल — सब शामिल।",
+        f1_title:"असली सिस्टम VPN",f1_desc:"NetworkExtension आधारित टनल हर ऐप का ट्रैफ़िक रूट करता है। प्रॉक्सी नहीं — असली सिस्टम VPN।",
+        f2_title:"ज़ीरो सेटअप",f2_desc:"सर्वर पर कुछ इंस्टॉल नहीं। sshd काफ़ी। न root, न TUN, न स्क्रिप्ट, न कंटेनर।",
+        f3_title:"19 DNS प्रीसेट",f3_desc:"Cloudflare, Google, AdGuard, Quad9 और बहुत कुछ। एक टैप में बदलें। कस्टम DNS भी सपोर्टेड।",
+        f4_title:"DNS ब्लॉक लिस्ट",f4_desc:"डोमेन ब्लॉक करें या IPs लोकली ओवरराइड करें। नियम डिवाइस पर लागू होते हैं।",
+        f5_title:"लाइव आँकड़े",f5_desc:"SSH कनेक्शन, चैनल, फ़्लो, ट्रांसफ़र डेटा — सब रीयल-टाइम में।",
+        f6_title:"ऑटो-रीकनेक्ट",f6_desc:"एक्स्पोनेंशियल बैकऑफ़ के साथ रूट मॉनिटरिंग। SSH कीपअलाइव, ज़ॉम्बी वॉचडॉग।",
+        scr_label:"स्क्रीनशॉट",scr_title:"इसे काम करते देखें",scr_desc:"साफ़, सहज इंटरफ़ेस। एक टैप में कनेक्ट। बस काम करता है।",
+        how_label:"कैसे काम करता है",how_title:"अपने VPN के लिए तीन कदम",how_desc:"कोई खाता नहीं। कोई साइन-अप नहीं। बस सर्वर जोड़ें और कनेक्ट टैप करें।",
+        s1_title:"VPS जोड़ें",s1_desc:"होस्ट, यूज़रनेम, पासवर्ड दर्ज करें — या Ed25519 प्राइवेट की इम्पोर्ट करें।",
+        s2_title:"कनेक्ट टैप करें",s2_desc:"SSH2VPN सिस्टम VPN उठाता है और एन्क्रिप्टेड SSH टनल से ट्रैफ़िक रूट करता है।",
+        s3_title:"मुक्त रूप से ब्राउज़ करें",s3_desc:"आपका IP आपके सर्वर का IP बन जाता है। ट्रैफ़िक आपकी मशीन से बाहर जाता है।",
+        priv_label:"गोपनीयता",priv_title:"आपका डेटा आपका है",priv_desc:"SSH2VPN कोई सर्वर नहीं चलाता और ट्रैफ़िक कभी नहीं देखता।",
+        priv_banner_title:"कोई लॉग नहीं। कोई सर्वर नहीं। कोई बिचौलिया नहीं।",
+        priv_banner_desc:"क्रेडेंशियल और कीज़ आपके डिवाइस पर रहते हैं। टनल सिर्फ़ आपके और सर्वर के बीच चलता है।",
+        priv_p1:"डेटा संग्रह नहीं",priv_p2:"खाता नहीं चाहिए",priv_p3:"कीज़ डिवाइस पर",priv_p4:"ओपन SSH प्रोटोकॉल",
+        cta_title:"अपनी गोपनीयता पर<br>नियंत्रण रखने के लिए तैयार?",cta_desc:"SSH2VPN डाउनलोड करें और 1 मिनट में अपने VPS को व्यक्तिगत VPN में बदलें।",
+        footer_rights:"सर्वाधिकार सुरक्षित।"
+    },
+    th: {
+        nav_features:"คุณสมบัติ",nav_how:"วิธีใช้",nav_privacy:"ความเป็นส่วนตัว",nav_download:"ดาวน์โหลด",
+        hero_badge:"ใช้ได้บน iOS",hero_title_1:"VPS ของคุณ",hero_title_2:"VPN ของคุณ",
+        hero_desc:"เปลี่ยน VPS ของคุณให้เป็น VPN ที่เร็วและเป็นส่วนตัว — แค่แตะเดียว SSH2VPN ส่งทราฟฟิกผ่าน SSH ไปยังเซิร์ฟเวอร์ของคุณ ไม่มีเครือข่ายบุคคลที่สาม",
+        hero_appstore:"ดาวน์โหลดใน App Store",hero_learn:"วิธีใช้ →",
+        feat_label:"คุณสมบัติ",feat_title:"ทุกอย่างที่ต้องการ<br>ไม่มีอะไรเกินจำเป็น",
+        feat_desc:"SSH2VPN เป็นไคลเอนต์ VPN ระดับระบบ ทำงานกับทุกแอป DNS ในตัว หลายเซิร์ฟเวอร์ คอนโซลแฮ็กเกอร์ — ทั้งหมดรวมอยู่",
+        f1_title:"VPN ระดับระบบของแท้",f1_desc:"อุโมงค์ NetworkExtension ส่งทราฟฟิกทุกแอป ไม่ใช่พร็อกซี — VPN ระดับระบบจริงๆ",
+        f2_title:"ตั้งค่าศูนย์",f2_desc:"ไม่ต้องติดตั้งอะไรบนเซิร์ฟเวอร์ sshd ก็พอ ไม่ต้อง root, TUN, สคริปต์, container",
+        f3_title:"19 ตัวเลือก DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 และอื่นๆ แตะเดียวสลับ รองรับ DNS กำหนดเอง",
+        f4_title:"รายการบล็อก DNS",f4_desc:"บล็อกโดเมนหรือเขียนทับ IP ได้ในเครื่อง กฎใช้ก่อนส่งออก",
+        f5_title:"สถิติแบบเรียลไทม์",f5_desc:"การเชื่อมต่อ SSH, ช่องทาง, ปริมาณข้อมูล — ทั้งหมดเห็นแบบเรียลไทม์",
+        f6_title:"เชื่อมต่ออัตโนมัติ",f6_desc:"ตรวจสอบเส้นทางพร้อม exponential backoff SSH keepalive, watchdog",
+        scr_label:"ภาพหน้าจอ",scr_title:"ดูตัวอย่างจริง",scr_desc:"อินเทอร์เฟซสะอาด ใช้ง่าย เชื่อมต่อแค่แตะ ทุกอย่างทำงาน",
+        how_label:"วิธีใช้",how_title:"3 ขั้นตอนสู่ VPN ของคุณ",how_desc:"ไม่ต้องสมัครบัญชี ไม่ต้องลงทะเบียน แค่เพิ่มเซิร์ฟเวอร์แล้วแตะเชื่อมต่อ",
+        s1_title:"เพิ่ม VPS",s1_desc:"ใส่โฮ스트 ยูสเซอร์เนม พาสเวิร์ด — หรือนำเข้า private key Ed25519 ทดสอบก่อนบันทึก",
+        s2_title:"แตะเชื่อมต่อ",s2_desc:"SSH2VPN สร้าง VPN ระดับระบบแล้วส่งทราฟฟิกผ่านอุโมงค์ SSH ที่เข้ารหัส",
+        s3_title:"ท่องเว็บอย่างอิสระ",s3_desc:"IP ของคุณกลายเป็น IP เซิร์ฟเวอร์ ทราฟฟิกออกจากเครื่องคุณ ไม่มีใครเห็นข้อมูล",
+        priv_label:"ความเป็นส่วนตัว",priv_title:"ข้อมูลของคุณเป็นของคุณ",priv_desc:"SSH2VPN ไม่ได้ดำเนินการเซิร์ฟเวอร์และไม่เห็นทราฟฟิก",
+        priv_banner_title:"ไม่มีล็อก ไม่มีเซิร์ฟเวอร์ ไม่มีคนกลาง",
+        priv_banner_desc:"ข้อมูลรับรองและกุญแจอยู่บนอุปกรณ์ อุโมงค์ทำงานเฉพาะระหว่างคุณกับเซิร์ฟเวอร์",
+        priv_p1:"ไม่เก็บข้อมูล",priv_p2:"ไม่ต้องสมัครบัญชี",priv_p3:"กุญแจในเครื่อง",priv_p4:"โปรโตคอล SSH เปิด",
+        cta_title:"พร้อมเข้าควบคุม<br>ความเป็นส่วนตัว?",cta_desc:"ดาวน์โหลด SSH2VPN แล้วเปลี่ยน VPS เป็น VPN ส่วนตัวในไม่ถึงนาที",
+        footer_rights:"สงวนลิขสิทธิ์"
+    },
+    tr: {
+        nav_features:"Özellikler",nav_how:"Nasıl Çalışır",nav_privacy:"Gizlilik",nav_download:"İndir",
+        hero_badge:"iOS'ta mevcut",hero_title_1:"VPS'in.",hero_title_2:"VPN'in.",
+        hero_desc:"Kendi VPS'ini hızlı ve kişisel bir VPN'e dönüştür — tek dokunuşla. SSH2VPN iPhone trafiğini SSH üzerinden kendi sunucundan geçirir. Seninle verilerin arasında üçüncü taraf yok.",
+        hero_appstore:"App Store'dan İndir",hero_learn:"Nasıl çalışır →",
+        feat_label:"Özellikler",feat_title:"İhtiyacın olan her şey,<br>ihtiyacın olmayan hiçbir şey",
+        feat_desc:"SSH2VPN her uygulamada çalışan sistem seviyesinde bir VPN istemcisi. Dahili DNS, çoklu sunucu, hacker konsolu — hepsi dahil.",
+        f1_title:"Gerçek Sistem VPN",f1_desc:"NetworkExtension tabanlı tünel her uygulamanın trafiğini yönlendirir. Proxy değil — gerçek sistem VPN.",
+        f2_title:"Sıfır Kurulum",f2_desc:"Sunucuda kurulacak bir şey yok. sshd yeterli. Root yok, TUN yok, betik yok, konteyner yok.",
+        f3_title:"19 DNS Hazır Ayarı",f3_desc:"Cloudflare, Google, AdGuard, Quad9 ve daha fazlası. Tek dokunuşla geçiş. Özel DNS desteği.",
+        f4_title:"DNS Engelleme Listesi",f4_desc:"Etki alanlarını engelle veya IP'leri yerel olarak değiştir. Kurallar cihazda uygulanır.",
+        f5_title:"Canlı İstatistikler",f5_desc:"SSH bağlantıları, kanalları, akışları, aktarılan veri — hepsi gerçek zamanlı.",
+        f6_title:"Otomatik Yeniden Bağlanma",f6_desc:"Üstel geri dönüşlü yol izleme. SSH keepalive, zombi gözetleyici.",
+        scr_label:"Ekran Görüntüleri",scr_title:"Canlı görün",scr_desc:"Temiz, sezgisel arayüz. Tek dokunuşla bağlan. Her şey çalışır.",
+        how_label:"Nasıl Çalışır",how_title:"VPN'in için üç adım",how_desc:"Hesap yok. Kayıt yok. Sunucunu ekle ve Bağlan'a dokun.",
+        s1_title:"VPS'ini Ekle",s1_desc:"Host, kullanıcı adı, şifre gir — veya Ed25519 özel anahtarını içe aktar. Kaydetmeden önce test eder.",
+        s2_title:"Bağlan'a Dokun",s2_desc:"SSH2VPN sistem VPN'i kaldırır ve trafiği şifreli SSH tüneli üzerinden sunucuna yönlendirir.",
+        s3_title:"Özgürce gez",s3_desc:"IP'n sunucunun IP'si olur. Trafik kendi makinenizden çıkar. Kimse verini görmez.",
+        priv_label:"Gizlilik",priv_title:"Verilerin senin kalır",priv_desc:"SSH2VPN sunucu işletmez ve trafiğini asla görmez.",
+        priv_banner_title:"Günlük yok. Sunucu yok. Aracı yok.",
+        priv_banner_desc:"Kimlik bilgileri ve anahtarlar cihazında kalır. Tünel yalnızca seninle sunucun arasında çalışır.",
+        priv_p1:"Veri toplama yok",priv_p2:"Hesap gerekmez",priv_p3:"Anahtarlar cihazda",priv_p4:"Açık SSH protokolü",
+        cta_title:"Gizliliğinin kontrolünü<br>almaya hazır mısın?",cta_desc:"SSH2VPN'i indir ve VPS'ini bir dakikadan kısa sürede kişisel VPN'e dönüştür.",
+        footer_rights:"Tüm hakları saklıdır."
+    },
+    pl: {
+        nav_features:"Funkcje",nav_how:"Jak działa",nav_privacy:"Prywatność",nav_download:"Pobierz",
+        hero_badge:"Dostępne na iOS",hero_title_1:"Twój VPS.",hero_title_2:"Twój VPN.",
+        hero_desc:"Zamień własny VPS w szybki, prywatny VPN — jednym dotknięciem. SSH2VPN prowadzi ruch przez Twój własny serwer po SSH. Żadnej sieci trzeciej między Tobą a Twoimi danymi.",
+        hero_appstore:"Pobierz z App Store",hero_learn:"Jak działa →",
+        feat_label:"Funkcje",feat_title:"Wszystko czego potrzebujesz,<br>nic czego nie potrzebujesz",
+        feat_desc:"SSH2VPN to klient VPN na poziomie systemu działający z każdą aplikacją. Wbudowane DNS, wieloserwer, konsola hakerska — wszystko w środku.",
+        f1_title:"Prawdziwy systemowy VPN",f1_desc:"_TUNNEL NetworkExtension kieruje ruch każdej aplikacji. Nie proxy — prawdziwy VPN systemowy.",
+        f2_title:"Zero konfiguracji",f2_desc:"Nic do instalowania na serwerze. Wystarczy sshd. Bez roota, TUN, skryptów, kontenerów.",
+        f3_title:"19 presetów DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 i więcej. Jedno dotknięcie by przełączyć. Własne DNS też obsługiwane.",
+        f4_title:"Lista blokowania DNS",f4_desc:"Blokuj domeny lub nadpisuj IP lokalnie. Zasady działają na urządzeniu przed wysłaniem.",
+        f5_title:"Statystyki na żywo",f5_desc:"Połączenia SSH, kanały, przepływy, przesłane dane — wszystko w czasie rzeczywistym.",
+        f6_title:"Automatyczne ponowne łączenie",f6_desc:"Monitorowanie tras z wykładniczym backoffem. SSH keepalive, watchdog.",
+        scr_label:"Zrzuty ekranu",scr_title:"Zobacz w akcji",scr_desc:"Czysty, intuicyjny interfejs. Łączenie jednym dotknięciem. Po prostu działa.",
+        how_label:"Jak działa",how_title:"Trzy kroki do Twojego VPN",how_desc:"Bez kont. Bez rejestracji. Dodaj serwer i dotknij Połącz.",
+        s1_title:"Dodaj VPS",s1_desc:"Wpisz host, użytkownika, hasło — lub importuj klucz prywatny Ed25519. Testuje połączenie przed zapisaniem.",
+        s2_title:"Dotknij Połącz",s2_desc:"SSH2VPN podnosi systemowy VPN i kieruje ruch szyfrowanym tunelem SSH do Twojego serwera.",
+        s3_title:"Przeglądaj swobodnie",s3_desc:"Twój IP staje się IP serwera. Ruch wychodzi z Twojej maszyny. Nikt nie widzi Twoich danych.",
+        priv_label:"Prywatność",priv_title:"Twoje dane pozostają Twoje",priv_desc:"SSH2VPN nie prowadzi serwerów i nigdy nie widzi Twojego ruchu.",
+        priv_banner_title:"Bez logów. Bez serwerów. Bez pośredników.",
+        priv_banner_desc:"Dane logowania i klucze zostają na urządzeniu. Tunel działa między Tobą a serwerem. Zerowy dostęp do danych.",
+        priv_p1:"Brak zbierania danych",priv_p2:"Brak wymaganego konta",priv_p3:"Klucze na urządzeniu",priv_p4:"Otwarty protokół SSH",
+        cta_title:"Gotowy przejąć kontrolę<br>nad swoją prywatnością?",cta_desc:"Pobierz SSH2VPN i zamień VPS w osobisty VPN w mniej niż minutę.",
+        footer_rights:"Wszelkie prawa zastrzeżone."
+    },
+    nl: {
+        nav_features:"Functies",nav_how:"Hoe het werkt",nav_privacy:"Privacy",nav_download:"Download",
+        hero_badge:"Beschikbaar op iOS",hero_title_1:"Jouw VPS.",hero_title_2:"Jouw VPN.",
+        hero_desc:"Maak van je eigen VPS een snelle, privé-VPN — met één tik. SSH2VPN stuurt het verkeer van je iPhone via SSH door je eigen server. Geen netwerk van derden tussen jou en je data.",
+        hero_appstore:"Download in de App Store",hero_learn:"Hoe het werkt →",
+        feat_label:"Functies",feat_title:"Alles wat je nodig hebt,<br>niets wat je niet nodig hebt",
+        feat_desc:"SSH2VPN is een VPN-client op systeemniveau die werkt met elke app. Ingebouwde DNS, meerdere servers en hacker-console — alles inbegrepen.",
+        f1_title:"Echte Systeem-VPN",f1_desc:"NetworkExtension-tunnel stuurt verkeer van elke app. Geen proxy — een echte systeem-VPN.",
+        f2_title:"Nul Configuratie",f2_desc:"Niets te installeren op de server. sshd is genoeg. Geen root, geen TUN, geen scripts, geen containers.",
+        f3_title:"19 DNS Voorinstellingen",f3_desc:"Cloudflare, Google, AdGuard, Quad9 en meer. Eén tik om te wisselen. Eigen DNS mogelijk.",
+        f4_title:"DNS Blokkeerlijst",f4_desc:"Blokkeer domeinen of overschrijf IPs lokaal. Regels worden op het apparaat toegepast.",
+        f5_title:"Live Statistieken",f5_desc:"SSH-verbindingen, kanalen, flows, overgedragen data — alles real-time zichtbaar.",
+        f6_title:"Automatisch Opnieuw Verbinden",f6_desc:"Route-monitoring met exponentiële backoff. SSH keepalive, zombie-watchdog.",
+        scr_label:"Schermafbeeldingen",scr_title:"Ziet het in actie",scr_desc:"Schone, intuïtieve interface. Eén tik om te verbinden. Het werkt gewoon.",
+        how_label:"Hoe het werkt",how_title:"Drie stappen naar je eigen VPN",how_desc:"Geen accounts. Geen aanmeldingen. Voeg je server toe en tik op Verbinden.",
+        s1_title:"VPS Toevoegen",s1_desc:"Host, gebruikersnaam, wachtwoord invoeren — of Ed25519 privésleutel importeren. Test verbinding voor opslaan.",
+        s2_title:"Tik op Verbinden",s2_desc:"SSH2VPN start een systeem-VPN en leidt het verkeer via een versleutelde SSH-tunnel naar je server.",
+        s3_title:"Browse vrij",s3_desc:"Jouw IP wordt dat van je server. Je verkeer verlaat je machine. Niemand ziet je data.",
+        priv_label:"Privacy",priv_title:"Jouw data blijft van jou",priv_desc:"SSH2VPN beheert geen servers en ziet je verkeer nooit.",
+        priv_banner_title:"Geen logs. Geen servers. Geen tussenpersonen.",
+        priv_banner_desc:"Inloggegevens en sleutels blijven op je apparaat. De tunnel loopt alleen tussen jou en je server.",
+        priv_p1:"Geen dataverzameling",priv_p2:"Geen account nodig",priv_p3:"Sleutels op apparaat",priv_p4:"Open SSH-protocol",
+        cta_title:"Klaar om de controle over<br>je privacy over te nemen?",cta_desc:"Download SSH2VPN en maak van je VPS in minder dan een minuut een persoonlijke VPN.",
+        footer_rights:"Alle rechten voorbehouden."
+    },
+    vi: {
+        nav_features:"Tính năng",nav_how:"Cách hoạt động",nav_privacy:"Quyền riêng tư",nav_download:"Tải về",
+        hero_badge:"Có trên iOS",hero_title_1:"VPS của bạn.",hero_title_2:"VPN của bạn.",
+        hero_desc:"Biến VPS của riêng bạn thành một VPN nhanh và riêng tư — chỉ với một lần chạm. SSH2VPN dẫn lưu lượng iPhone qua chính máy chủ của bạn bằng SSH. Không có mạng bên thứ ba.",
+        hero_appstore:"Tải về trên App Store",hero_learn:"Cách hoạt động →",
+        feat_label:"Tính năng",feat_title:"Mọi thứ bạn cần,<br>không gì thừa",
+        feat_desc:"SSH2VPN là ứng dụng VPN cấp hệ thống, hoạt động với mọi app. DNS tích hợp, đa máy chủ, console hacker — tất cả included.",
+        f1_title:"VPN hệ thống thật sự",f1_desc:"Đường hầm NetworkExtension dẫn lưu lượng mọi app. Không phải proxy — VPN hệ thống thật sự.",
+        f2_title:"Zero cài đặt",f2_desc:"Không cần cài gì trên máy chủ. Chỉ cần sshd. Không root, không TUN, không script, không container.",
+        f3_title:"19 preset DNS",f3_desc:"Cloudflare, Google, AdGuard, Quad9 và hơn thế. Một lần chạm để chuyển. Hỗ trợ DNS tùy chỉnh.",
+        f4_title:"Danh sách chặn DNS",f4_desc:"Chặn tên miền hoặc ghi đè IP cục bộ. Quy tắc áp dụng trên thiết bị trước khi gửi.",
+        f5_title:"Thống kê trực tiếp",f5_desc:"Kết nối SSH, kênh, lưu lượng, dữ liệu truyền — tất cả hiển thị real-time.",
+        f6_title:"Tự động kết nối lại",f6_desc:"Giám sát đường dẫn với exponential backoff. SSH keepalive, watchdog.",
+        scr_label:"Ảnh chụp",scr_title:"Xem ứng dụng hoạt động",scr_desc:"Giao diện sạch, trực quan. Kết nối bằng một chạm. Mọi thứ hoạt động.",
+        how_label:"Cách hoạt động",how_title:"3 bước để có VPN riêng",how_desc:"Không cần tài khoản. Không cần đăng ký. Thêm máy chủ và bấm Kết nối.",
+        s1_title:"Thêm VPS",s1_desc:"Nhập host, tên đăng nhập, mật khẩu — hoặc nhập private key Ed25519. Kiểm tra kết nối trước khi lưu.",
+        s2_title:"Bấm Kết nối",s2_desc:"SSH2VPN dựng VPN hệ thống và dẫn lưu lượng qua đường hầm SSH mã hóa tới máy chủ.",
+        s3_title:"Lướt web tự do",s3_desc:"IP của bạn thành IP máy chủ. Lưu lượng ra từ chính máy bạn. Không ai thấy dữ liệu.",
+        priv_label:"Quyền riêng tư",priv_title:"Dữ liệu của bạn là của bạn",priv_desc:"SSH2VPN không vận hành máy chủ và không bao giờ thấy lưu lượng.",
+        priv_banner_title:"Không log. Không máy chủ. Không trung gian.",
+        priv_banner_desc:"Thông tin đăng nhập và khóa nằm trên thiết bị. Đường hầm chỉ chạy giữa bạn và máy chủ.",
+        priv_p1:"Không thu thập dữ liệu",priv_p2:"Không cần tài khoản",priv_p3:"Khóa trên thiết bị",priv_p4:"Giao thức SSH mở",
+        cta_title:"Sẵn sàng kiểm soát<br>quyền riêng tư?",cta_desc:"Tải SSH2VPN và biến VPS thành VPN cá nhân trong chưa đầy một phút.",
+        footer_rights:"Bảo lưu mọi quyền."
+    }
+};
+
+let currentLang = 'en';
+
+function setLang(lang) {
+    if (!I18N[lang]) return;
+    currentLang = lang;
+    localStorage.setItem('ssh2vpn_lang', lang);
+    document.documentElement.lang = lang;
+
+    // Update all translatable elements
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (I18N[lang][key]) {
+            el.innerHTML = I18N[lang][key];
+        }
+    });
+
+    // Update nav links (li elements)
+    document.querySelectorAll('.nav-links li').forEach(li => {
+        const a = li.querySelector('a[data-i18n]');
+        if (a) {
+            const key = a.getAttribute('data-i18n');
+            if (I18N[lang][key]) a.textContent = I18N[lang][key];
+        }
+    });
+
+    // Update lang buttons
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.setLang === lang);
+    });
+}
+
+// Init
+document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLang(btn.dataset.setLang));
+});
+
+// Restore saved or detect
+const saved = localStorage.getItem('ssh2vpn_lang');
+if (saved && I18N[saved]) {
+    setLang(saved);
+} else {
+    const nav = navigator.language.toLowerCase();
+    const match = Object.keys(I18N).find(k => nav.startsWith(k));
+    if (match) setLang(match);
+}
+</script>
 
 </body>
 </html>
