@@ -4,33 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SSH2VPN — Support</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#F6F8FB; --card:#FFFFFF; --ink:#0E1524; --mut:#8A94A6; --acc:#2E9E6B; --line:#E7ECF5; }
+  :root { --bg:#0a0e17; --card:#111827; --card-hover:#1a2332; --border:#1e293b; --text:#f1f5f9; --mut:#94a3b8; --acc:#3b82f6; --green:#10b981; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--ink); line-height:1.55; padding:20px; }
+  body { font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; padding:20px; }
   .wrap { max-width:760px; margin:0 auto; }
   header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
-  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; }
-  .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#40C98C,#2E9E6B); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800; }
-  select { font:inherit; padding:7px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; color:var(--text); text-decoration:none; }
+  .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#10b981,#3b82f6); display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px; font-weight:800; }
+  select { font:inherit; padding:7px 12px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; }
   h1 { font-size:24px; margin:14px 0 4px; }
   .updated { color:var(--mut); font-size:13px; margin-bottom:18px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
-  section h2 { font-size:16px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
-  section h2 .n { width:22px; height:22px; border-radius:7px; background:rgba(46,158,107,.12); color:var(--acc); font-size:12px; display:flex; align-items:center; justify-content:center; flex:none; }
-  p, li { font-size:14.5px; color:var(--ink); }
+  section { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
+  section h2 { font-size:16px; margin-bottom:8px; display:flex; align-items:center; gap:8px; color:var(--text); }
+  section h2 .n { width:22px; height:22px; border-radius:7px; background:rgba(59,130,246,.15); color:var(--acc); font-size:12px; display:flex; align-items:center; justify-content:center; flex:none; }
+  p, li { font-size:14.5px; color:var(--text); }
   ul { padding-left:20px; margin-top:6px; }
   li { margin-bottom:5px; }
-  .accent { color:var(--acc); font-weight:600; }
-  code { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:13px; }
+  .accent { color:var(--green); font-weight:600; }
+  code { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:13px; color:#c7d8f5; }
   footer { text-align:center; color:var(--mut); font-size:12.5px; margin-top:20px; }
-  footer a { color:var(--acc); text-decoration:none; }
+  footer a { color:var(--green); text-decoration:none; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><span class="dot">S</span> SSH2VPN</div>
+    <a class="brand" href="index.html"><span class="dot">S</span> SSH2VPN</a>
     <select id="lang" onchange="apply()"></select>
   </header>
   <h1 id="t-title"></h1>
@@ -62,7 +65,7 @@ const FLAGS = {en:"\u{1F1EC}\u{1F1E7}",es:"\u{1F1EA}\u{1F1F8}",de:"\u{1F1E9}\u{1
 const NAMES = {en:"English",es:"Espa\u00f1ol",de:"Deutsch",fr:"Fran\u00e7ais",it:"Italiano",pt:"Portugu\u00eas",ja:"\u65e5\u672c\u8a9e",zh:"\u7b80\u4f53\u4e2d\u6587",ko:"\ud55c\uad6d\uc5b4",ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629",hi:"\u0939\u093f\u0928\u094d\u0926\u0940",th:"\u0e44\u0e17\u0e22",tr:"T\u00fcrk\u00e7e",pl:"Polski",nl:"Nederlands",vi:"Ti\u1ebfng Vi\u1ec7t",ru:"\u0420\u0443\u0441\u0441\u043a\u0438\u0439"};
 // Russian stays last (owner's decision); the browser language picks the default.
 const ORDER = ["en","es","de","fr","it","pt","ja","zh","ko","ar","hi","th","tr","pl","nl","vi","ru"];
-let cur = (navigator.language || "en");
+let cur = (localStorage.getItem("ssh2vpn_lang") || navigator.language || "en");
 if (!T[cur] || typeof T[cur] !== "object") {
   const l = String(cur).toLowerCase().split("-")[0];
   const map = {"pt":"pt","zh":"zh","ja":"ja","ko":"ko","ar":"ar","hi":"hi","th":"th","tr":"tr","pl":"pl","nl":"nl","vi":"vi"};
@@ -71,6 +74,7 @@ if (!T[cur] || typeof T[cur] !== "object") {
 function apply(){
   const sel = document.getElementById("lang");
   if (sel && sel.value) { cur = sel.value; }
+  try { localStorage.setItem("ssh2vpn_lang", cur); } catch(e) {}
   const t = (typeof T[cur] === "object") ? T[cur] : T.en;
   document.getElementById("t-title").textContent = t.title;
   document.getElementById("t-updated").textContent = t.updated;

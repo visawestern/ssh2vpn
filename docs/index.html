@@ -794,8 +794,10 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
     btn.addEventListener('click', () => setLang(btn.dataset.setLang));
 });
 
-// Restore saved or detect
-const saved = localStorage.getItem('ssh2vpn_lang');
+// Restore saved or detect. The legal pages may have stored an app-style
+// code ("pt-BR", "zh-Hans") — normalize it to the landing's keys first.
+const savedRaw = localStorage.getItem('ssh2vpn_lang');
+const saved = savedRaw ? savedRaw.toLowerCase().split('-')[0] : null;
 if (saved && I18N[saved]) {
     setLang(saved);
 } else {
