@@ -116,7 +116,7 @@ enum RewardedAdRouter {
     static func presentRewarded() async -> RewardedOutcome {
         switch AdsProvider.active {
         case .admob:
-            await AdMobRewardedProvider.shared.initialize()
+            AdMobRewardedProvider.shared.initialize()
             return await AdMobRewardedProvider.shared.presentRewarded()
         case .applovinMax:
             guard AdsConfig.maxSDKKey != "PENDING" else {
@@ -139,7 +139,7 @@ enum RewardedAdRouter {
 /// its handler) → GADRewardedAd.load (20s no-fill timeout) → present +
 /// earn handler; dismissal completes the flow.
 final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
-    nonisolated(unsafe) static let shared = AdMobRewardedProvider()
+    static let shared = AdMobRewardedProvider()
 
     private var initialized = false
     private var rewardedAd: RewardedAd?
@@ -335,7 +335,7 @@ extension AdMobRewardedProvider {
 /// Wires the AppLovin MAX SDK behind AdsProvider.applovinMax. Inactive
 /// until AdsConfig.maxSDKKey holds the real key from the MAX dashboard.
 final class MaxRewardedProvider: NSObject, @unchecked Sendable {
-    nonisolated(unsafe) static let shared = MaxRewardedProvider()
+    static let shared = MaxRewardedProvider()
 
     private var rewarded: MARewardedAd?
 
@@ -372,7 +372,6 @@ final class MaxRewardedProvider: NSObject, @unchecked Sendable {
             }
         }
         guard loaded else { return .noFill }
-        let presentingVC = await TopVCFinder.find()
         var earned = false
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             let box = ResumeOnceBox(c)
@@ -394,7 +393,7 @@ final class MaxRewardedProvider: NSObject, @unchecked Sendable {
 /// Bridges the nonisolated MAX delegate callbacks into the awaiting
 /// continuations (delegate methods land on an arbitrary queue).
 final class MaxLoadBox: @unchecked Sendable {
-    nonisolated(unsafe) static let shared = MaxLoadBox()
+    static let shared = MaxLoadBox()
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Bool, Never>?
 
@@ -416,7 +415,7 @@ final class MaxLoadBox: @unchecked Sendable {
 }
 
 final class MaxRewardBox: @unchecked Sendable {
-    nonisolated(unsafe) static let shared = MaxRewardBox()
+    static let shared = MaxRewardBox()
     private let lock = NSLock()
     private var handler: (@MainActor (Bool) -> Void)?
     /// didRewardUser lands BEFORE didHide; remember it, didHide completes

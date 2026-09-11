@@ -84,7 +84,7 @@ enum LanguageOrdering {
     /// there. Only countries whose language the app actually ships.
     static func language(forCountry code: String) -> AppLanguage? {
         switch code.uppercased() {
-        case "US", "GB", "AU", "CA", "NZ", "IE", "SG", "PH", "IN": return .english
+        case "US", "GB", "AU", "CA", "NZ", "IE", "SG", "PH": return .english
         case "ES", "MX", "AR", "CL", "CO", "PE": return .spanish
         case "DE", "AT", "CH", "LI": return .german
         case "FR", "BE", "LU", "MC": return .french

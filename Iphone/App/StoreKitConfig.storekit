@@ -20,7 +20,7 @@
           "locale" : "ru_RU"
         }
       ],
-      "productID" : "com.sshtunnel.unlimited",
+      "productID" : "com.ssh2vpn.unlimited",
       "referenceName" : "Unlimited",
       "type" : "NonConsumable"
     },
@@ -40,7 +40,7 @@
           "locale" : "ru_RU"
         }
       ],
-      "productID" : "com.sshtunnel.unlimited.discount",
+      "productID" : "com.ssh2vpn.unlimited.discount",
       "referenceName" : "Unlimited Discount",
       "type" : "NonConsumable"
     }

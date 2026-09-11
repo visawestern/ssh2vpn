@@ -8,10 +8,10 @@ import VPNCore
 /// in the extension, which reads the same ledger.
 @MainActor
 final class StoreManager: ObservableObject {
-    static let unlimitedProductID = "com.sshtunnel.unlimited"
+    static let unlimitedProductID = "com.ssh2vpn.unlimited"
     /// One-time $6 offer product — same entitlement as the full-price one,
     /// bought only from the paywall's discount stage.
-    static let discountProductID = "com.sshtunnel.unlimited.discount"
+    static let discountProductID = "com.ssh2vpn.unlimited.discount"
     /// Any of these product IDs grants Unlimited.
     static let entitledProductIDs: Set<String> = [unlimitedProductID, discountProductID]
 

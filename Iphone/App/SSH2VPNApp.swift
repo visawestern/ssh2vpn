@@ -372,10 +372,6 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        // TEMPORARY (owner-requested while testing): reset the "discount
-        // declined forever" latch on every launch so the $6 offer stays
-        // testable across relaunches. Remove before the App Store release.
-        UserDefaults.standard.removeObject(forKey: Self.paywallDiscountDeclinedKey)
         statusObserver = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: .main) { [weak self] note in
             // Observer runs on queue: .main, so this closure is always on the
             // main actor in practice — assert it and delegate all state work.
@@ -1473,7 +1469,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Triggered from the Settings Unlimited card or the paywall. Buys
-    /// `com.sshtunnel.unlimited` ($10) or `com.sshtunnel.unlimited.discount`
+    /// `com.ssh2vpn.unlimited` ($10) or `com.ssh2vpn.unlimited.discount`
     /// ($6 one-time offer) and, on success, sets the shared ledger to
     /// unlimited (kernel honors it). Returns the StoreKit outcome so callers
     /// can react to cancellation (e.g. show the discounted follow-up offer).
