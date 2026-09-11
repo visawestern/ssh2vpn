@@ -11,6 +11,7 @@
 		A10000010000000000000002 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000002 /* Localization.swift */; };
 		A10000010000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000003 /* RootView.swift */; };
 		A10000010000000000000004 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000004 /* PacketTunnelProvider.swift */; };
+		E70000010000000000000002 /* GatewayScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70000010000000000000001 /* GatewayScript.swift */; };
 		A10000010000000000000005 /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A20000010000000000000008 /* PacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A10000010000000000000006 /* Copy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000011 /* Copy.swift */; };
 		A1000001000000000000009A /* CopyDNS.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000009B /* CopyDNS.swift */; };
@@ -39,7 +40,6 @@
 		A10000010000000000000049 /* privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000049 /* privacy.html */; };
 		A10000010000000000000048 /* terms.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000048 /* terms.html */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
-		C30000010000000000000002 /* gateway.py in Resources */ = {isa = PBXBuildFile; fileRef = C40000010000000000000001 /* gateway.py */; };
 		C30000010000000000000003 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
 		C30000010000000000000010 /* CleverAdsSolutionsSPM in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000010 /* CleverAdsSolutionsSPM */; };
 		C30000010000000000000011 /* CASMediationGoogleAds in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000011 /* CASMediationGoogleAds */; };
@@ -80,6 +80,7 @@
 		A20000010000000000000002 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		A20000010000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		A20000010000000000000004 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		E70000010000000000000001 /* GatewayScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayScript.swift; sourceTree = "<group>"; };
 		A20000010000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000010000000000000006 /* PacketTunnel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "PacketTunnel-Info.plist"; sourceTree = "<group>"; };
 		A20000010000000000000007 /* SSH2VPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SSH2VPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -201,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000010000000000000004 /* PacketTunnelProvider.swift */,
+				E70000010000000000000001 /* GatewayScript.swift */,
 				A20000010000000000000006 /* PacketTunnel-Info.plist */,
 				A20000010000000000000010 /* SSH2VPNPacketTunnel.entitlements */,
 				A20000010000000000000018 /* PacketTunnelPacketLoop.swift */,
@@ -345,7 +347,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C30000010000000000000002 /* gateway.py in Resources */,
 				A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -377,6 +378,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000010000000000000004 /* PacketTunnelProvider.swift in Sources */,
+				E70000010000000000000002 /* GatewayScript.swift in Sources */,
 				A10000010000000000000017 /* PacketTunnelPacketLoop.swift in Sources */,
 				A10000010000000000000019 /* KeychainStore.swift in Sources */,
 			);

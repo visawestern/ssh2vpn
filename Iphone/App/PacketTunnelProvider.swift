@@ -684,8 +684,9 @@ private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked 
             }
             monitor.start(queue: DispatchQueue.global(qos: .utility))
 
-            guard let scriptURL = self.bundle.url(forResource: "gateway", withExtension: "py"),
-                  let script = try? Data(contentsOf: scriptURL),
+            // Server-side gateway script is embedded in this binary (GatewayScript)
+            // so the .appex ships no loose script files (App Store 90035).
+            guard let script = GatewayScript.bytes,
                   let factory = self.factory else {
                 elog(.error, "TRANSPORT", "gateway.py missing or factory nil -> gatewayMissing")
                 self.reconnectController.stateMachine.fail(.protocolViolation)
