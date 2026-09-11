@@ -16,6 +16,12 @@ xcuserdata/
 *.ipa
 octohide-vpn*
 
+# Secrets — never commit (API keys, certs, profiles)
+AuthKey_*.p8
+*.p8
+*.p12
+*.mobileprovision
+
 # Python
 __pycache__/
 *.pyc
