@@ -54,6 +54,9 @@ final class AppModel: ObservableObject {
     @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
     /// True while the ad stub is "playing" (disables the button).
     @Published var adPlaying = false
+    /// True while the own-promo fallback screen is shown (the 30s animated
+    /// paywall-style promo displayed when the ad networks have no fill).
+    @Published var promoFallbackPlaying = false
     /// Short-lived in-button notice after a failed rewarded attempt
     /// (no fill / early dismissal). Shown by the button for ~5s.
     @Published var adNoticeKey: CopyKey?
@@ -210,6 +213,13 @@ final class AppModel: ObservableObject {
     /// an unexpected disconnect then re-dials automatically with backoff
     /// instead of dropping the phone onto the raw network.
     private var userIntentConnected = false
+    /// Set when the model adopted a LIVE tunnel discovered on foreground
+    /// return / resync (out-of-band start, e.g. from Settings or surviving a
+    /// relaunch). Such a tunnel's disconnect events are REAL (something of
+    /// ours IS running) but didInvokeStart is false — this flag lets the
+    /// status observer's stale-churn filter accept them instead of dropping
+    /// a genuine death and leaving an adopted tunnel stuck "connected".
+    private var adoptedLiveTunnel = false
     private var killSwitchAttempts = 0
 
     private let vpn = VPNController()
@@ -323,36 +333,126 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Foreground-return hook: re-derives the model's connection state from
+    /// the system. Called on every didBecomeActive so a tunnel that died or
+    /// came up while the app was suspended (missed NEVPNStatusDidChange
+    /// events) is reflected the moment the user sees the app again. The core
+    /// never resets on its own just because the UI went away — this sync is
+    /// the "UI catches up to the kernel" direction.
+    private func syncConnectionStateOnForeground() {
+        resyncConnectionStateWithSystem()
+    }
+
     /// Reconciles the model's connection state with what NetworkExtension
     /// actually reports. Heals the drift where the UI keeps showing
     /// connected/connecting after the tunnel died without a status event —
     /// that drift froze server switching even though "nothing was running".
+    /// Also adopts a tunnel that came up out of band (on-demand, system
+    /// restart, or simply events missed while the app was suspended), and
+    /// is safe to call from any state: every branch re-derives the correct
+    /// timers, automation flags and kill-switch bookkeeping.
     func resyncConnectionStateWithSystem() {
-        guard let status = vpn.currentSystemStatus() else { return }
-        let presentation: ConnectionPresentation
-        switch status {
-        case .connected: presentation = .connected
-        case .connecting, .reasserting: presentation = .connecting
-        case .disconnecting: presentation = .connecting // still winding down
-        case .disconnected, .invalid: presentation = .disconnected
-        @unknown default: return
+        // The manager may not be loaded yet on a cold launch — load it, then
+        // re-sync: the foreground-return path must not silently no-op just
+        // because the first resolve hadn't finished yet.
+        guard vpn.currentSystemStatus() != nil else {
+            Task { @MainActor [weak self] in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    self?.vpn.ensureManagerLoaded { continuation.resume() }
+                }
+                self?.reconcileConnectionState()
+            }
+            return
         }
-        if presentation == .disconnected && (connection == .connected || connection == .connecting) {
+        reconcileConnectionState()
+    }
+
+    /// Core of the state reconciliation, called once the manager is loaded
+    /// (ground truth is available). Maps every NEVPNStatus to the
+    /// presentation it deserves and heals every direction of drift: a live
+    /// tunnel the model missed (suspended app, cold relaunch, started from
+    /// Settings) is adopted; a dead tunnel the model still shows is fully
+    /// unwound — including the kill-switch redial the missed .disconnected
+    /// event would have scheduled.
+    private func reconcileConnectionState() {
+        guard let status = vpn.currentSystemStatus() else { return }
+        switch status {
+        case .disconnected, .invalid:
+            guard connection == .connected || connection == .connecting else { return }
             ConsoleLogStore.shared.log(level: .warning, tag: "SERVER",
                 message: "state drift healed: model said \(connection) but the tunnel is actually down")
-            connection = .disconnected
-            stopPhasePolling()
-            stopStatsPolling()
-            attemptStartedAt = nil
-            userIntentConnected = false
-        } else if presentation == .connected && connection == .disconnected {
-            // Tunnel came up out of band (on-demand, system restart) while
-            // the UI still reported disconnected — adopt the live state so
-            // switching doesn't look broken.
+            adoptDisconnectedState()
+        case .connected:
+            guard connection != .connected else { return }
             ConsoleLogStore.shared.log(level: .warning, tag: "SERVER",
-                message: "state resync: model said disconnected but the tunnel is actually UP")
-            connection = .connected
+                message: "state resync: model said \(connection) but the tunnel is actually UP")
+            adoptLiveTunnelState(.connected)
+        case .connecting, .reasserting, .disconnecting:
+            // Only adopt when the model thinks nothing is happening — a
+            // mid-connect attempt or a reasserting live tunnel self-heals via
+            // real status events; only the "nothing at all" state is wrong.
+            guard connection == .disconnected || isFailedState(connection) else { return }
+            ConsoleLogStore.shared.log(level: .warning, tag: "SERVER",
+                message: "state resync: model said \(connection) but the tunnel is actually starting (\(status.rawValue))")
+            adoptLiveTunnelState(.connecting)
+        @unknown default:
+            return
+        }
+    }
+
+    private func isFailedState(_ state: ConnectionPresentation) -> Bool {
+        if case .failed = state { return true }
+        return false
+    }
+
+    /// Applies everything a real CONNECTED/CONNECTING event would have set.
+    /// Mirrors handleVPNStatusChange(.connected): automation, stats polling,
+    /// timer keep-alive and the console/log inventory — so an adopted tunnel
+    /// behaves identically to one whose events were received live.
+    private func adoptLiveTunnelState(_ presentation: ConnectionPresentation) {
+        connection = presentation
+        userIntentConnected = true
+        adoptedLiveTunnel = true
+        if presentation == .connected {
+            _ = automation.markConnected()
+            killSwitchAttempts = 0
+            attemptStartedAt = nil
+            stallRestartArmed = false
+            lastStallRead = nil
+            stallFrozenCycles = 0
             startStatsPolling()
+            ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> TUNNEL ADOPTED (still/now running) << model state restored from NetworkExtension")
+            logExtensionInventory()
+        } else {
+            attemptStartedAt = Date()
+            startPhasePolling()
+        }
+        startDisplayTimerIfNeeded()
+    }
+
+    /// Applies everything a real DISCONNECTED event would have set. Used by
+    /// the drift heal so a stale "connected" fully unwinds (timers, polls,
+    /// kill-switch armed state) instead of leaving orphaned background work.
+    /// The kill-switch branch mirrors handleVPNStatusChange(.disconnected):
+    /// the missed event never armed its redial, so heal it here.
+    private func adoptDisconnectedState() {
+        let wasConnected = connection == .connected
+        let wanted = userIntentConnected
+        let adopted = adoptedLiveTunnel
+        connection = .disconnected
+        adoptedLiveTunnel = false
+        stopPhasePolling()
+        stopStatsPolling()
+        attemptStartedAt = nil
+        if (wanted || adopted), wasConnected, settings.killSwitch {
+            // Keep the intent: the redial task's guard requires it, same as
+            // the live handler which leaves it true while re-dialing.
+            userIntentConnected = true
+            ConsoleLogStore.shared.log(level: .warning, tag: "KILLSWITCH",
+                message: "tunnel death was missed while the app was away — arming redial now")
+            scheduleKillSwitchReconnect()
+        } else {
+            userIntentConnected = false
         }
     }
 
@@ -386,6 +486,12 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateIdleTimer()
+                // The tunnel lives in its own extension process and keeps
+                // running (or dying) while the app is suspended or even
+                // terminated — but NEVPNStatusDidChange events posted during
+                // suspension never reach the model. Re-sync on every return
+                // to the foreground so the UI always shows the real state.
+                self?.syncConnectionStateOnForeground()
             }
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -428,8 +534,11 @@ final class AppModel: ObservableObject {
         // DISCONNECTED) — accepting it would clobber a fresh .connecting
         // and orphan the whole attempt. Real failures always arrive AFTER
         // startVPNTunnel was invoked, when the flag is set.
+        // Exception: an ADOPTED tunnel (a live tunnel the model learned
+        // about via resync, e.g. started from Settings or surviving a
+        // relaunch) — its death is real, accept it.
         if connection.status == .disconnected || connection.status == .disconnecting {
-            if !vpn.didInvokeStart { return }
+            if !vpn.didInvokeStart && !adoptedLiveTunnel { return }
         }
         // Collapse identical bursts (system double-posts) in the log.
         // State below still updates, so a repeated status is harmless.
@@ -474,6 +583,7 @@ final class AppModel: ObservableObject {
                 diagnoseEarlyDeathAndMaybeRetry()
             } else {
                 self.connection = .disconnected
+                adoptedLiveTunnel = false
                 stopPhasePolling()
                 stopStatsPolling()
                 attemptStartedAt = nil
@@ -492,6 +602,7 @@ final class AppModel: ObservableObject {
             }
         case .invalid:
             self.connection = .disconnected
+            adoptedLiveTunnel = false
             stopPhasePolling()
             attemptStartedAt = nil
             ConsoleLogStore.shared.log(level: .error, tag: "TUNNEL", message: "PacketTunnel state -> INVALID CONFIGURATION — removing broken profile, tap connect to recreate")
@@ -971,6 +1082,9 @@ final class AppModel: ObservableObject {
         // redial after an unexpected drop only fires while this stays true.
         userIntentConnected = true
         killSwitchAttempts = 0
+        // A fresh manual attempt drives its own lifecycle via real status
+        // events (didInvokeStart) — it is no longer the adopted tunnel.
+        adoptedLiveTunnel = false
         // Re-entrancy guard: a second tap (same runloop or impatient finger)
         // must never stack another tunnel attempt on top of a live one.
         switch connection {
@@ -1228,6 +1342,7 @@ final class AppModel: ObservableObject {
         // Manual disconnect = user no longer wants the tunnel: kill-switch
         // redial must NOT fire after this.
         userIntentConnected = false
+        adoptedLiveTunnel = false
         killSwitchAttempts = 0
         connection = .disconnected
         attemptStartedAt = nil
@@ -1396,8 +1511,44 @@ final class AppModel: ObservableObject {
 
     /// True when an ad may be creditable (not unlimited, cooldown over,
     /// bank under the 12h cap, tunnel DOWN so geo targeting is honest).
+    /// The own-promo fallback counts as "playing" too — the button must
+    /// stay disabled while it's on screen.
     var canWatchAd: Bool {
-        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
+        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying && !promoFallbackPlaying
+    }
+
+    /// Called by PromoFallbackView when its 30 seconds elapse or the user
+    /// dismisses it — releases the ad button back to normal.
+    func promoFallbackFinished() {
+        promoFallbackPlaying = false
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo fallback finished")
+    }
+
+    /// The user watched the full 30s of our own promo — the same real
+    /// attention a rewarded ad buys, so it earns the same +3h. Closes the
+    /// promo, credits the ledger via the shared path (bank caps, cooldown,
+    /// persistence all apply), and re-checks the connection gate.
+    func promoFallbackWatchedToEarn() {
+        promoFallbackPlaying = false
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo watched to the end — crediting +3h")
+        creditAdView()
+    }
+
+    /// Shared reward-credit path for both real rewarded ads and the own-
+    /// promo fallback: writes the ledger, reloads the UI state, logs the
+    /// outcome. No-ops safely when the bank is full or the user is
+    /// unlimited (creditingAdView == nil).
+    private func creditAdView() {
+        let now = Date()
+        var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
+        if let credited = ledger.creditingAdView(now: now) {
+            ledger = credited
+            QuotaLedgerStore().save(ledger)
+            reloadQuota()
+            ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "reward credited: +3h wall-clock (expires \(ledger.expires.map { QuotaLedger.formatter.string(from: $0) } ?? "never"))")
+        } else {
+            ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (unlimited or bank full)")
+        }
     }
 
     /// Rewarded ad via CAS.AI (demo ID + test mode until the account
@@ -1426,23 +1577,18 @@ final class AppModel: ObservableObject {
             case .earned:
                 break
             case .noFill:
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate)")
-                self.showAdNotice(.adNoFillShort)
+                // No ad from the networks: instead of a dead-end notice,
+                // play our own 30s animated promo (paywall-styled, tap
+                // opens the real paywall). The button stays busy for the
+                // promo's duration, then re-enables normally.
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate) — showing own promo fallback")
+                self.promoFallbackPlaying = true
             case .dismissedEarly:
                 ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early)")
                 self.showAdNotice(.adRewardNotCredited)
             }
             guard outcome == .earned else { return }
-            let now = Date()
-            var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
-            if let credited = ledger.creditingAdView(now: now) {
-                ledger = credited
-                QuotaLedgerStore().save(ledger)
-                self.reloadQuota()
-                ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "reward credited: +3h wall-clock (expires \(ledger.expires.map { QuotaLedger.formatter.string(from: $0) } ?? "never"))")
-            } else {
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "ad not credited (unlimited or bank full)")
-            }
+            creditAdView()
         }
     }
 

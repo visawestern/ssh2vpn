@@ -117,6 +117,15 @@ struct RootView: View {
             PaywallView()
                 .environmentObject(model)
         }
+        // Own-promo fallback (rewarded no-fill): a 30s animated promo that
+        // taps through into the paywall above. Full watch credits +3h via
+        // the model (same as a real rewarded ad). Presented separately so
+        // both covers can coexist (promo -> paywall) without dismissal
+        // conflicts.
+        .fullScreenCover(isPresented: $model.promoFallbackPlaying) {
+            PromoFallbackView()
+                .environmentObject(model)
+        }
         .preferredColorScheme(.light)
     }
 }
