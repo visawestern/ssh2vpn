@@ -96,6 +96,7 @@ enum CopyKey {
     case promoFallbackNoAds
     case promoFallbackCTA
     case promoFallbackClose
+    case promoFallbackRewardIn
     case vpsPriceFrom, vpsSubDigitalOcean, vpsSubVultr, vpsSubHostinger
     case vpsSubContabo, vpsSubLinode, vpsSubInterServer, vpsSubCloudways
     // Paste-and-parse credentials import
@@ -242,6 +243,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Zero ads, zero interruptions",
         .promoFallbackCTA: "Unlock Unlimited",
         .promoFallbackClose: "Close",
+        .promoFallbackRewardIn: "Reward in %d s",
     ]
 
     // MARK: - Russian
@@ -357,6 +359,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Ноль рекламы и ожидания",
         .promoFallbackCTA: "Открыть безлимит",
         .promoFallbackClose: "Закрыть",
+        .promoFallbackRewardIn: "Награда через %d с",
         .diagLive: "В ЭФИРЕ", .diagSSHConnections: "SSH-соединения", .diagActiveFlows: "Активные потоки", .diagDownloaded: "Скачано", .diagUploaded: "Отправлено", .diagDNS: "DNS", .diagLocalRulesLine: "%d активных · %d заблокировано", .diagStopReason: "Причина остановки", .diagLastError: "Последняя ошибка", .diagDNSPending: "DNS ОЖИДАЕТ", .diagLiveNow: "Сейчас", .diagOnNextConnect: "При след. подключении", .diagDefaultDNS: "8.8.8.8 (по умолчанию)",
     ]
 
@@ -414,6 +417,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Cero anuncios, cero interrupciones",
         .promoFallbackCTA: "Desbloquear Ilimitado",
         .promoFallbackClose: "Cerrar",
+        .promoFallbackRewardIn: "Recompensa en %d s",
         .failureFreeTimeExhausted: "Se acabó el tiempo gratis. Mira un anuncio para conseguir +3 horas.",
         .dnsRuleScope: "Se aplica a", .dnsRuleScopeExact: "Solo este dominio", .dnsRuleScopeSubtree: "Dominio + subdominios",
         .dnsEditRule: "Editar regla", .dnsEditRuleTitle: "Editar regla DNS", .dnsSaveRule: "Guardar",
@@ -518,6 +522,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Null Werbung, null Unterbrechungen",
         .promoFallbackCTA: "Unbegrenzt freischalten",
         .promoFallbackClose: "Schließen",
+        .promoFallbackRewardIn: "Belohnung in %d s",
         .failureFreeTimeExhausted: "Die Gratiszeit ist vorbei. Schau eine Werbung für +3 Stunden.",
         .dnsRuleScope: "Gilt für", .dnsRuleScopeExact: "Nur diese Domain", .dnsRuleScopeSubtree: "Domain + Subdomains",
         .dnsEditRule: "Regel bearbeiten", .dnsEditRuleTitle: "DNS-Regel bearbeiten", .dnsSaveRule: "Speichern",
@@ -622,6 +627,7 @@ struct AppCopy {
         .promoFallbackNoAds: "広告ゼロ、中断ゼロ",
         .promoFallbackCTA: "無制限をアンロック",
         .promoFallbackClose: "閉じる",
+        .promoFallbackRewardIn: "残り %d 秒で報酬",
         .failureFreeTimeExhausted: "無料時間が終了しました。動画を見ると+3時間もらえます。",
         .dnsRuleScope: "適用範囲", .dnsRuleScopeExact: "このドメインのみ", .dnsRuleScopeSubtree: "ドメイン + サブドメイン",
         .dnsEditRule: "ルールを編集", .dnsEditRuleTitle: "DNSルールの編集", .dnsSaveRule: "保存",
@@ -718,6 +724,7 @@ struct AppCopy {
         .promoFallbackNoAds: "零广告，零打扰",
         .promoFallbackCTA: "解锁不限量",
         .promoFallbackClose: "关闭",
+        .promoFallbackRewardIn: "%d 秒后发放奖励",
         .failureFreeTimeExhausted: "免费时长已用完。观看广告可获得 +3 小时。",
         .dnsRuleScope: "作用于", .dnsRuleScopeExact: "仅此域名", .dnsRuleScopeSubtree: "域名 + 子域名",
         .dnsEditRule: "编辑规则", .dnsEditRuleTitle: "编辑 DNS 规则", .dnsSaveRule: "保存",
@@ -812,6 +819,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Zéro pub, zéro interruption",
         .promoFallbackCTA: "Débloquer l'illimité",
         .promoFallbackClose: "Fermer",
+        .promoFallbackRewardIn: "Récompense dans %d s",
         .failureFreeTimeExhausted: "Le temps gratuit est écoulé. Regardez une pub pour +3 heures.",
         .dnsRuleScope: "S'applique à", .dnsRuleScopeExact: "Ce domaine seulement", .dnsRuleScopeSubtree: "Domaine + sous-domaines",
         .dnsEditRule: "Modifier la règle", .dnsEditRuleTitle: "Modifier la règle DNS", .dnsSaveRule: "Enregistrer",
@@ -916,6 +924,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Zero pubblicità, zero interruzioni",
         .promoFallbackCTA: "Sblocca Illimitato",
         .promoFallbackClose: "Chiudi",
+        .promoFallbackRewardIn: "Premio tra %d s",
         .failureFreeTimeExhausted: "Il tempo gratuito è finito. Guarda una pubblicità per +3 ore.",
         .dnsRuleScope: "Si applica a", .dnsRuleScopeExact: "Solo questo dominio", .dnsRuleScopeSubtree: "Dominio + sottodomini",
         .dnsEditRule: "Modifica regola", .dnsEditRuleTitle: "Modifica regola DNS", .dnsSaveRule: "Salva",
@@ -1020,6 +1029,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Zero anúncios, zero interrupções",
         .promoFallbackCTA: "Desbloquear Ilimitado",
         .promoFallbackClose: "Fechar",
+        .promoFallbackRewardIn: "Recompensa em %d s",
         .failureFreeTimeExhausted: "O tempo grátis acabou. Assista um anúncio para +3 horas.",
         .dnsRuleScope: "Aplica-se a", .dnsRuleScopeExact: "Apenas este domínio", .dnsRuleScopeSubtree: "Domínio + subdomínios",
         .dnsEditRule: "Editar regra", .dnsEditRuleTitle: "Editar regra DNS", .dnsSaveRule: "Salvar",
@@ -1124,6 +1134,7 @@ struct AppCopy {
         .promoFallbackNoAds: "광고 제로, 방해 제로",
         .promoFallbackCTA: "무제한 잠금 해제",
         .promoFallbackClose: "닫기",
+        .promoFallbackRewardIn: "%d초 후 보상",
         .failureFreeTimeExhausted: "무료 시간이 끝났습니다. 광고를 보면 +3시간을 얻습니다.",
         .dnsRuleScope: "적용 대상", .dnsRuleScopeExact: "이 도메인만", .dnsRuleScopeSubtree: "도메인 + 하위 도메인",
         .dnsEditRule: "규칙 편집", .dnsEditRuleTitle: "DNS 규칙 편집", .dnsSaveRule: "저장",
@@ -1219,6 +1230,7 @@ struct AppCopy {
         .promoFallbackNoAds: "صفر إعلانات، صفر مقاطعات",
         .promoFallbackCTA: "افتح غير المحدود",
         .promoFallbackClose: "إغلاق",
+        .promoFallbackRewardIn: "المكافأة خلال %d ث",
         .failureFreeTimeExhausted: "انتهى الوقت المجاني. شاهد إعلانًا للحصول على +3 ساعات.",
         .dnsRuleScope: "ينطبق على", .dnsRuleScopeExact: "هذا النطاق فقط", .dnsRuleScopeSubtree: "النطاق + النطاقات الفرعية",
         .dnsEditRule: "تعديل القاعدة", .dnsEditRuleTitle: "تعديل قاعدة DNS", .dnsSaveRule: "حفظ",
@@ -1320,6 +1332,7 @@ struct AppCopy {
         .promoFallbackNoAds: "शून्य विज्ञापन, शून्य बाधा",
         .promoFallbackCTA: "असीमित अनलॉक करें",
         .promoFallbackClose: "बंद करें",
+        .promoFallbackRewardIn: "%d सेकंड में इनाम",
         .failureFreeTimeExhausted: "फ़्री समय समाप्त हुआ। +3 घंटे के लिए विज्ञापन देखें।",
         .dnsRuleScope: "लागू होता है", .dnsRuleScopeExact: "केवल यह डोमेन", .dnsRuleScopeSubtree: "डोमेन + सबडोमेन",
         .dnsEditRule: "नियम संपादित करें", .dnsEditRuleTitle: "DNS नियम संपादित करें", .dnsSaveRule: "सहेजें",
@@ -1422,6 +1435,7 @@ struct AppCopy {
         .promoFallbackNoAds: "ศูนย์โฆษณา ศูนย์การรบกวน",
         .promoFallbackCTA: "ปลดล็อกแบบไม่จำกัด",
         .promoFallbackClose: "ปิด",
+        .promoFallbackRewardIn: "รางวัลใน %d วิ",
         .failureFreeTimeExhausted: "หมดเวลาฟรีแล้ว ดูโฆษณาเพื่อรับ +3 ชม.",
         .dnsRuleScope: "ใช้กับ", .dnsRuleScopeExact: "โดเมนนี้เท่านั้น", .dnsRuleScopeSubtree: "โดเมน + โดเมนย่อย",
         .dnsEditRule: "แก้ไขกฎ", .dnsEditRuleTitle: "แก้ไขกฎ DNS", .dnsSaveRule: "บันทึก",
@@ -1525,6 +1539,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Sıfır reklam, sıfır kesinti",
         .promoFallbackCTA: "Sınırsız'ı Aç",
         .promoFallbackClose: "Kapat",
+        .promoFallbackRewardIn: "Ödül %d sn içinde",
         .failureFreeTimeExhausted: "Ücretsiz süre doldu. +3 saat için reklam izleyin.",
         .dnsRuleScope: "Şunlara uygulanır", .dnsRuleScopeExact: "Yalnızca bu alan adı", .dnsRuleScopeSubtree: "Alan adı + alt alan adları",
         .dnsEditRule: "Kuralı düzenle", .dnsEditRuleTitle: "DNS kuralını düzenle", .dnsSaveRule: "Kaydet",
@@ -1628,6 +1643,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Zero reklam, zero przeszkód",
         .promoFallbackCTA: "Odblokuj Bez limitu",
         .promoFallbackClose: "Zamknij",
+        .promoFallbackRewardIn: "Nagroda za %d s",
         .failureFreeTimeExhausted: "Bezpłatny czas się skończył. Obejrzyj reklamę, aby dostać +3 godziny.",
         .dnsRuleScope: "Dotyczy", .dnsRuleScopeExact: "Tylko tej domeny", .dnsRuleScopeSubtree: "Domeny + subdomeny",
         .dnsEditRule: "Edytuj zasadę", .dnsEditRuleTitle: "Edytuj zasadę DNS", .dnsSaveRule: "Zapisz",
@@ -1732,6 +1748,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Nul advertenties, nul onderbrekingen",
         .promoFallbackCTA: "Ontgrendel Onbeperkt",
         .promoFallbackClose: "Sluiten",
+        .promoFallbackRewardIn: "Beloning over %d s",
         .failureFreeTimeExhausted: "De gratis tijd is voorbij. Bekijk een advertentie voor +3 uur.",
         .dnsRuleScope: "Geldt voor", .dnsRuleScopeExact: "Alleen dit domein", .dnsRuleScopeSubtree: "Domein + subdomeinen",
         .dnsEditRule: "Regel bewerken", .dnsEditRuleTitle: "DNS-regel bewerken", .dnsSaveRule: "Bewaren",
@@ -1835,6 +1852,7 @@ struct AppCopy {
         .promoFallbackNoAds: "Không quảng cáo, không gián đoạn",
         .promoFallbackCTA: "Mở khóa Không giới hạn",
         .promoFallbackClose: "Đóng",
+        .promoFallbackRewardIn: "Thưởng sau %d giây",
         .failureFreeTimeExhausted: "Thời gian miễn phí đã hết. Xem quảng cáo để có +3 giờ.",
         .dnsRuleScope: "Áp dụng cho", .dnsRuleScopeExact: "Chỉ tên miền này", .dnsRuleScopeSubtree: "Tên miền + tên miền con",
         .dnsEditRule: "Sửa quy tắc", .dnsEditRuleTitle: "Sửa quy tắc DNS", .dnsSaveRule: "Lưu",

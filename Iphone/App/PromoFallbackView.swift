@@ -3,9 +3,17 @@ import VPNCore
 
 /// Own-promo fallback shown INSTEAD of the "No ads right now" dead-end
 /// when the rewarded networks return no fill. Plays for 30 seconds as an
-/// animated, paywall-styled promo; tapping anywhere (or the CTA) opens the
-/// real paywall to buy our own Unlimited — turning a wasted button press
-/// into a monetization impression.
+/// animated, paywall-styled promo in full rewarded-ad UX:
+///
+///  - Top-right close shows a live "Reward in Ns" countdown, exactly like
+///    a rewarded ad's skip control.
+///  - While it counts down, the close is INERT (taps bounce off) — the
+///    user must watch to the end; nothing closes and nothing credits.
+///  - When the countdown reaches 0 the X unlocks and the same button tap
+///    both closes the promo AND credits the +3h (proof-of-watch: the only
+///    way out is through the X, so the tap itself proves the watch).
+///  - The CTA opens the real paywall at any time (early exit = no credit,
+///    same as closing a real ad early).
 ///
 /// Deliberately NOT a GIF asset: a live SwiftUI composition stays sharp on
 /// every device, weighs nothing, localizes itself, and can't go stale
@@ -13,8 +21,8 @@ import VPNCore
 struct PromoFallbackView: View {
     @EnvironmentObject private var model: AppModel
 
-    /// Total promo duration before the screen dismisses itself — and, on
-    /// that full watch, credits the same +3h a real rewarded ad would.
+    /// Total promo duration the close button stays locked for. After it
+    /// elapses the X becomes the single close-and-earn control.
     static let duration: TimeInterval = 30
 
     @State private var startedAt = Date()
@@ -49,32 +57,57 @@ struct PromoFallbackView: View {
                 .animation(.easeInOut(duration: 7).repeatForever(autoreverses: true), value: orbB)
 
             VStack(spacing: 0) {
-                // Countdown capsule — the "ad is playing" affordance.
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                // Rewarded-style header: live "Reward in Ns" countdown next
+                // to the X. The X stays disabled (dimmed, taps ignored)
+                // until the countdown hits 0 — then the same tap closes
+                // the promo AND credits +3h. The tap on the unlocked X is
+                // the proof the user actually watched to the end.
+                TimelineView(.periodic(from: .now, by: 0.25)) { context in
                     let remaining = max(0, Self.duration - context.date.timeIntervalSince(startedAt))
-                    HStack(spacing: 6) {
-                        Circle()
-                            .trim(from: 0, to: max(0.02, remaining / Self.duration))
-                            .stroke(Color.prim50, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 16, height: 16)
-                        Text(String(format: "%d", Int(ceil(remaining))))
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(.white.opacity(0.10), in: Capsule())
-                    .onChange(of: remaining <= 0) {
-                        // Full watch = the user gave us 30 seconds of real
-                        // attention: reward it exactly like a completed
-                        // rewarded ad. Early close pays nothing (end()
-                        // with .earned=false below).
-                        end(.earned)
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            if remaining > 0 {
+                                // Reward countdown chip — ticks down like a
+                                // real rewarded ad's skip timer.
+                                HStack(spacing: 5) {
+                                    Circle()
+                                        .trim(from: 0, to: max(0.02, remaining / Self.duration))
+                                        .stroke(Color.prim50, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                                        .rotationEffect(.degrees(-90))
+                                        .frame(width: 14, height: 14)
+                                    Text(String(format: model.copy.text(.promoFallbackRewardIn), Int(ceil(remaining))))
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                        .monospacedDigit()
+                                }
+                                .foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.white.opacity(0.10), in: Capsule())
+                                .transition(.opacity)
+                            }
+                            // The X: inert + dimmed while the reward chip
+                            // counts, fully alive afterwards. One control,
+                            // one meaning: unlock = close & earn.
+                            Button {
+                                guard remaining <= 0 else { return }
+                                end(.earned)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(remaining > 0 ? .white.opacity(0.35) : .white.opacity(0.85))
+                                    .frame(width: 34, height: 34)
+                                    .background(.white.opacity(remaining > 0 ? 0.06 : 0.10), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(remaining > 0)
+                            .animation(.easeInOut(duration: 0.3), value: remaining <= 0)
+                            .accessibilityLabel(remaining > 0
+                                ? model.copy.text(.promoFallbackRewardIn)
+                                : model.copy.text(.promoFallbackClose))
+                        }
                     }
                 }
-                .padding(.bottom, 18)
 
                 Spacer(minLength: 0)
 
@@ -123,6 +156,8 @@ struct PromoFallbackView: View {
                 Spacer(minLength: 0)
 
                 // CTA — mirrors the paywall buy button (full-price styling).
+                // Tap-through to the paywall at any time; leaving early
+                // forfeits the +3h exactly like abandoning a real ad.
                 Button {
                     end(.skipped, openPaywall: true)
                 } label: {
@@ -147,19 +182,7 @@ struct PromoFallbackView: View {
                     .scaleEffect(pulse ? 1.02 : 1.0)
                 }
                 .buttonStyle(.plain)
-
-                // Dismiss — never locked, but an early close forfeits the
-                // +3h (same rule as a real rewarded ad: no completion, no
-                // reward). The countdown pays; the X doesn't.
-                Button {
-                    end(.skipped)
-                } label: {
-                    Text(model.copy.text(.promoFallbackClose))
-                        .font(.openSans(13))
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 14)
+                .padding(.top, 24)
             }
             .padding(.horizontal, 24)
             .padding(.top, 16)
@@ -172,10 +195,7 @@ struct PromoFallbackView: View {
             orbA = true
             orbB = true
             spin = true
-            ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "no-fill fallback: own promo playing (30s, full watch credits +3h)")
-        }
-        .onTapGesture {
-            end(.skipped, openPaywall: true)
+            ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "no-fill fallback: own promo playing (reward-in-30s close, X tap after countdown credits +3h)")
         }
     }
 
@@ -195,20 +215,19 @@ struct PromoFallbackView: View {
         }
     }
 
-    /// Why the promo ended. `.earned` = the full 30s were watched (the
-    /// countdown hit zero) — the model then credits +3h exactly like a
-    /// completed rewarded ad. `.skipped` = the user left early (close or
-    /// tap-through to the paywall): no credit, same as an ad dismissed
-    /// early.
+    /// Why the promo ended. `.earned` = the countdown ran out and the user
+    /// tapped the unlocked X (proof-of-watch) — the model credits +3h
+    /// exactly like a completed rewarded ad. `.skipped` = the user left
+    /// via the CTA before the countdown finished: no credit, same as an ad
+    /// abandoned early.
     enum PromoOutcome {
         case earned
         case skipped
     }
 
-    /// Single exit point: closes the promo, reports the outcome once, and
-    /// on `.earned` lets the model credit the reward and show the +3h
-    /// confirmation path used by real ads. `openPaywall` escalates into
-    /// the real paywall (tap-through monetization).
+    /// Single exit point: closes the promo and reports the outcome once.
+    /// `openPaywall` escalates into the real paywall (tap-through
+    /// monetization).
     private func end(_ outcome: PromoOutcome, openPaywall: Bool = false) {
         guard !finished else { return }
         finished = true
