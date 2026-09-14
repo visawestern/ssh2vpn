@@ -226,7 +226,10 @@ struct AddServerChooserView: View {
                     .foregroundStyle(Color.sec50)
             }
             .buttonStyle(.plain)
-            .accessibilityHint(Text("opens the paste parser"))
+            // Reuses the visible label: an accessibility hint must speak
+            // the user's language, and this button's whole meaning is the
+            // paste-import entry point.
+            .accessibilityHint(Text(model.copy.text(.vpsHaveCredentials)))
 
             Text(model.copy.text(.vpsPartnersFooter))
                 .font(.openSans(11))

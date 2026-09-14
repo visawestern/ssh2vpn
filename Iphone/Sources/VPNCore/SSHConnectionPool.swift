@@ -9,9 +9,12 @@ public struct SSHPoolPolicy: Sendable {
     public var maxConnections: Int
     /// Soft channel cap per connection. When EVERY pooled connection sits at
     /// or above it, the pool grows (up to maxConnections).
+    /// Default 9 = sshd MaxSessions(10) minus 1 slot always reserved for the
+    /// mandatory per-connection keepalive ping, so live flows can never push
+    /// the server into tearing the whole SSH connection down.
     public var channelsPerConnection: Int
 
-    public init(maxConnections: Int = 4, channelsPerConnection: Int = 4) {
+    public init(maxConnections: Int = 4, channelsPerConnection: Int = 9) {
         self.maxConnections = max(1, maxConnections)
         self.channelsPerConnection = max(1, channelsPerConnection)
     }
@@ -214,8 +217,9 @@ public final class SSHConnectionPool: @unchecked Sendable {
         return entries.map(\.inFlight)
     }
 
-    /// Keeps every pooled connection visibly active for NAT/sshd idle
-    /// timers: opens one throwaway direct-tcpip channel per connection and
+    /// MANDATORY keepalive: keeps every pooled connection visibly active for
+    /// NAT/sshd idle timers. Opens one throwaway direct-tcpip channel per
+    /// connection (every pooled SSH stream gets its own ping, no exceptions) and
     /// closes it as soon as it is established (an OPEN + immediate CHANNEL_CLOSE
     /// round trip). Cheap (one SSH round trip), uses only public NIOSSH
     /// APIs, and runs on each link's own event loop.

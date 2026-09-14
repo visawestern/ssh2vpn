@@ -421,7 +421,7 @@ struct ConnectView: View {
                             Image(systemName: "power")
                                 .font(.system(size: 36, weight: .regular))
                                 .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
-                            Text("Connecting")
+                            Text(model.copy.text(.connecting))
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
                         }
@@ -1347,7 +1347,9 @@ struct SettingsViewNew: View {
                                 .font(.openSans(15))
                                 .foregroundStyle(Color.octGray100)
                             Spacer()
-                            Text("1.0.0")
+                            // Read live from the bundle so the row can never
+                            // go stale after a version bump.
+                            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
                                 .font(.openSans(15))
                                 .foregroundStyle(Color.octGray60)
                         }
