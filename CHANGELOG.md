@@ -1,5 +1,24 @@
 # SSH2VPN — Changelog
 
+## 1.0.2 (build 3)
+
+Connect-storm circuit breaker (the 1.0.1 reconnect loop could pile
+concurrent SSH handshakes onto the server until every attempt died).
+
+- **Circuit breaker (NEW, as requested).** After 10 consecutive failed
+  attempts the app disables connect-on-demand at the NE level (saved, so iOS
+  stops relaunching a dead tunnel) and parks the app-side redial — while
+  `killSwitch` stays ON in settings. Fatal failures count too (a doomed
+  password must not hammer either). A manual Connect or any success re-arms.
+  (`ConnectionBreaker`, BREAKER log tag)
+- **No-duplicate-start guard.** A start is skipped when the live manager is
+  already connecting/connected/reasserting — stacking another startTunnel
+  murders the in-flight SSH handshake, which fed the storm.
+- **Quota-refusal visibility.** The extension's quota gate now persists
+  `quotaExhausted` to the shared error record (was: silent death with
+  extError=none and blind retries).
+- BOOT log line reads the version from the bundle (was hardcoded v1.0.0).
+
 ## 1.0.1 (build 2)
 
 Connection speed + DNS latency, no behavior changes for the user.

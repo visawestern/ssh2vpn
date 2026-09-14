@@ -162,6 +162,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         if !ledger.allowsConnection(now: Date()) {
             let elapsed = ledger.remaining(now: Date())
             lastRuntimeError = "quotaExhausted"
+            // Persist: without this the app dump shows extError=none and the
+            // retry loop hammers a tunnel that can never start.
+            TunnelLastError.write("quotaExhausted")
             elog(.error, "QUOTA", "start refused by kernel: budget exhausted (unlimited=\(ledger.isUnlimited), remaining=\(Int(elapsed))s)")
             let err = NSError(domain: NEVPNErrorDomain, code: 8, userInfo: [NSLocalizedDescriptionKey: "quotaExhausted"])
             completeStart(err, completionHandler: completionHandler)

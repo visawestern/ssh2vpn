@@ -162,6 +162,14 @@ final class AppModel: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: serverDedupeKey) }
     }
 
+    /// Bundle version for logs/dumps — read live so it can never go stale
+    /// after a version bump (a hardcoded string once misled a diagnosis).
+    static var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (\(b))"
+    }
+
     /// Backward-compatible single-profile view derived from the selected server.
     /// Existing UI code reads `profile`; this keeps it working while the data
     /// of record lives in the extension.
@@ -221,6 +229,10 @@ final class AppModel: ObservableObject {
     /// a genuine death and leaving an adopted tunnel stuck "connected".
     private var adoptedLiveTunnel = false
     private var killSwitchAttempts = 0
+    /// Connect-storm circuit breaker: trips after 10 consecutive failed
+    /// attempts (see tripCircuitBreaker). Fresh user intent and any success
+    /// re-arm it; a kill-switch redial must NOT reset it.
+    private var breaker = ConnectionBreaker()
 
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
@@ -416,6 +428,7 @@ final class AppModel: ObservableObject {
         if presentation == .connected {
             _ = automation.markConnected()
             killSwitchAttempts = 0
+            breaker.reset()
             attemptStartedAt = nil
             stallRestartArmed = false
             lastStallRead = nil
@@ -480,7 +493,7 @@ final class AppModel: ObservableObject {
                 self?.handleVPNStatusChange(connection)
             }
         }
-        ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v1.0.0 Cyber Terminal Logger Initialized")
+        ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v\(Self.appVersion) Cyber Terminal Logger Initialized")
         // Re-apply the idle-lock whenever the app enters the foreground so the
         // screen stays on for the whole time the user is inside the app.
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -560,6 +573,7 @@ final class AppModel: ObservableObject {
             self.connection = .connected
             userIntentConnected = true
             killSwitchAttempts = 0
+            breaker.reset()
             startStatsPolling()
             attemptStartedAt = nil
             stallRestartArmed = false
@@ -753,8 +767,22 @@ final class AppModel: ObservableObject {
             }
             guard let selected = self.selectedServer else { return }
             ConsoleLogStore.shared.log(level: .info, tag: "KILLSWITCH", message: "auto-reconnecting to \(selected.host)...")
-            self.connect()
+            self.connect(manual: false)
         }
+    }
+
+    /// The storm stop: 10 consecutive failed attempts. Disables
+    /// connect-on-demand at the NE level (saved to preferences, so iOS stops
+    /// relaunching a dead tunnel on every network blip) and parks the
+    /// app-side redial via userIntentConnected=false. settings.killSwitch is
+    /// DELIBERATELY left ON — the user's kill-switch posture doesn't change,
+    /// only the auto-dial storm stops. A manual connect() re-arms everything
+    /// (breaker reset + on-demand re-applied per settings).
+    private func tripCircuitBreaker() {
+        userIntentConnected = false
+        vpn.clearOnDemandRules()
+        ConsoleLogStore.shared.log(level: .error, tag: "BREAKER",
+            message: "CIRCUIT BREAKER: \(breaker.consecutiveFailures) consecutive failures — connect-on-demand DISABLED (iOS will no longer relaunch the tunnel); kill switch stays ON in settings; tap Connect to retry manually")
     }
 
     private func scheduleZombieTunnelCheck() {
@@ -1077,11 +1105,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func connect() {
+    func connect(manual: Bool = true) {
         // Kill-switch bookkeeping: a manual connect is user intent; the
         // redial after an unexpected drop only fires while this stays true.
         userIntentConnected = true
         killSwitchAttempts = 0
+        // Fresh USER intent re-arms the circuit breaker. A kill-switch
+        // redial passes manual:false — the storm it belongs to is exactly
+        // what the breaker is counting, so it must not reset the count.
+        if manual { breaker.reset() }
         // A fresh manual attempt drives its own lifecycle via real status
         // events (didInvokeStart) — it is no longer the adopted tunnel.
         adoptedLiveTunnel = false
@@ -1203,18 +1235,31 @@ final class AppModel: ObservableObject {
                 return
             }
             let msg = "tunnel disconnected \(elapsed)s after start (extension phase=\(phase), extError=\(extErr ?? "none"))"
-            switch self.automation.reportFailure(msg) {
+            // Every failed attempt feeds the circuit breaker (transient AND
+            // fatal — a doomed password must not hammer either). The breaker
+            // returns true exactly once, on the trip.
+            let failure = self.automation.reportFailure(msg)
+            let breakerTripped = self.breaker.recordFailure()
+            switch failure {
             case .transientFailure(let attempt, _):
                 ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "Early death (attempt \(attempt))/\(self.automation.maxRetries): \(msg). Retrying in 2s via saved config...")
                 try? await Task.sleep(for: .seconds(2))
                 guard self.connection == .connecting else { return }
+                if self.breaker.tripped {
+                    ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "retry parked — circuit breaker tripped (on-demand off, kill switch still on)")
+                    return
+                }
                 self.attemptStartedAt = Date()
                 self.performConnectionAttempt()
             case .gaveUpAfterRetries(let m):
                 self.attemptStartedAt = nil
                 self.stopPhasePolling()
-                self.connection = .failed(m)
-                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(m)")
+                if breakerTripped { self.tripCircuitBreaker() }
+                let final = breakerTripped
+                    ? "circuit breaker: connect-on-demand disabled after 10 consecutive failures (kill switch still ON) — tap Connect to retry"
+                    : m
+                self.connection = .failed(final)
+                ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(m) (storm \(self.breaker.consecutiveFailures)/10)")
                 self.fetchTunnelDiagnostics()
             case .fatalFailure(let m):
                 self.attemptStartedAt = nil
@@ -1270,6 +1315,17 @@ final class AppModel: ObservableObject {
 
     private func performConnectionAttempt() {
         guard !automation.isConnected else { return }
+        // Duplicate-start guard: iOS on-demand or a racing redial may already
+        // have a start in flight — our model can lag the real NE state.
+        // Stacking another startTunnel on top murders the in-flight SSH
+        // handshake, and the retry loop then murders its own replacement
+        // forever (connect storm). The live manager status is the truth.
+        if let st = self.vpn.liveStatus(),
+           st == .connecting || st == .connected || st == .reasserting {
+            ConsoleLogStore.shared.log(level: .warning, tag: "RETRY",
+                message: "start already \(String(describing: st)) system-side — skipping duplicate startTunnel (would murder the in-flight handshake)")
+            return
+        }
         var effectiveProfile = profile
         // Only VALID custom DNS entries reach the tunnel: a typo'd upstream
         // silently blackholes every lookup (the relay forwards raw IPs, no
@@ -1296,7 +1352,9 @@ final class AppModel: ObservableObject {
             guard let self = self else { return }
             if let error {
                 let message = error.localizedDescription
-                switch self.automation.reportFailure(error) {
+                let failure = self.automation.reportFailure(error)
+                let breakerTripped = self.breaker.recordFailure()
+                switch failure {
                 case .transientFailure(let attempt, _):
                     ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "Transient failure (attempt \(attempt))/\(self.automation.maxRetries): \(message). Retrying in 2s...")
                     Task { @MainActor in
@@ -1308,11 +1366,19 @@ final class AppModel: ObservableObject {
                             ConsoleLogStore.shared.log(level: .info, tag: "RETRY", message: "retry dropped — connection no longer in progress (cancelled?)")
                             return
                         }
+                        if self.breaker.tripped {
+                            ConsoleLogStore.shared.log(level: .warning, tag: "RETRY", message: "retry parked — circuit breaker tripped (on-demand off, kill switch still on)")
+                            return
+                        }
                         self.performConnectionAttempt()
                     }
                 case .gaveUpAfterRetries(let msg):
-                    self.connection = .failed(msg)
-                    ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(msg)")
+                    if breakerTripped { self.tripCircuitBreaker() }
+                    let final = breakerTripped
+                        ? "circuit breaker: connect-on-demand disabled after 10 consecutive failures (kill switch still ON) — tap Connect to retry"
+                        : msg
+                    self.connection = .failed(final)
+                    ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Gave up after \(self.automation.maxRetries) attempts: \(msg) (storm \(self.breaker.consecutiveFailures)/10)")
                 case .fatalFailure(let msg):
                     self.connection = .failed(msg)
                     ConsoleLogStore.shared.log(level: .error, tag: "FAIL", message: "Fatal config error (no retry): \(msg)")
@@ -1344,6 +1410,7 @@ final class AppModel: ObservableObject {
         userIntentConnected = false
         adoptedLiveTunnel = false
         killSwitchAttempts = 0
+        breaker.reset()
         connection = .disconnected
         attemptStartedAt = nil
         stallRestartArmed = false
@@ -2105,6 +2172,23 @@ private final class VPNController {
             ConsoleLogStore.shared.log(level: .info, tag: "VPN", message: "on-demand rules cleared by manual disconnect")
         }
         manager?.connection.stopVPNTunnel()
+    }
+
+    /// Live NE status of our tunnel (nil before the manager resolves).
+    /// Lets callers tell a real in-flight start from a stale model.
+    func liveStatus() -> NEVPNStatus? {
+        guard let manager else { return nil }
+        return manager.connection.status
+    }
+
+    /// Clears on-demand rules + disables on-demand on the live manager,
+    /// saved to preferences (circuit breaker). Rules are re-applied on the
+    /// next connect if the setting is still enabled.
+    func clearOnDemandRules() {
+        guard let manager, manager.isOnDemandEnabled || !(manager.onDemandRules ?? []).isEmpty else { return }
+        manager.onDemandRules = []
+        manager.isOnDemandEnabled = false
+        manager.saveToPreferences { _ in }
     }
 
     /// True when this connection object belongs to our manager. Events from
