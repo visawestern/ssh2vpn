@@ -1,5 +1,18 @@
 # SSH2VPN — Changelog
 
+## 1.0.3 (build 4)
+
+Crash fix: the extension died in `ssh-connect` on every start.
+
+- **Root cause (device crash log).** `extractSSHHandler` read the NIO
+  pipeline via `syncOperations` from the start-sequence queue — off the
+  channel's event loop. Release builds silently tolerate it; DEBUG builds
+  trap (`EventLoop.preconditionInEventLoop` → SIGTRAP), so the locally
+  installed 1.0.1/1.0.2 builds could never connect. Fixed by hopping to the
+  event loop first (`.wait()` off-loop; direct path preserved on-loop).
+- Installed builds now match store behavior; the latent trap is gone in
+  every configuration.
+
 ## 1.0.2 (build 3)
 
 Connect-storm circuit breaker (the 1.0.1 reconnect loop could pile

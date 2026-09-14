@@ -18,9 +18,26 @@ private func elog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
 /// is pinned to its channel's event loop), which trips NIO's Sendable
 /// generic on the async `handler(type:)` API. The official NIOSSH test
 /// pattern is the sync pipeline accessor — same lookup, no Sendable gate.
-/// Safe here: the start sequence is strictly sequential per channel.
+/// CONFINEMENT: syncOperations traps (DEBUG) / corrupts (release) when
+/// called off the event loop — runStartSequence runs on a global queue, so
+/// hop first. .wait() is safe here: this site is never on the loop itself
+/// (guarded by inEventLoop for the flatMap callers that are).
 private func extractSSHHandler(_ channel: Channel) throws -> NIOSSHHandler {
-    try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+    if channel.eventLoop.inEventLoop {
+        return try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+    }
+    return try channel.eventLoop.submit { () -> HandlerBox in
+        let handler = try channel.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
+        return HandlerBox(handler)
+    }.wait().handler
+}
+
+/// Carries the loop-pinned handler across the submit/.wait() boundary.
+/// Sound: .wait() blocks until the loop finished producing it, and from then
+/// on the pool serializes every touch (see SSHConnectionPool.Link).
+private final class HandlerBox: @unchecked Sendable {
+    let handler: NIOSSHHandler
+    init(_ handler: NIOSSHHandler) { self.handler = handler }
 }
 
 /// Dials one extra pooled SSH connection and hands a Link to the pool's
