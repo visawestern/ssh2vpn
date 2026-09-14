@@ -294,17 +294,30 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
             // Parallel SSH pool: starts with the one already-authenticated
             // connection, grows on demand (all channels saturated) up to the
-            // policy max, and logs every step under the POOL tag.
+            // policy max, and logs every step under the POOL tag. The policy
+            // value is shared with the warm pre-opener (below) so its slack
+            // math always matches the pool's real caps.
+            let relayPolicy = SSHPoolPolicy()
             let connector: SSHConnectionPool.Connector = { @Sendable (completion: @escaping (Result<SSHConnectionPool.Link, Error>) -> Void) in
                 dialPooledLink(factory: factory, credentials: credentials, completion: completion)
             }
             let pool = SSHConnectionPool(initial: SSHConnectionPool.Link(channel: sshChannel, handler: sshHandler),
-                                         connector: connector)
+                                          policy: relayPolicy,
+                                          connector: connector)
             elog(.info, "POOL", "ssh pool ready: 1 connection (grows on demand, max 4)")
+            // Speculative virgin pre-warm for hot destinations (WarmChannelPool):
+            // repeat/parallel SYNs to a recently-busy host skip the cold
+            // channel open. Gated on REAL pool slack below; DNS queries keep
+            // bypassing it via pool.openTo. The policy value is shared with
+            // the pool so the slack math always matches the real caps.
+            let warm = WarmChannelPool(underlying: pool, slack: { [pool] in
+                pool.snapshotInFlight().reduce(0) { $0 + max(0, relayPolicy.channelsPerConnection - $1) }
+            })
 
             elog(.info, "TUNNEL", "config loaded: dns=\(configuration.dnsServers) rules=\(configuration.dnsRules.count) (blocklist from app)")
             let relay = RelayTransport(factory: factory,
                                        pool: pool,
+                                       channelFactory: warm,
                                        dnsServers: configuration.dnsServers,
                                        dnsRules: configuration.dnsRules,
                                        receive: { [weak self] packet in
@@ -1044,6 +1057,9 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// Open per-query upstream DNS channels (bounded; oldest closed past cap).
     private var dnsInFlight: [AnyObject] = []
     private let maxDNSInFlight = 32
+    /// A cache hit with less than this much TTL left triggers a background
+    /// upstream re-query (early-refresh) so the next lookup never misses.
+    private static let dnsEarlyRefreshThreshold: TimeInterval = 15
     private var sweepTimer: DispatchSourceTimer?
     /// Local hosts/uBlock-style blocklist — answered with REFUSED before any
     /// upstream query is sent. All access on relayQueue.
@@ -1052,6 +1068,11 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// tunnel. All access on relayQueue.
     private var dnsCache = DNSCache()
     private var dnsCacheHits = 0
+    /// Background early-refreshes fired (cache hits close to expiry).
+    private var dnsRefreshes = 0
+    /// Last warm-pool counters written to the 30s journal (delta logging).
+    private var warmLoggedSpawns = 0
+    private var warmLoggedHits = 0
     private var dnsBlockedCount = 0
     /// Total UDP packets that reached handleDNSPacket (port-53 gate is below).
     private var rawUDPSeen = 0
@@ -1072,6 +1093,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
 
     init(factory: SSHTransportFactory,
          pool: SSHConnectionPool,
+         channelFactory: RelayChannelFactory? = nil,
          dnsServers: [String] = [],
          dnsRules: [DNSBlocklistEntry] = [],
          receive: @escaping (Data) -> Void,
@@ -1089,7 +1111,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             elog(.success, "DNSFILTER", "local rules active: \(localFilter.exactBlocks.count + localFilter.subtreeBlocks.count) block(s), \(localFilter.exactOverrides.count + localFilter.subtreeOverrides.count) override(s) — answered locally before any upstream query")
         }
 
-        self.stateMachine = TCPRelayStateMachine(factory: pool, isnGenerator: RandomISN(), idleTimeout: 120)
+        // TCP flows open through the channel factory — the warm pre-opener
+        // when wired (nil in unit tests, where the pool itself is the factory).
+        // DNS queries bypass it and use pool.openTo directly (below).
+        self.stateMachine = TCPRelayStateMachine(factory: channelFactory ?? pool, isnGenerator: RandomISN(), idleTimeout: 120)
         // Server-to-phone splice: channel callbacks arrive on NIO threads and
         // hop onto the relay queue, where they mutate the same state machine
         // the utun send path uses. Replies go straight back into utun.
@@ -1231,11 +1256,21 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                 let spread = loads.enumerated().map { "ssh#\($0.offset + 1)=\($0.element)" }.joined(separator: " ")
                 elog(.info, "POOL", "load [\(spread)]")
             }
-            // Local DNS journal: blocks + cache hits over the last 30s.
-            if self.dnsBlockedCount > 0 || self.dnsCacheHits > 0 {
-                elog(.info, "DNSFILTER", "per/30s blocked=\(self.dnsBlockedCount) cacheHits=\(self.dnsCacheHits)")
+            // Local DNS journal: blocks + cache hits/refreshes over the last 30s.
+            if self.dnsBlockedCount > 0 || self.dnsCacheHits > 0 || self.dnsRefreshes > 0 {
+                elog(.info, "DNSFILTER", "per/30s blocked=\(self.dnsBlockedCount) cacheHits=\(self.dnsCacheHits) refresh=\(self.dnsRefreshes)")
                 self.dnsBlockedCount = 0
                 self.dnsCacheHits = 0
+                self.dnsRefreshes = 0
+            }
+            // Warm pre-opener journal: log only when the counters moved.
+            if let warm = self.stateMachine.factory as? WarmChannelPool {
+                let ws = warm.statsSnapshot()
+                if ws.spawns != self.warmLoggedSpawns || ws.hits != self.warmLoggedHits {
+                    elog(.info, "WARM", "spawns=\(ws.spawns) hits=\(ws.hits) expired=\(ws.expired) dirty=\(ws.dirtyDrops) dead=\(ws.deadDrops) standby=\(ws.standby)")
+                    self.warmLoggedSpawns = ws.spawns
+                    self.warmLoggedHits = ws.hits
+                }
             }
         }
         timer.resume()
@@ -1431,20 +1466,44 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                 repliesWritten += 1
                 receiveCallback(Data(pkt))
             }
+            // Early-refresh: served from cache, but the entry is about to
+            // expire — re-query upstream in the background so the NEXT
+            // lookup never pays a cold miss. Cache-only, never re-sent:
+            // the phone already has its reply for this ID.
+            if let left = dnsCache.remainingTTL(for: udp.payload), left < Self.dnsEarlyRefreshThreshold {
+                dnsRefreshes += 1
+                fetchUpstreamDNS(queryPayload: udp.payload, replyTo: nil, qname: qName)
+            }
             return
         }
 
+        fetchUpstreamDNS(queryPayload: udp.payload, replyTo: flow, qname: qName)
+    }
+
+    /// Upstream DNS query over its own throwaway direct-tcpip channel (one
+    /// per query — shared idle DNS channels historically die). When `replyTo`
+    /// is nil this is a background early-refresh: the answer is cached but
+    /// never sent to the phone (a second reply to an already-answered query
+    /// would look like an unsolicited packet to the resolver).
+    private func fetchUpstreamDNS(queryPayload: Data, replyTo: RelayFlow?, qname: String?) {
+        // The demux routes answers by ID back to a registered flow; for a
+        // refresh that flow is a sink — its replies are dropped after caching.
+        let route = replyTo ?? RelayFlow(srcAddr: [0, 0, 0, 0], srcPort: 0,
+                                         dstAddr: [0, 0, 0, 0], dstPort: 53, transport: .udp)
         var demux = DNSRelay(upstreamHost: dnsUpstream)
-        guard let toSend = demux.query(udp.payload, from: flow) else { return }
-        let s = flow.srcAddr.map(String.init).joined(separator: ".")
-        let qid = udp.payload.count >= 2 ? String(format: "0x%02x%02x", udp.payload[0], udp.payload[1]) : "?"
+        guard let toSend = demux.query(queryPayload, from: route) else { return }
+        let qid = queryPayload.count >= 2 ? String(format: "0x%02x%02x", queryPayload[0], queryPayload[1]) : "?"
         let upstreamHost = "\(dnsUpstream)"
         let upstreamPort = 53
-        elog(.info, "RELAY", "dns query \(s):\(flow.srcPort) id=\(qid) (\(udp.payload.count)B) -> \(upstreamHost):\(upstreamPort)")
+        if let replyTo {
+            let s = replyTo.srcAddr.map(String.init).joined(separator: ".")
+            elog(.info, "RELAY", "dns query \(s):\(replyTo.srcPort) id=\(qid) (\(queryPayload.count)B) -> \(upstreamHost):\(upstreamPort)")
+        } else {
+            elog(.info, "RELAY", "dns refresh \(qname ?? "?") id=\(qid) (\(queryPayload.count)B) -> \(upstreamHost):\(upstreamPort) (background, cache-only)")
+        }
         var channelRef: RelayChannel?
-        let queryPayload = udp.payload
         channelRef = pool.openTo(
-            flow: flow,
+            flow: route,
             targetHost: upstreamHost,
             targetPort: upstreamPort,
             onData: { [weak self] bytes in
@@ -1463,9 +1522,14 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
                         // lookups of this name resolve locally — "optimal
                         // time" for DNS on the happy path.
                         self.dnsCache.store(query: queryPayload, response: resp)
+                        guard replyTo != nil else {
+                            elog(.info, "RELAY", "dns refresh \(qname ?? "?") cached (\(resp.count)B, no reply — phone served from cache)")
+                            continue
+                        }
                         if let pkt = try? UDPReplyBuilder.reply(flow: f, payload: Array(resp)) {
                             self.repliesWritten += 1
                             self.receiveCallback(Data(pkt))
+                            let s = f.srcAddr.map(String.init).joined(separator: ".")
                             elog(.info, "RELAY", "dns answer -> \(s):\(f.srcPort) (\(resp.count)B)")
                         }
                     }

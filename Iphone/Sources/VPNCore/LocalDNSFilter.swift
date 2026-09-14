@@ -324,13 +324,18 @@ public struct DNSCache: Sendable {
     /// Hard cap we'll hold any entry regardless of the record TTL — a moved
     /// domain must not stay stale for an hour.
     public static let maxTTL: TimeInterval = 300
+    /// Negative answers (NXDOMAIN/NODATA) are capped much lower — a freshly
+    /// registered domain must become visible quickly, not after 5 minutes.
+    public static let maxNegativeTTL: UInt32 = 60
+    /// SERVFAIL is most likely transient (upstream blip) — retry soon.
+    public static let maxServfailTTL: UInt32 = 10
     /// Entries below this TTL are dropped instead of stored.
     public static let minStoreTTL: UInt32 = 5
 
     private var entries: [String: Entry] = [:]
     public let capacity: Int
 
-    public init(capacity: Int = 512) {
+    public init(capacity: Int = 2048) {
         self.capacity = max(16, capacity)
     }
 
@@ -352,44 +357,84 @@ public struct DNSCache: Sendable {
         return Self.rewriteID(in: hit.payload, to: query)
     }
 
-    /// Stores `responsePayload` under `query`'s key for min(record TTL,
-    /// maxTTL) seconds.
-    public mutating func store(query: Data, response responsePayload: Data) {
-        guard let key = Self.key(for: query) else { return }
-        guard let name = DNSWire.questionName(from: query), !name.isEmpty else { return }
-        let ttl = Self.effectiveTTL(of: responsePayload, questionName: name)
-        guard ttl >= Self.minStoreTTL else { return }
-        evictIfNeeded()
-        entries[key] = Entry(payload: responsePayload,
-                            expiresAt: Date().addingTimeInterval(TimeInterval(min(ttl, UInt32(Self.maxTTL)))))
+    /// Seconds left on this query's cached entry, if any. Drives
+    /// early-refresh: a hit close to expiry triggers a background re-query
+    /// so the NEXT lookup never pays a cold miss.
+    public func remainingTTL(for query: Data) -> TimeInterval? {
+        guard let key = Self.key(for: query),
+              let hit = entries[key], hit.remainingTTL > 0 else { return nil }
+        return hit.remainingTTL
     }
 
-    /// First A-record TTL found in the answer; 0 when none parse.
-    static func effectiveTTL(of response: Data, questionName: String) -> UInt32 {
-        guard response.count >= 12 else { return 0 }
-        let qdcount = UInt16(response[4]) << 8 | UInt16(response[5])
+    /// Stores `responsePayload` under `query`'s key: positive answers for
+    /// min(record TTL, maxTTL); NXDOMAIN/NODATA/SERVFAIL for the authority
+    /// SOA TTL capped at maxNegativeTTL/maxServfailTTL (previously negative
+    /// answers were never cached — every miss re-queried upstream).
+    public mutating func store(query: Data, response responsePayload: Data) {
+        guard let key = Self.key(for: query) else { return }
+        guard let hit = Self.cacheTTL(of: responsePayload) else { return }
+        guard hit.ttl >= Self.minStoreTTL else { return }
+        evictIfNeeded()
+        entries[key] = Entry(payload: responsePayload,
+                             expiresAt: Date().addingTimeInterval(TimeInterval(min(hit.ttl, UInt32(Self.maxTTL)))))
+    }
+
+    /// Cache TTL for a response, or nil when it must not be cached.
+    /// Positive answers use the first A/AAAA record TTL; negatives use the
+    /// authority-section SOA TTL (RFC 2308). AAAA was previously never
+    /// cached — half of every dual-stack lookup missed.
+    static func cacheTTL(of response: Data) -> (ttl: UInt32, negative: Bool)? {
+        guard response.count >= 12 else { return nil }
+        let rcode = response[3] & 0x0F
+        let qdcount = Int(UInt16(response[4]) << 8 | UInt16(response[5]))
+        let ancount = Int(UInt16(response[6]) << 8 | UInt16(response[7]))
+        let nscount = Int(UInt16(response[8]) << 8 | UInt16(response[9]))
         var i = 12
         for _ in 0..<qdcount {
-            guard i < response.count else { return 0 }
+            guard i < response.count else { return nil }
             while i < response.count, response[i] != 0 { i += Int(response[i]) + 1 }
             i += 5 // null label + QTYPE + QCLASS
         }
-        let ancount = UInt16(response[6]) << 8 | UInt16(response[7])
-        for _ in 0..<ancount {
-            guard i < response.count else { return 0 }
+        guard let ans = scanRecords(response, from: i, count: ancount) else { return nil }
+        if let ttl = ans.positive { return (ttl, false) }
+        guard let auth = scanRecords(response, from: ans.next, count: nscount) else { return nil }
+        // SOA may sit in either section (SOA queries answer it directly).
+        guard let soaTTL = auth.soa ?? ans.soa, soaTTL > 0 else { return nil }
+        switch rcode {
+        case 3:
+            return (min(soaTTL, maxNegativeTTL), true) // NXDOMAIN
+        case 2:
+            return (min(soaTTL, maxServfailTTL), true) // SERVFAIL
+        case 0 where ancount == 0:
+            return (min(soaTTL, maxNegativeTTL), true) // NODATA
+        default:
+            return nil
+        }
+    }
+
+    /// Walks `count` resource records; returns the first A(1)/AAAA(28) TTL,
+    /// the first SOA(6) TTL, and the offset past the section. Nil when the
+    /// bytes don't parse.
+    private static func scanRecords(_ response: Data, from offset: Int, count: Int) -> (positive: UInt32?, soa: UInt32?, next: Int)? {
+        var i = offset
+        var positive: UInt32?
+        var soa: UInt32?
+        for _ in 0..<count {
+            guard i < response.count else { return nil }
             if response[i] & 0xC0 == 0xC0 { i += 2 } else {
                 while i < response.count, response[i] != 0 { i += Int(response[i]) + 1 }
                 i += 1
             }
-            guard i + 10 <= response.count else { return 0 }
+            guard i + 10 <= response.count else { return nil }
             let type = UInt16(response[i]) << 8 | UInt16(response[i + 1])
-            let rdlength = Int(UInt16(response[i + 8]) << 8 | UInt16(response[i + 9]))
             let ttl = UInt32(response[i + 4]) << 24 | UInt32(response[i + 5]) << 16
                 | UInt32(response[i + 6]) << 8 | UInt32(response[i + 7])
+            let rdlength = Int(UInt16(response[i + 8]) << 8 | UInt16(response[i + 9]))
             i += 10 + rdlength
-            if type == 1 { return ttl }
+            if positive == nil && (type == 1 || type == 28) { positive = ttl }
+            if soa == nil && type == 6 { soa = ttl }
         }
-        return 0
+        return (positive, soa, i)
     }
 
     /// Copies a payload with the DNS id replaced by `query`'s id.

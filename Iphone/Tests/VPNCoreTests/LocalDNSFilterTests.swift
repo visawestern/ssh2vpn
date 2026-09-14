@@ -253,4 +253,137 @@ final class DNSCacheTests: XCTestCase {
         cache.store(query: a, response: answer(to: a, name: "example.com", ttl: 300, id: 1))
         XCTAssertNil(cache.answer(for: https))
     }
+
+    // MARK: - negative caching (v2)
+
+    private func dnsName(_ s: String, into d: inout Data) {
+        for label in s.split(separator: ".") {
+            let bytes = Array(label.utf8)
+            d.append(UInt8(bytes.count)); d.append(contentsOf: bytes)
+        }
+        d.append(0)
+    }
+
+    /// ANCOUNT=0 response with one SOA in authority (or none).
+    private func negativeResponse(queryID: UInt16, name: String, rcode: UInt8,
+                                  soaTTL: UInt32, withSOA: Bool = true) -> Data {
+        var d = Data()
+        d.append(UInt8(queryID >> 8)); d.append(UInt8(queryID & 0xFF))
+        d.append(0x81); d.append(0x80 | rcode)
+        // QDCOUNT=1, ANCOUNT=0, NSCOUNT=0/1, ARCOUNT=0
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x00,
+                              0x00, withSOA ? 0x01 : 0x00, 0x00, 0x00] as [UInt8])
+        dnsName(name, into: &d)
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x01] as [UInt8]) // QTYPE A, QCLASS IN
+        if withSOA {
+            dnsName(name, into: &d)
+            d.append(contentsOf: [0x00, 0x06, 0x00, 0x01] as [UInt8]) // TYPE SOA, CLASS IN
+            d.append(UInt8((soaTTL >> 24) & 0xFF)); d.append(UInt8((soaTTL >> 16) & 0xFF))
+            d.append(UInt8((soaTTL >> 8) & 0xFF)); d.append(UInt8(soaTTL & 0xFF))
+            var rdata = Data()
+            dnsName("ns1." + name, into: &rdata)
+            dnsName("hostmaster." + name, into: &rdata)
+            rdata.append(contentsOf: [0, 0, 0, 1, 0, 0, 0x0E, 0x10, 0, 0, 0x01, 0x2C,
+                                      0, 0, 0x0E, 0x10, 0, 0, 0x00, 0x3C] as [UInt8])
+            d.append(UInt8(rdata.count >> 8)); d.append(UInt8(rdata.count & 0xFF))
+            d.append(rdata)
+        }
+        return d
+    }
+
+    private func aaaaQuery(id: UInt16, name: String) -> Data {
+        var q = query(id: id, name: name)
+        q[q.count - 4] = 0x00; q[q.count - 3] = 0x1C // QTYPE AAAA
+        return q
+    }
+
+    private func aaaaAnswer(name: String, ttl: UInt32, id: UInt16) -> Data {
+        var d = Data()
+        d.append(UInt8(id >> 8)); d.append(UInt8(id & 0xFF))
+        d.append(0x81); d.append(0x80)
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00] as [UInt8])
+        dnsName(name, into: &d)
+        d.append(contentsOf: [0x00, 0x1C, 0x00, 0x01] as [UInt8]) // QTYPE AAAA, QCLASS IN
+        dnsName(name, into: &d)
+        d.append(contentsOf: [0x00, 0x1C, 0x00, 0x01] as [UInt8]) // TYPE AAAA, CLASS IN
+        d.append(UInt8((ttl >> 24) & 0xFF)); d.append(UInt8((ttl >> 16) & 0xFF))
+        d.append(UInt8((ttl >> 8) & 0xFF)); d.append(UInt8(ttl & 0xFF))
+        d.append(contentsOf: [0x00, 0x10] as [UInt8])
+        d.append(contentsOf: [UInt8](repeating: 0, count: 15) + [0x01] as [UInt8]) // ::1
+        return d
+    }
+
+    func testNXDOMAINCachedWithSOATTL() {
+        var cache = DNSCache()
+        let q1 = query(id: 0x1111, name: "missing.example")
+        let q2 = query(id: 0x2222, name: "missing.example")
+        cache.store(query: q1, response: negativeResponse(queryID: 0x1111, name: "missing.example",
+                                                          rcode: 3, soaTTL: 120))
+        let hit = cache.answer(for: q2)
+        XCTAssertNotNil(hit, "NXDOMAIN must be cached (was: every miss re-queried upstream)")
+        XCTAssertEqual(hit?.prefix(2), q2.prefix(2), "cached answer carries the LIVE query id")
+        let left = cache.remainingTTL(for: q2)
+        XCTAssertNotNil(left)
+        XCTAssertLessThanOrEqual(left!, 60, "negative TTL capped at 60s")
+        XCTAssertGreaterThan(left!, 50)
+    }
+
+    func testNXDOMAINHighSOACapped() {
+        var cache = DNSCache()
+        let q = query(id: 7, name: "missing.example")
+        cache.store(query: q, response: negativeResponse(queryID: 7, name: "missing.example",
+                                                         rcode: 3, soaTTL: 3600))
+        XCTAssertNotNil(cache.answer(for: q))
+        XCTAssertLessThanOrEqual(cache.remainingTTL(for: q)!, 60)
+    }
+
+    func testNODATACached() {
+        var cache = DNSCache()
+        let q = query(id: 8, name: "nodata.example")
+        cache.store(query: q, response: negativeResponse(queryID: 8, name: "nodata.example",
+                                                         rcode: 0, soaTTL: 45))
+        XCTAssertNotNil(cache.answer(for: q), "NODATA (rcode 0, no records) must be cached")
+    }
+
+    func testSERVFAILCappedAt10() {
+        var cache = DNSCache()
+        let q = query(id: 9, name: "flaky.example")
+        cache.store(query: q, response: negativeResponse(queryID: 9, name: "flaky.example",
+                                                         rcode: 2, soaTTL: 300))
+        XCTAssertNotNil(cache.answer(for: q))
+        XCTAssertLessThanOrEqual(cache.remainingTTL(for: q)!, 10, "SERVFAIL retries soon")
+    }
+
+    func testSERVFAILWithoutSOANotCached() {
+        var cache = DNSCache()
+        let q = query(id: 10, name: "flaky.example")
+        cache.store(query: q, response: negativeResponse(queryID: 10, name: "flaky.example",
+                                                         rcode: 2, soaTTL: 0, withSOA: false))
+        XCTAssertNil(cache.answer(for: q), "no SOA TTL source -> nothing to cache")
+    }
+
+    func testAAAACached() {
+        var cache = DNSCache()
+        let q1 = aaaaQuery(id: 0x1111, name: "example.com")
+        let q2 = aaaaQuery(id: 0x2222, name: "example.com")
+        cache.store(query: q1, response: aaaaAnswer(name: "example.com", ttl: 200, id: 0x1111))
+        let hit = cache.answer(for: q2)
+        XCTAssertNotNil(hit, "AAAA was never cached before v2 — half of dual-stack lookups missed")
+        XCTAssertEqual(hit?.prefix(2), q2.prefix(2))
+        XCTAssertEqual(hit?.suffix(2), Data([0x00, 0x01]), "address tail ::1 intact")
+        // ...and it must not leak into the A-type key.
+        XCTAssertNil(cache.answer(for: query(id: 3, name: "example.com")))
+    }
+
+    func testPositiveStillCappedAt300() {
+        var cache = DNSCache()
+        let q = query(id: 11, name: "example.com")
+        cache.store(query: q, response: answer(to: q, name: "example.com", ttl: 3600, id: 11))
+        XCTAssertNotNil(cache.answer(for: q))
+        XCTAssertLessThanOrEqual(cache.remainingTTL(for: q)!, 300)
+    }
+
+    func testDefaultCapacityIs2048() {
+        XCTAssertEqual(DNSCache().capacity, 2048)
+    }
 }
