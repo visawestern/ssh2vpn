@@ -17,6 +17,11 @@ public enum ConnectionErrorClassifier {
             "missing credentials",
             "некорректная конфигурация",
             "пустой хост",
+            // Extension stable codes (see stableStartError): retrying these
+            // can never succeed and hammers fail2ban — no auto-retry.
+            "authfailedexhausted",
+            "hostkeymismatch",
+            "forwardingrefused",
         ]
         return fatalMarkers.contains { lower.contains($0.lowercased()) }
     }

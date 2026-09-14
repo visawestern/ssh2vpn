@@ -1,5 +1,21 @@
 # SSH2VPN — Changelog
 
+## 1.0.4 (build 5)
+
+Anti-fail2ban: the app no longer hammers the server with doomed attempts.
+
+- **Auth/host-key failures are fatal (no auto-retry).** The extension maps
+  typed failures to stable codes (`authFailedExhausted` when the server
+  rejects all offered credentials, `hostKeyMismatch`, `forwardingRefused`
+  for the probe) and persists them; the app classifier treats these as
+  fatal — exactly 1 attempt per manual tap instead of 3×N. Raw
+  localizedDescriptions carry no case info, so the mapping is the whole
+  fix. Generic/vague auth strings stay transient (breaker-capped).
+- With the 1.0.2 breaker (10-attempt cap) this means fail2ban's default
+  `maxretry 5` can no longer be reached by the app alone.
+- Tests: +3 classifier cases (typed codes fatal, generic string still
+  transient). Full suite 621 pass.
+
 ## 1.0.3 (build 4)
 
 Crash fix: the extension died in `ssh-connect` on every start.

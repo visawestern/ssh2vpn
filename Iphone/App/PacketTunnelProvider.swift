@@ -40,6 +40,29 @@ private final class HandlerBox: @unchecked Sendable {
     init(_ handler: NIOSSHHandler) { self.handler = handler }
 }
 
+/// Maps typed start failures to stable strings the app classifier matches.
+/// Raw localizedDescription of Swift errors carries no case info ("The
+/// operation couldn't be completed..."), so without this every auth/host-key
+/// failure looks transient and gets retried — a doomed credential then feeds
+/// a fail2ban ban via the retry storm. The auth/host-key codes are FATAL
+/// app-side (no auto-retry); timeouts stay transient.
+private func stableStartError(_ error: Error) -> String {
+    if let e = error as? SSHTransportError {
+        switch e {
+        case .passwordAuthenticationUnavailable:
+            return "authFailedExhausted: server rejected all offered credentials (wrong password/key or method not allowed) — fix credentials, no auto-retry"
+        case .hostKeyMismatch:
+            return "hostKeyMismatch: server host key differs from pinned — verify the server or update the pinned key, no auto-retry"
+        case .hostKeyNotPinned, .invalidChannelType:
+            return error.localizedDescription
+        }
+    }
+    if let e = error as? SSHProbeError, case .refused(let h, let p, let detail) = e {
+        return "forwardingRefused (\(h):\(p)): \(detail) — check AllowTcpForwarding on server, no auto-retry"
+    }
+    return error.localizedDescription
+}
+
 /// Dials one extra pooled SSH connection and hands a Link to the pool's
 /// connector callback. Uses the sync handler accessor (see above) from the
 /// event-loop-threaded flatMap — the canonical NIOSSH pattern. The final
@@ -293,7 +316,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 case SSHProbeError.timeout(let h, let p, let s):
                     msg = "SSH forwarding probe timed out (\(h):\(p), \(s)s) — auth stuck or server silent"
                 case SSHProbeError.refused(let h, let p, let detail):
-                    msg = "SSH forwarding refused (\(h):\(p)): \(detail) — check password and AllowTcpForwarding on server"
+                    msg = "forwardingRefused (\(h):\(p)): \(detail) — check AllowTcpForwarding on server, no auto-retry"
                 default:
                     msg = "SSH forwarding probe failed: \(probeError.localizedDescription)"
                 }
@@ -451,13 +474,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 }
             }
         } catch {
-            elog(.error, "TUNNEL", "startTunnel THREW: \(error)")
+            // Stable code (see stableStartError): raw descriptions of typed
+            // errors carry no case info, and without the code every failure
+            // looks transient to the app classifier.
+            let stable = stableStartError(error)
+            elog(.error, "TUNNEL", "startTunnel THREW: \(stable)")
             tunnelPhase = "error"
-            lastRuntimeError = error.localizedDescription
+            lastRuntimeError = stable
             // Persist: the process may be torn down within milliseconds and
             // the message channel dies with it — without this the app sees
             // extError=none and retries blindly into a fail2ban lockout.
-            TunnelLastError.write(error.localizedDescription)
+            TunnelLastError.write(stable)
             completeStart(error, completionHandler: completionHandler)
         }
     }

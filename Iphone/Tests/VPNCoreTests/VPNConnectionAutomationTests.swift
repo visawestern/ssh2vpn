@@ -86,7 +86,29 @@ final class VPNConnectionAutomationTests: XCTestCase {
     }
 
     func testSSHAuthFailedIsNotFatal() {
+        // Generic/vague auth strings stay transient (could be a blip, and the
+        // 10-failure breaker still caps the storm). Only the extension's
+        // precise stable codes are fatal (see below).
         XCTAssertFalse(ConnectionErrorClassifier.isFatal("SSH authentication failed: bad password"))
+    }
+
+    func testTypedAuthExhaustionIsFatal() {
+        XCTAssertTrue(ConnectionErrorClassifier.isFatal("authFailedExhausted: server rejected all offered credentials (wrong password/key or method not allowed) — fix credentials, no auto-retry"))
+        var a = VPNConnectionAutomation(maxRetries: 3)
+        _ = a.beginConnect()
+        let result = a.reportFailure("authFailedExhausted: server rejected all offered credentials")
+        guard case .fatalFailure = result else {
+            return XCTFail("auth exhaustion must be fatal (no retry), got \(result)")
+        }
+        XCTAssertEqual(a.attempt, 1, "fatal error must NOT advance the attempt counter")
+    }
+
+    func testHostKeyMismatchIsFatal() {
+        XCTAssertTrue(ConnectionErrorClassifier.isFatal("hostKeyMismatch: server host key differs from pinned — verify the server or update the pinned key, no auto-retry"))
+    }
+
+    func testForwardingRefusedIsFatal() {
+        XCTAssertTrue(ConnectionErrorClassifier.isFatal("forwardingRefused (8.8.8.8:53): channel open rejected — check AllowTcpForwarding on server, no auto-retry"))
     }
 
     func testEnglishAndRussianFatalMarkers() {
