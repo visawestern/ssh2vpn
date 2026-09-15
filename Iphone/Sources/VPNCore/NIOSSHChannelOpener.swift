@@ -8,6 +8,39 @@ public enum SSHProbeError: Error, Sendable {
     case timeout(host: String, port: Int, seconds: Int)
     /// The server refused the open (e.g. AllowTcpForwarding off, bad auth).
     case refused(host: String, port: Int, detail: String)
+    /// Forwarding itself works (localhost opens) but no public target is
+    /// reachable: the server's egress is blocked, not its SSH config.
+    /// `tried` lists the public "host:port" targets that all failed.
+    case egressBlocked(tried: [String])
+}
+
+/// Ordered, deduped pre-flight probe targets. No single hardcoded IP is
+/// reachable from every network on earth (public DNS is filtered in some
+/// countries, offices and captive portals), so the probe races a chain of
+/// different-class targets instead of betting on one: the user's own DNS
+/// upstream first (the egress they actually need), then three independent
+/// public resolvers on :53, then :443 for whitelist-only-80/443 networks.
+public enum SSHProbeTargets {
+    public static let defaultPublicTargets: [(host: String, port: Int)] = [
+        ("8.8.8.8", 53), ("1.1.1.1", 53), ("9.9.9.9", 53), ("1.1.1.1", 443),
+    ]
+    /// Last-resort target with a different verdict: if this opens while every
+    /// public target failed, forwarding is fine and the egress is blocked.
+    public static let localhostFallback: (host: String, port: Int) = ("127.0.0.1", 22)
+    public static let perTargetTimeoutSeconds = 3
+
+    public static func ordered(userDNS: [String]) -> [(host: String, port: Int)] {
+        var out: [(host: String, port: Int)] = []
+        var seen = Set<String>()
+        func add(host: String, port: Int) {
+            let h = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !h.isEmpty, seen.insert("\(h):\(port)").inserted else { return }
+            out.append((host: h, port: port))
+        }
+        for dns in userDNS { add(host: dns, port: 53) }
+        for t in defaultPublicTargets { add(host: t.host, port: t.port) }
+        return out
+    }
 }
 
 /// Pre-flight probe: opens one throwaway direct-tcpip channel and closes it.

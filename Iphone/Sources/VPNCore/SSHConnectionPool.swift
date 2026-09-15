@@ -9,12 +9,16 @@ public struct SSHPoolPolicy: Sendable {
     public var maxConnections: Int
     /// Soft channel cap per connection. When EVERY pooled connection sits at
     /// or above it, the pool grows (up to maxConnections).
-    /// Default 9 = sshd MaxSessions(10) minus 1 slot always reserved for the
-    /// mandatory per-connection keepalive ping, so live flows can never push
-    /// the server into tearing the whole SSH connection down.
+    /// Default 9 = sshd MaxSessions(10) minus 1 slot of headroom for
+    /// server-side session uses (gateway exec for UDP, SFTP) — live flows
+    /// can never push the server into tearing the whole SSH connection down.
+    /// (The protocol-level keepalive burns no MaxSessions slot, unlike the
+    /// old channel-dance ping, but the headroom stays: 9 is conservative.)
     public var channelsPerConnection: Int
 
-    public init(maxConnections: Int = 4, channelsPerConnection: Int = 9) {
+    /// Default ceiling 8 (was 4): one live connection in idle, headroom up
+    /// to 8 under bursts — dynamic, never a fixed fan-out.
+    public init(maxConnections: Int = 8, channelsPerConnection: Int = 9) {
         self.maxConnections = max(1, maxConnections)
         self.channelsPerConnection = max(1, channelsPerConnection)
     }
@@ -32,11 +36,87 @@ public struct SSHPoolPolicy: Sendable {
     /// channels. Each connection is good for `channelsPerConnection` streams;
     /// a burst browser page (20-40 concurrent streams) immediately warrants
     /// 2-4 parallel connections, and growth can lag creation — so callers ask
-    /// for the desired count and open the difference right away (several
-    /// grows may fly in parallel).
+    /// for the desired count and the pacer throttles the actual dialing.
     public func desiredConnections(totalInFlight: Int) -> Int {
         let needed = (max(1, totalInFlight) + channelsPerConnection - 1) / channelsPerConnection
         return min(maxConnections, needed)
+    }
+}
+
+/// Dial throttler for pool growth: caps concurrent SSH handshakes and enforces
+/// a minimum gap between dials, so a burst can never storm the server
+/// (sshd MaxStartups starts dropping, fail2ban starts banning) while the pool
+/// is still allowed to scale. Pure value type, fully unit-testable; callers
+/// hold it under the pool lock.
+public struct SSHGrowPacer: Sendable {
+    private var inFlightDials = 0
+    private var lastDialAt: Date?
+    private let maxConcurrent: Int
+    private let minInterval: TimeInterval
+
+    /// Invalid inputs clamp to the safest usable values: at most one dial at a
+    /// time (never zero — growth must stay possible), zero interval (never
+    /// negative — back-to-back allowed).
+    public init(maxConcurrentDials: Int, minInterval: TimeInterval) {
+        self.maxConcurrent = max(1, maxConcurrentDials)
+        self.minInterval = max(0, minInterval)
+    }
+
+    /// Reserves a dial slot if allowed now. Caller must call `settle()`
+    /// exactly once (success or failure) to release the slot.
+    public mutating func acquire(at now: Date) -> Bool {
+        guard inFlightDials < maxConcurrent else { return false }
+        if let lastDialAt, now.timeIntervalSince(lastDialAt) < minInterval { return false }
+        inFlightDials += 1
+        lastDialAt = now
+        return true
+    }
+
+    /// Releases one dial slot. Over-settling is a no-op (never underflows).
+    public mutating func settle() {
+        inFlightDials = max(0, inFlightDials - 1)
+    }
+
+    /// Dials currently open (for the 30s journal).
+    public var inFlight: Int { inFlightDials }
+}
+
+/// Idle shrink: picks which pooled connections may close once they sit idle
+/// long enough, keeping a minimum baseline alive. Pure function over
+/// (inFlight, idleSince) snapshots — a burst must not sit on a permanent
+/// fan-out (it would both stand out on the wire and burn CPU/NAT width), but
+/// the single baseline connection must NEVER be evicted (the pool must hold
+/// one authenticated connection at all times).
+public enum SSHPoolShrink {
+    /// Returns indexes of entries eligible for eviction right now.
+    /// - inFlight[i]: live channel count on connection i.
+    /// - idleSince[i]: when connection i first reached zero channels (nil = never idle / busy).
+    /// Rules: only inFlight==0 with a non-nil idleSince older than idleTimeout
+    /// qualifies; evict stalest first; never drop below minConnections survivors;
+    /// invalid timeout (<=0) is a safe no-op; minConnections clamps to >= 1;
+    /// mismatched array lengths operate on the paired prefix (no crashes).
+    public static func evictionIndexes(inFlight: [Int],
+                                       idleSince: [Date?],
+                                       now: Date,
+                                       idleTimeout: TimeInterval,
+                                       minConnections: Int) -> [Int] {
+        guard idleTimeout > 0 else { return [] }
+        let keepMin = max(1, minConnections)
+        let count = min(inFlight.count, idleSince.count)
+        guard count > keepMin else { return [] }
+        // Candidates: zero channels, known idle timestamp, older than timeout.
+        var candidates: [(index: Int, idleSince: Date)] = []
+        for i in 0..<count {
+            guard inFlight[i] == 0, let since = idleSince[i], now.timeIntervalSince(since) >= idleTimeout else { continue }
+            candidates.append((index: i, idleSince: since))
+        }
+        // Stalest first, capped so survivors >= keepMin.
+        let evictable = min(count - keepMin, candidates.count)
+        return candidates
+            .sorted { $0.idleSince < $1.idleSince }
+            .prefix(evictable)
+            .map(\.index)
+            .sorted()
     }
 }
 
@@ -79,13 +159,22 @@ public final class SSHConnectionPool: @unchecked Sendable {
     private struct Entry {
         var link: Link
         var inFlight: Int
+        /// When this connection first reached zero channels. nil = busy or
+        /// never idle. Feeds the idle-shrink selection.
+        var idleSince: Date?
+        /// Bytes relayed in both directions since the last (re)keying. Feeds
+        /// SSHRekeyPolicy (OpenSSH `RekeyLimit 4G`). Wrapping add: at 2^64
+        /// the counter would take millennia to matter, but &+ is free.
+        var bytesSinceRekey: UInt64 = 0
+        /// When the session keys were last (re)negotiated. Feeds the 1h leg
+        /// of SSHRekeyPolicy.
+        var rekeyedAt: Date = Date()
     }
 
     private let lock = NSLock()
     private var entries: [Entry]
-    /// SSH connects currently opening (a burst may warrant several at once —
-    /// unlike a single grow-in-flight flag, a burst isn't serialized behind
-    /// the first connect's latency).
+    /// SSH connects currently opening (a burst may warrant several at once,
+    /// throttled by the pacer below).
     private var pendingGrows = 0
     private var nextIndex: Int
     private var closed = false
@@ -96,6 +185,10 @@ public final class SSHConnectionPool: @unchecked Sendable {
     private let policy: SSHPoolPolicy
     private let connector: Connector
     private let log: (ConsoleLogLevel, String, String) -> Void
+    /// Throttles growth dials (heal dials are NOT paced — they have their own
+    /// backoff). Guarded by `lock`.
+    private var pacer: SSHGrowPacer
+    private let now: () -> Date
 
     /// Exponential backoff delay (seconds) for heal retry `attempt` (1-based).
     /// Grows 1s, 2s, 4s ... clamped to a hard 3600s (1 hour) ceiling so a dead
@@ -106,12 +199,16 @@ public final class SSHConnectionPool: @unchecked Sendable {
 
     public init(initial: Link,
                 policy: SSHPoolPolicy = SSHPoolPolicy(),
+                pacer: SSHGrowPacer = SSHGrowPacer(maxConcurrentDials: 3, minInterval: 0.4),
                 connector: @escaping Connector,
+                now: @escaping () -> Date = Date.init,
                 log: @escaping (ConsoleLogLevel, String, String) -> Void = { ConsoleLogStore.shared.log(level: $0, tag: $1, message: $2) }) {
-        self.entries = [Entry(link: initial, inFlight: 0)]
+        self.entries = [Entry(link: initial, inFlight: 0, idleSince: Date())]
         self.nextIndex = 1
         self.policy = policy
+        self.pacer = pacer
         self.connector = connector
+        self.now = now
         self.log = log
         watch(link: initial)
     }
@@ -174,7 +271,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
                 }
                 self.lock.lock()
                 if !self.closed {
-                    self.entries.append(Entry(link: link, inFlight: 0))
+                    self.entries.append(Entry(link: link, inFlight: 0, idleSince: nil))
                     self.healAttempts = 0
                     let n = self.entries.count
                     self.lock.unlock()
@@ -217,29 +314,84 @@ public final class SSHConnectionPool: @unchecked Sendable {
         return entries.map(\.inFlight)
     }
 
-    /// MANDATORY keepalive: keeps every pooled connection visibly active for
-    /// NAT/sshd idle timers. Opens one throwaway direct-tcpip channel per
-    /// connection (every pooled SSH stream gets its own ping, no exceptions) and
-    /// closes it as soon as it is established (an OPEN + immediate CHANNEL_CLOSE
-    /// round trip). Cheap (one SSH round trip), uses only public NIOSSH
-    /// APIs, and runs on each link's own event loop.
+    /// Protocol-level keepalive: one `keepalive@openssh.com` global request
+    /// per pooled connection — the exact bytes `ssh -o ServerAliveInterval`
+    /// sends. Stock sshd answers SSH_MSG_REQUEST_SUCCESS; the round trip
+    /// keeps NAT/sshd idle timers fresh with NO channel open/close dance
+    /// (the old dance burned a MaxSessions slot per ping and its OPEN+CLOSE
+    /// pair is itself a beacon).
     ///
-    /// CRITICAL: the opened channel MUST be closed. The first version of
-    /// this keepalive left every ping channel open forever, so sshd's
-    /// MaxSessions (default 10) filled up within minutes and the server
-    /// tore the whole SSH connection down — the tunnel kept dying in the
-    /// background exactly at the moment the pool had idled for a while.
-    public func keepalivePing() {
+    /// - Parameter onResponse: invoked once per connection with true on
+    ///   REQUEST_SUCCESS, false on FAILURE/send error/closed channel.
+    ///   Called on that connection's NIO event loop — callers hop where
+    ///   they need. A nil-promise fire-and-forget is NOT used here: the
+    ///   caller feeds successes into SSHKeepalivePolicy for dead-peer
+    ///   detection.
+    public func protocolKeepalive(onResponse: @escaping @Sendable (Bool) -> Void) {
         lock.lock()
         let links = entries.map { $0.link }
         lock.unlock()
         for link in links {
-            let opener = NIOSSHChannelOpener(handler: link.handler, eventLoop: link.channel.eventLoop)
-            let channel = opener.open(targetHost: "127.0.0.1", targetPort: 22,
-                        originatorAddress: (try? SocketAddress(ipAddress: "127.0.0.1", port: 0)) ?? (try! SocketAddress(ipAddress: "0.0.0.0", port: 0)),
-                        onData: { _ in },
-                        onClosed: { })
-            channel?.close()
+            // MUST run on the event loop: sendGlobalRequest mutates the
+            // handler's pending queue without locking.
+            link.channel.eventLoop.execute {
+                guard link.channel.isActive else {
+                    onResponse(false)
+                    return
+                }
+                let promise = link.channel.eventLoop.makePromise(of: ByteBuffer?.self)
+                promise.futureResult.whenComplete { result in
+                    switch result {
+                    case .success:
+                        onResponse(true)
+                    case .failure(let error as NIOSSHError)
+                        where error.type == .globalRequestRefused:
+                        // The server ANSWERED (with refusal): stock sshd
+                        // replies REQUEST_FAILURE to keepalive@openssh.com,
+                        // and RFC 4254 §4 mandates FAILURE for unknown
+                        // requests. Either reply proves the peer is alive —
+                        // real OpenSSH clients treat any answer the same way
+                        // (it is silence, not refusal, that means death).
+                        onResponse(true)
+                    case .failure:
+                        onResponse(false)
+                    }
+                }
+                link.handler.sendGlobalRequest(
+                    name: SSHCrowdProfile.keepaliveRequestName,
+                    payload: link.channel.allocator.buffer(capacity: 0),
+                    wantReply: true,
+                    promise: promise)
+            }
+        }
+    }
+
+    /// Renegotiates session keys on connections due under `policy` (OpenSSH
+    /// `RekeyLimit 4G 1h` schedule). Safe mid-traffic: the state machine
+    /// queues channel data during the exchange. Failures only log — the
+    /// connection stays up on its old keys and retries next sweep.
+    public func rekeyIfNeeded(policy: SSHRekeyPolicy = SSHRekeyPolicy(), now: Date = Date()) {
+        lock.lock()
+        let due = entries.filter {
+            policy.shouldRekey(bytesSinceRekey: $0.bytesSinceRekey,
+                               elapsed: now.timeIntervalSince($0.rekeyedAt))
+        }.map { $0.link }
+        lock.unlock()
+        for link in due {
+            link.channel.eventLoop.execute { [weak self] in
+                // Guard FIRST: rekey() traps (precondition, uncatchable) when
+                // called pre-auth or mid-rekey, and pool entries exist from
+                // TCP-connect time — authentication finishes asynchronously.
+                // Same-turn check+call on the serial loop: nothing interleaves.
+                guard link.channel.isActive, link.handler.isReadyForRekey else { return }
+                do {
+                    try link.handler.rekey()
+                    self?.noteRekeyed(link: link)
+                    self?.log(.info, "POOL", "rekeyed ssh connection (4G/1h schedule) — session keys rotated")
+                } catch {
+                    self?.log(.warning, "POOL", "rekey failed (stays on old keys, retries next sweep): \(error.localizedDescription)")
+                }
+            }
         }
     }
 
@@ -282,20 +434,28 @@ public final class SSHConnectionPool: @unchecked Sendable {
         }
         let index = policy.plan(inFlight: entries.map(\.inFlight))
         entries[index].inFlight += 1
+        entries[index].idleSince = nil
         let entry = entries[index]
         let total = entries[index].inFlight
         // Growth: how many connections SHOULD exist for this load, minus
-        // those we already have or are already opening. A burst opens the
-        // whole deficit at once instead of one connection per RTT. Only the
-        // counter is reserved under the lock — the async connects are
-        // launched AFTER unlocking (a synchronous test connector must never
-        // run into a held lock).
+        // those we already have or are already opening. The pacer throttles
+        // HOW MANY dials actually launch right now (sshd MaxStartups/fail2ban
+        // must never see a burst); denied slots stay unaccounted (pendingGrows
+        // unchanged) so a later open can retry them under the lock.
         let totalInFlight = entries.reduce(0) { $0 + $1.inFlight }
         let deficit = policy.desiredConnections(totalInFlight: totalInFlight) - entries.count - pendingGrows
-        let toLaunch = max(0, deficit)
-        pendingGrows += toLaunch
+        let nowAt = now()
+        var toLaunch = max(0, deficit)
+        var launchedNow = 0
+        while launchedNow < toLaunch {
+            guard pacer.acquire(at: nowAt) else { break }
+            launchedNow += 1
+            pendingGrows += 1
+        }
         lock.unlock()
-        for _ in 0..<toLaunch { launchGrow() }
+        for _ in 0..<launchedNow {
+            launchGrow()
+        }
 
         let s = flow.srcAddr.map(String.init).joined(separator: ".")
         let d = flow.dstAddr.map(String.init).joined(separator: ".")
@@ -306,13 +466,27 @@ public final class SSHConnectionPool: @unchecked Sendable {
             ipAddress: flow.srcAddr.map(String.init).joined(separator: "."),
             port: Int(flow.srcPort)))
             ?? (try! SocketAddress(ipAddress: "0.0.0.0", port: 0))
-        return opener.open(targetHost: targetHost, targetPort: targetPort,
-                           originatorAddress: originator,
-                           onData: onData,
-                           onClosed: { [weak self] in
-                               self?.release(index: index)
-                               onClosed()
-                           }) ?? FailedClosedChannel()
+        // Byte accounting for the 4G leg of SSHRekeyPolicy (both directions).
+        // The entry INDEX is captured like release() does: shrinkIdle only
+        // ever removes higher indexes first, so a live channel's index is
+        // stable unless a SIBLING connection drops mid-flow (rare; worst
+        // case some bytes land on the wrong entry and a rekey fires early).
+        let countedOnData: (Data) -> Void = { [weak self] data in
+            self?.addBytes(UInt64(data.count), to: index)
+            onData(data)
+        }
+        guard let raw = opener.open(targetHost: targetHost, targetPort: targetPort,
+                                    originatorAddress: originator,
+                                    onData: countedOnData,
+                                    onClosed: { [weak self] in
+                                        self?.release(index: index)
+                                        onClosed()
+                                    }) else {
+            return FailedClosedChannel()
+        }
+        return ByteCountingRelayChannel(inner: raw) { [weak self] n in
+            self?.addBytes(n, to: index)
+        }
     }
 
     /// Closes every pooled connection (parent channels). Idempotent; late
@@ -337,8 +511,58 @@ public final class SSHConnectionPool: @unchecked Sendable {
         lock.lock()
         if entries.indices.contains(index), entries[index].inFlight > 0 {
             entries[index].inFlight -= 1
+            if entries[index].inFlight == 0, entries[index].idleSince == nil {
+                entries[index].idleSince = now()
+            }
         }
         lock.unlock()
+    }
+
+    /// Attributes relayed bytes to the entry that carried them (see openTo
+    /// for the index-stability argument). Hot path: one uncontended lock
+    /// hold per chunk (~20ns), never held across user callbacks.
+    private func addBytes(_ n: UInt64, to index: Int) {
+        guard n > 0 else { return }
+        lock.lock()
+        if entries.indices.contains(index) {
+            entries[index].bytesSinceRekey &+= n
+        }
+        lock.unlock()
+    }
+
+    /// Resets the rekey clock after a successful rotation, matched by parent
+    /// channel identity (indexes may have shifted while the rekey was in
+    /// flight — identity cannot).
+    private func noteRekeyed(link: Link) {
+        lock.lock()
+        if let i = entries.firstIndex(where: { $0.link.channel === link.channel }) {
+            entries[i].bytesSinceRekey = 0
+            entries[i].rekeyedAt = now()
+        }
+        lock.unlock()
+    }
+
+    /// Closes idle connections beyond the baseline. Idle = zero live channels
+    /// for at least `idleTimeout`; at least `minConnections` always survive.
+    /// A burst must not sit on a permanent fan-out (it stands out on the wire
+    /// and burns CPU/NAT width) — the pool must shrink back, but never to
+    /// zero authenticated connections.
+    public func shrinkIdle(idleTimeout: TimeInterval = 60, minConnections: Int = 2) {
+        lock.lock()
+        let nowAt = now()
+        let toEvict = SSHPoolShrink.evictionIndexes(
+            inFlight: entries.map(\.inFlight),
+            idleSince: entries.map(\.idleSince),
+            now: nowAt,
+            idleTimeout: idleTimeout,
+            minConnections: minConnections)
+        guard !closed, !toEvict.isEmpty else { lock.unlock(); return }
+        let taken = toEvict.reversed().map { entries.remove(at: $0) }
+        lock.unlock()
+        for entry in taken {
+            entry.link.channel.close(promise: nil)
+        }
+        log(.success, "POOL", "idle shrink: closed \(taken.count) idle ssh connection(s) — \(entries.count) left (cap \(policy.maxConnections))")
     }
 
     /// Establishes one more SSH connection. The slot (pendingGrows) was
@@ -354,6 +578,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
             guard let self else { return }
             self.lock.lock()
             self.pendingGrows -= 1
+            self.pacer.settle()
             self.lock.unlock()
             switch result {
             case .success(let link):
@@ -363,7 +588,7 @@ public final class SSHConnectionPool: @unchecked Sendable {
                     link.channel.close(promise: nil)
                     return
                 }
-                self.entries.append(Entry(link: link, inFlight: 0))
+                self.entries.append(Entry(link: link, inFlight: 0, idleSince: nil))
                 let n = self.entries.count
                 self.lock.unlock()
                 self.watch(link: link)
@@ -384,4 +609,26 @@ extension SSHConnectionPool: RelayChannelFactory {}
 private final class FailedClosedChannel: RelayChannel {
     func send(_ data: Data) {}
     func close() {}
+}
+
+/// Transparent byte counter for the 4G leg of SSHRekeyPolicy: every chunk
+/// sent through the wrapped channel is reported upstream. Identity,
+/// backpressure and close semantics are the inner channel's untouched.
+private final class ByteCountingRelayChannel: RelayChannel {
+    private let inner: RelayChannel
+    private let onBytes: (UInt64) -> Void
+
+    init(inner: RelayChannel, onBytes: @escaping (UInt64) -> Void) {
+        self.inner = inner
+        self.onBytes = onBytes
+    }
+
+    func send(_ data: Data) {
+        onBytes(UInt64(data.count))
+        inner.send(data)
+    }
+
+    func close() {
+        inner.close()
+    }
 }

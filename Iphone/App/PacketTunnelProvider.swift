@@ -60,6 +60,12 @@ private func stableStartError(_ error: Error) -> String {
     if let e = error as? SSHProbeError, case .refused(let h, let p, let detail) = e {
         return "forwardingRefused (\(h):\(p)): \(detail) — check AllowTcpForwarding on server, no auto-retry"
     }
+    // egressBlocked is environmental (office WiFi vs LTE can differ), so it
+    // stays transient like timeouts — but with a stable code, not a raw
+    // localizedDescription, so the app classifier can match it.
+    if let e = error as? SSHProbeError, case .egressBlocked(let tried) = e {
+        return "egressBlocked (no public egress via \(tried.joined(separator: ", "))) — server forwards but cannot reach the internet"
+    }
     return error.localizedDescription
 }
 
@@ -303,17 +309,38 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             // done AND the server forwards. Without it, later fire-and-forget
             // opens can hang forever on a stuck auth or AllowTcpForwarding=no,
             // leaving a blackholed tunnel with zero diagnostics.
+            //
+            // Chain (not a single hardcoded IP): the user's own DNS upstream
+            // first, then independent public targets of different classes.
+            // A network that filters foreign DNS must not condemn a healthy
+            // server — any single success passes. If every public target fails
+            // but localhost opens, the verdict is "egress blocked", not
+            // "forwarding broken" (different cause, different user message).
             var probeError: Error?
-            for target in [("8.8.8.8", 53), ("1.1.1.1", 53)] {
+            let probeTargets = SSHProbeTargets.ordered(userDNS: configuration.dnsServers)
+            for target in probeTargets {
                 do {
                     try SSHChannelProbe.probe(handler: sshHandler, eventLoop: sshChannel.eventLoop,
-                                              host: target.0, port: target.1, timeoutSeconds: 5)
-                    elog(.info, "TUNNEL", "forwarding probe OK via \(target.0):\(target.1)")
+                                              host: target.host, port: target.port,
+                                              timeoutSeconds: SSHProbeTargets.perTargetTimeoutSeconds)
+                    elog(.info, "TUNNEL", "forwarding probe OK via \(target.host):\(target.port)")
                     probeError = nil
                     break
                 } catch {
-                    elog(.warning, "TUNNEL", "forwarding probe via \(target.0):\(target.1) failed: \(error.localizedDescription)")
+                    elog(.warning, "TUNNEL", "forwarding probe via \(target.host):\(target.port) failed: \(error.localizedDescription)")
                     probeError = error
+                }
+            }
+            if probeError != nil {
+                let local = SSHProbeTargets.localhostFallback
+                do {
+                    try SSHChannelProbe.probe(handler: sshHandler, eventLoop: sshChannel.eventLoop,
+                                              host: local.host, port: local.port,
+                                              timeoutSeconds: SSHProbeTargets.perTargetTimeoutSeconds)
+                    elog(.warning, "TUNNEL", "forwarding works (localhost opens) but no public egress — marking egressBlocked")
+                    probeError = SSHProbeError.egressBlocked(tried: probeTargets.map { "\($0.host):\($0.port)" })
+                } catch {
+                    elog(.warning, "TUNNEL", "localhost probe also failed: \(error.localizedDescription) — keeping original probe error")
                 }
             }
             if let probeError {
@@ -323,6 +350,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                     msg = "SSH forwarding probe timed out (\(h):\(p), \(s)s) — auth stuck or server silent"
                 case SSHProbeError.refused(let h, let p, let detail):
                     msg = "forwardingRefused (\(h):\(p)): \(detail) — check AllowTcpForwarding on server, no auto-retry"
+                case SSHProbeError.egressBlocked(let tried):
+                    msg = "egressBlocked (forwarding OK, no route to internet via \(tried.joined(separator: ", "))) — server cannot reach the outside (egress firewall or upstream block)"
                 default:
                     msg = "SSH forwarding probe failed: \(probeError.localizedDescription)"
                 }
@@ -1102,6 +1131,10 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     /// sweep timer). NIO callbacks arrive on event loops, utun reads on the
     /// packet thread — without this the structs race.
     private let relayQueue = DispatchQueue(label: "com.ssh2vpn.relay")
+    /// Suppression-aware keepalive policy: user traffic in the last interval
+    /// makes the timed ping unnecessary (and NO ping looks human, unlike a
+    /// fixed beacon). Pure policy; the timer consults it (relayQueue-guarded).
+    private var keepalivePolicy = SSHKeepalivePolicy(interval: 60, maxUnanswered: 3)
     /// Parallel SSH connections to the server; every new flow/DNS query opens
     /// its direct-tcpip channel on the least-loaded one. The pool grows on
     /// demand (see SSHPoolPolicy) and logs every grow event (POOL tag).
@@ -1136,11 +1169,14 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     private var dnsBlockedCount = 0
     /// Total UDP packets that reached handleDNSPacket (port-53 gate is below).
     private var rawUDPSeen = 0
-    /// SSH/NAT keepalive: one throwaway direct-tcpip open every 15s. Idle
-    /// NAT mappings on flaky Wi-Fi kill the SSH TCP stream after ~45s
-    /// otherwise; a tiny SSH round trip keeps every pooled connection
-    /// visibly active without any private NIOSSH API.
+    /// SSH/NAT keepalive: one protocol-level `keepalive@openssh.com` global
+    /// request per pooled connection every 60s (suppressed while user
+    /// traffic flows). Same bytes as `ssh -o ServerAliveInterval` — no
+    /// channel open/close dance, no MaxSessions slot burned.
     private var keepaliveTimer: DispatchSourceTimer?
+    /// Edge-trigger for the dead-peer warning (logged once per outage, not
+    /// once per dead link per tick).
+    private var keepaliveDeadLogged = false
 
     /// pending packets received before SSH connected (bounded)
     private var pendingPackets: [Data] = []
@@ -1280,6 +1316,13 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
             if n > 0 {
                 elog(.info, "RELAY", "sweep expired \(n) idle flow(s)")
             }
+            // Shrink pool back: a burst must not sit on a permanent fan-out
+            // (it stands out on the wire and burns CPU/NAT width). Keeps at
+            // least 2 baseline SSH connections; never evicts busy ones.
+            self.pool.shrinkIdle(idleTimeout: 60)
+            // Rekey on OpenSSH's schedule (4G/1h): a session that never
+            // rotates keys is a long-lived-session fingerprint.
+            self.pool.rekeyIfNeeded(now: Date())
             // Stuck-SYN watch: SYN-ACK sent but phone never ACKed (or channel
             // open hung). Listed flows prove the SYN arrived AND we answered —
             // if the phone's retransmits never follow, iOS stopped feeding us.
@@ -1336,13 +1379,29 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         timer.resume()
         sweepTimer = timer
 
-        // SSH/NAT keepalive (see keepaliveTimer). Runs on the relay queue so
-        // it can never race pool state.
+        // SSH/NAT keepalive. Suppressed whenever user traffic flows through
+        // this runner queue — "no ping when you're already talking" is both
+        // cheaper on NAT and closer to a human silhouette than a fixed beacon.
+        // Protocol-level (keepalive@openssh.com), not a channel dance.
         let ka = DispatchSource.makeTimerSource(queue: relayQueue)
-        ka.schedule(deadline: .now() + 15, repeating: 15)
+        ka.schedule(deadline: .now() + 60, repeating: 60)
         ka.setEventHandler { [weak self] in
             guard let self, self.isStarted else { return }
-            self.pool.keepalivePing()
+            guard self.keepalivePolicy.shouldSend(at: Date()) else { return }
+            self.keepalivePolicy.noteSent(at: Date())
+            self.pool.protocolKeepalive { [weak self] ok in
+                guard let self else { return }
+                self.relayQueue.async { [weak self] in
+                    guard let self, self.isStarted else { return }
+                    if ok {
+                        self.keepalivePolicy.noteServerResponse(at: Date())
+                        self.keepaliveDeadLogged = false
+                    } else if self.keepalivePolicy.isDead(at: Date()), !self.keepaliveDeadLogged {
+                        self.keepaliveDeadLogged = true
+                        elog(.warning, "KEEPALIVE", "peer silent through 3 protocol pings — connection may be dead; pool heal owns recovery")
+                    }
+                }
+            }
         }
         ka.resume()
         keepaliveTimer = ka
@@ -1361,6 +1420,7 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
         // Hop onto the relay queue; the loop ignores completion anyway.
         relayQueue.async { [weak self] in
             guard let self else { return }
+            self.keepalivePolicy.noteUserTraffic(at: Date())
             self.handlePacket(packet, receive: self.receiveCallback)
         }
         completion(nil)

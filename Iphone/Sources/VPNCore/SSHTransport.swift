@@ -32,6 +32,12 @@ public final class SSHTransportFactory: @unchecked Sendable {
     private let group: MultiThreadedEventLoopGroup
     private let pinnedHostKey: NIOSSHPublicKey?
 
+    /// Channel "maximum packet size" we advertise on every direct-tcpip open.
+    /// OpenSSH uses 32768; NIOSSH defaults to 128 KiB. The smaller value blends
+    /// into the admin crowd (same CHANNEL_OPEN bytes as Termux/desktop ssh) and
+    /// keeps the advertised window at 64x = 2 MiB, also matching OpenSSH.
+    public static let channelMaximumPacketSize = 32768
+
     public init(pinnedOpenSSHHostKey: String? = nil, threadCount: Int = 1) throws {
         if let pinnedOpenSSHHostKey {
             self.pinnedHostKey = try NIOSSHPublicKey(openSSHPublicKey: pinnedOpenSSHHostKey)
@@ -56,8 +62,10 @@ public final class SSHTransportFactory: @unchecked Sendable {
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
+                    var config = SSHClientConfiguration(userAuthDelegate: auth, serverAuthDelegate: hostKey)
+                    config.maximumPacketSize = Self.channelMaximumPacketSize
                     let ssh = NIOSSHHandler(
-                        role: .client(.init(userAuthDelegate: auth, serverAuthDelegate: hostKey)),
+                        role: .client(config),
                         allocator: channel.allocator,
                         inboundChildChannelInitializer: nil
                     )
