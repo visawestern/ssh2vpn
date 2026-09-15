@@ -85,4 +85,58 @@ final class ServerListCoderTests: XCTestCase {
         XCTAssertEqual(servers[0].password, nil, "app must not retain leaked secrets")
         XCTAssertEqual(servers[0].privateKey, nil, "app must not retain leaked secrets")
     }
+
+    // MARK: - Label (optional server alias)
+
+    func testEncodeServerSetIncludesLabelWhenSet() {
+        let profile = ServerProfile(
+            id: "x", name: "1.2.3.4", host: "1.2.3.4", port: 22, username: "root",
+            hostKey: "", dnsServers: [], hasPassword: false, hasPrivateKey: false,
+            label: "My Hetzner"
+        )
+        let dict = ServerListCoder.encodeServerSet(profile)
+        XCTAssertEqual(dict["label"] as? String, "My Hetzner")
+    }
+
+    func testEncodeServerSetSendsEmptyLabelWhenNone() {
+        // Empty string (not omission) so the extension can clear a stale alias:
+        // the router merges on key presence.
+        let profile = ServerProfile(
+            id: "x", name: "1.2.3.4", host: "1.2.3.4", port: 22, username: "root",
+            hostKey: "", dnsServers: [], hasPassword: false, hasPrivateKey: false
+        )
+        let dict = ServerListCoder.encodeServerSet(profile)
+        XCTAssertEqual(dict["label"] as? String, "")
+    }
+
+    func testDecodeServerListParsesLabel() {
+        let data: [String: String] = [
+            "servers": "[{\"id\":\"1\",\"name\":\"A\",\"label\":\"My Hetzner\",\"host\":\"1.1.1.1\",\"port\":22,\"username\":\"root\",\"hostKey\":\"\",\"dnsServers\":[],\"hasPassword\":false,\"hasPrivateKey\":false}]"
+        ]
+        let (servers, _) = ServerListCoder.decodeServerList(data: data)
+        XCTAssertEqual(servers[0].displayLabel, "My Hetzner")
+        XCTAssertEqual(servers[0].displayAddress, "My Hetzner")
+        XCTAssertTrue(servers[0].hasCustomLabel)
+    }
+
+    func testDecodeServerListWithoutLabelFallsBackToHostPort() {
+        let data: [String: String] = [
+            "servers": "[{\"id\":\"1\",\"name\":\"A\",\"host\":\"1.1.1.1\",\"port\":2222,\"username\":\"root\",\"hostKey\":\"\",\"dnsServers\":[],\"hasPassword\":false,\"hasPrivateKey\":false}]"
+        ]
+        let (servers, _) = ServerListCoder.decodeServerList(data: data)
+        XCTAssertNil(servers[0].displayLabel)
+        XCTAssertFalse(servers[0].hasCustomLabel)
+        XCTAssertEqual(servers[0].displayAddress, "1.1.1.1:2222")
+    }
+
+    func testBlankLabelNormalizesToNil() {
+        let profile = ServerProfile(
+            id: "x", name: "h", host: "h", port: 22, username: "r",
+            hostKey: "", dnsServers: [], hasPassword: false, hasPrivateKey: false,
+            label: "   "
+        )
+        XCTAssertNil(profile.displayLabel)
+        XCTAssertFalse(profile.hasCustomLabel)
+        XCTAssertEqual(profile.displayAddress, "h:22")
+    }
 }

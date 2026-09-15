@@ -45,7 +45,9 @@ public enum SSHPrivateKeyImporter {
         guard let text = String(data: input, encoding: .utf8) else { throw ImportError.unsupportedFormat }
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalized.contains("BEGIN OPENSSH PRIVATE KEY") {
-            if let base64 = Data(base64Encoded: normalized), base64.count == 32 { return base64 }
+            if let base64 = Data(base64Encoded: normalized), base64.count == 32 {
+                return base64
+            }
             if let hex = decodeHex(normalized), hex.count == 32 { return hex }
             throw ImportError.unsupportedFormat
         }
@@ -55,19 +57,17 @@ public enum SSHPrivateKeyImporter {
         return try parseSeed(decoded)
     }
 
+    /// PEM body: strips the BEGIN/END guards and every whitespace char
+    /// (keys pasted from Files/Notes often carry \r\n — every variant must
+    /// decode, not just the exact ssh-keygen line layout).
     private static func pemBody(_ text: String) -> String? {
-        text
+        let body = text
             .replacingOccurrences(of: "-----BEGIN OPENSSH PRIVATE KEY-----", with: "")
             .replacingOccurrences(of: "-----END OPENSSH PRIVATE KEY-----", with: "")
             .components(separatedBy: .whitespacesAndNewlines)
             .joined()
-            .isEmpty ? nil : text
-            .replacingOccurrences(of: "-----BEGIN OPENSSH PRIVATE KEY-----", with: "")
-            .replacingOccurrences(of: "-----END OPENSSH PRIVATE KEY-----", with: "")
-            .components(separatedBy: .whitespacesAndNewlines)
-            .joined()
+        return body.isEmpty ? nil : body
     }
-
     private static func decodeHex(_ text: String) -> Data? {
         guard text.count == 64 else { return nil }
         return Data((0..<64).compactMap { offset in
@@ -76,6 +76,23 @@ public enum SSHPrivateKeyImporter {
             let end = text.index(start, offsetBy: 2)
             return UInt8(text[start..<end], radix: 16)
         })
+    }
+
+    /// Lightweight pre-flight check for the save-server form: validates the
+    /// pasted/imported key WITHOUT importing it. Catches the encrypted-key
+    /// and wrong-format cases at entry time instead of as a mystery tunnel
+    /// failure at connect time.
+    public static func validatePEM(_ text: String) -> ImportError? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+        do {
+            _ = try importEd25519(Data(trimmed.utf8))
+            return nil
+        } catch let e as ImportError {
+            return e
+        } catch {
+            return .malformedKey
+        }
     }
 
     private static func parseOpenSSHEd25519(_ data: Data) throws -> NIOSSHPrivateKey {
@@ -93,7 +110,11 @@ public enum SSHPrivateKeyImporter {
         _ = try reader.readBytes(count: Int(try reader.readUInt32())) // KDF options
         guard cipher == "none" else { throw ImportError.encryptedKeyUnsupported }
         guard try reader.readUInt32() == 1 else { throw ImportError.unsupportedFormat }
-        _ = try reader.readString() // public key blob
+        // The public key blob is BINARY (mpints + algorithm name framing), not
+        // UTF-8 text — reading it through readString() made every real
+        // unencrypted key fail as "malformedKey" (the bug that broke key
+        // auth entirely while passwords worked). It only needs skipping.
+        _ = try reader.readStringData() // public key blob
         let privateBlob = try reader.readStringData()
         var privateReader = BinaryReader(privateBlob)
         let firstCheck = try privateReader.readUInt32()
@@ -104,8 +125,12 @@ public enum SSHPrivateKeyImporter {
         guard try privateReader.readString() == "ssh-ed25519" else {
             throw ImportError.unsupportedAlgorithm
         }
-        _ = try privateReader.readStringData() // public key
+        // Public key inside the private section is binary too (seed||public).
+        _ = try privateReader.readStringData()
         let privateKey = try privateReader.readStringData()
+        // OpenSSH stores the 32-byte seed followed by the 32-byte public
+        // key as one mpint. Accept exactly that 64-byte layout (leading
+        // zero-stripped 63-byte mpints never occur for Ed25519 seeds).
         guard privateKey.count == 64 else { throw ImportError.malformedKey }
         return privateKey.prefix(32)
     }

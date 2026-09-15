@@ -47,7 +47,9 @@ public final class SSHTransportFactory: @unchecked Sendable {
 
     public func connect(_ credentials: SSHCredentials) -> EventLoopFuture<Channel> {
         let auth = UserAuthenticationDelegate(username: credentials.username, password: credentials.password, privateKey: credentials.privateKey)
-        let hostKey = PinnedHostKeyDelegate(expected: pinnedHostKey)
+        let hostKey = PinnedHostKeyDelegate(expected: pinnedHostKey, trust: { key in
+            try HostKeyTrust.verify(key: String(openSSHPublicKey: key), host: credentials.host, port: credentials.port)
+        })
         let bootstrap = ClientBootstrap(group: group)
             .connectTimeout(.seconds(10))
             .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_KEEPALIVE), value: 1)
@@ -129,14 +131,19 @@ final class UserAuthenticationDelegate: NIOSSHClientUserAuthenticationDelegate, 
 final class PinnedHostKeyDelegate: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
     private let expected: NIOSSHPublicKey?
 
-    init(expected: NIOSSHPublicKey?) { self.expected = expected }
+    private let trust: (@Sendable (NIOSSHPublicKey) throws -> Void)?
+    init(expected: NIOSSHPublicKey?, trust: (@Sendable (NIOSSHPublicKey) throws -> Void)? = nil) {
+        self.expected = expected
+        self.trust = trust
+    }
 
     func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
-        // TOFU: when no key is pinned (e.g. the user logged in with a password
-        // and never set a host key) accept the first host key so the tunnel can
-        // establish. If a key IS pinned we enforce it strictly.
         guard let expected else {
-            validationCompletePromise.succeed(())
+            do {
+                guard let trust else { throw SSHTransportError.hostKeyNotPinned }
+                try trust(hostKey)
+                validationCompletePromise.succeed(())
+            } catch { validationCompletePromise.fail(error) }
             return
         }
         guard hostKey == expected else {

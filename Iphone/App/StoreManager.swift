@@ -47,7 +47,7 @@ final class StoreManager: ObservableObject {
                 guard case .verified(let transaction) = result,
                       Self.entitledProductIDs.contains(transaction.productID) else { continue }
                 await transaction.finish()
-                self?.applyUnlimited()
+                _ = await self?.refreshEntitlementClearingIfRevoked()
             }
         }
     }
@@ -67,7 +67,7 @@ final class StoreManager: ObservableObject {
         var owned = false
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
-            if Self.entitledProductIDs.contains(transaction.productID) {
+            if Self.entitledProductIDs.contains(transaction.productID), transaction.revocationDate == nil, !transaction.isUpgraded {
                 owned = true
             }
         }
@@ -99,13 +99,15 @@ final class StoreManager: ObservableObject {
     /// unavailable product — the old `String?` conflated "no product loaded"
     /// with success and silently ate failures.
     func purchaseUnlimited() async -> PurchaseOutcome {
-        await purchase(product)
+        if product == nil { await loadProduct() }
+        return await purchase(product)
     }
 
     /// Buys the one-time $6 discount product (same Unlimited entitlement).
     /// Only reachable from the paywall's discount stage.
     func purchaseDiscount() async -> PurchaseOutcome {
-        await purchase(discountProduct)
+        if discountProduct == nil { await loadProduct() }
+        return await purchase(discountProduct)
     }
 
     private func purchase(_ product: Product?) async -> PurchaseOutcome {
@@ -129,6 +131,7 @@ final class StoreManager: ObservableObject {
             switch verification {
             case .verified(let transaction):
                 await transaction.finish()
+                guard transaction.revocationDate == nil else { return .failure("Purchase revoked") }
                 applyUnlimited()
                 return .success
             case .unverified(_, let error):

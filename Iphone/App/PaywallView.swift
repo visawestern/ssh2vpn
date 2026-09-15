@@ -2,15 +2,12 @@ import SwiftUI
 
 /// Full-screen paywall shown when the user taps the Unlimited buy button.
 ///
-/// Double-offer flow (persisted across launches):
-///  - `.full`   : one-time price ($10) — dismiss escalates to `.discount`.
-///  - `.discount`: one-time $6 offer. Dismissing it marks the discount as
-///    declined forever, so only the full price is ever offered again on
-///    this device.
+/// Intro-offer flow: the FIRST presentation ever shows the one-time $6
+/// intro (copy says dismissing loses it); every later presentation shows
+/// the regular full price. Dismissing always just closes.
 ///
 /// Review compliance: NO countdown timer, NO locked close button, NO fake
-/// urgency — the close is always enabled and the discount is a plain
-/// second-chance offer, not a pressured flash sale.
+/// urgency, NO in-paywall stage switching — the close always closes.
 struct PaywallView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showUnavailable = false
@@ -46,6 +43,7 @@ struct PaywallView: View {
                 .blur(radius: 50)
                 .offset(x: 130, y: 240)
 
+            ScrollView {
             VStack(spacing: 0) {
                 header
                 Spacer(minLength: 12)
@@ -56,10 +54,18 @@ struct PaywallView: View {
                 pricing
                 buyButton
                 restoreButton
+                if let notice = model.purchaseNotice {
+                    Text(notice).foregroundStyle(.white).font(.footnote).multilineTextAlignment(.center)
+                }
+                // No in-paywall stage switching: the stage is decided once
+                // at open (intro first, full price later). A button here
+                // that jumps back to the discount would resurrect the
+                // dismissed offer — the escalation pattern in reverse.
             }
             .padding(.horizontal, 24)
             .padding(.top, 16)
             .padding(.bottom, 24)
+            }
         }
         .preferredColorScheme(.dark)
         .alert(model.copy.text(.purchaseUnavailable), isPresented: $showUnavailable) {
@@ -201,6 +207,13 @@ struct PaywallView: View {
     /// The $6 second-chance block: crossed-out $10 anchor, $6, "−40%"
     /// capsule. No countdown, no expiry theatrics — a plain offer the user
     /// can take or leave (Guideline 5.6: no pressured flash-sale UX).
+    private var discountPercentage: String {
+        guard let full = model.store.product, let discount = model.store.discountProduct,
+              full.price > 0, discount.price < full.price,
+              full.priceFormatStyle.currencyCode == discount.priceFormatStyle.currencyCode else { return "" }
+        let percent = NSDecimalNumber(decimal: (full.price - discount.price) / full.price * 100).intValue
+        return "−\(percent)%"
+    }
     private var discountPricing: some View {
         VStack(spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -215,7 +228,7 @@ struct PaywallView: View {
                                        startPoint: .top, endPoint: .bottom)
                     )
                     .shadow(color: Color(red: 1.0, green: 0.65, blue: 0.15).opacity(0.55), radius: 14, y: 3)
-                Text("−40%")
+                Text(discountPercentage)
                     .font(.system(size: 14, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 9)

@@ -18,14 +18,21 @@ public enum TunnelLastError {
     private static let service = "com.ssh2vpn.tunnel-last-error"
     private static let account = "lastError"
     /// Must match `keychain-access-groups` in SSH2VPN.entitlements and
-    /// SSH2VPNPacketTunnel.entitlements (TeamID prefix + suite id).
-    private static let accessGroup = "568467VWR6.com.sshtunnel.shared"
+    /// SSH2VPNPacketTunnel.entitlements (TeamID prefix + suite id). The
+    /// TeamID prefix is resolved at runtime — same proven pattern as
+    /// QuotaLedgerStore (a hardcoded foreign team made every SecItemAdd
+    /// silently no-op, so the app saw extError=none forever and retried
+    /// doomed credentials into fail2ban).
+    private static var resolvedAccessGroup: String {
+        let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String ?? ""
+        return prefix + "com.sshtunnel.shared"
+    }
 
     private static func baseQuery() -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account,
-         kSecAttrAccessGroup as String: accessGroup]
+         kSecAttrAccessGroup as String: resolvedAccessGroup]
     }
 
     /// Best-effort persist (never throws — logging must not crash a tunnel).

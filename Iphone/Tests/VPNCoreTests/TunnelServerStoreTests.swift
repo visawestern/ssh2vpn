@@ -12,7 +12,7 @@ final class TunnelServerStoreTests: XCTestCase {
         // in full isolation from each other.
         let suite = "test.tunnel-server-store.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        return (TunnelServerStore(defaults: defaults), defaults)
+        return (TunnelServerStore(defaults: defaults, vault: TestCredentialVault.forDefaults(defaults)), defaults)
     }
 
     private func sample(id: String = "aaa", host: String = "1.2.3.4", password: String? = "secret", privateKey: String? = nil) -> ServerProfile {
@@ -136,7 +136,7 @@ final class TunnelServerStoreTests: XCTestCase {
         store.select(id: "1")
 
         // Fresh store instance against the same backing defaults.
-        let reloaded = TunnelServerStore(defaults: defaults)
+        let reloaded = TunnelServerStore(defaults: defaults, vault: TestCredentialVault.forDefaults(defaults))
         XCTAssertEqual(reloaded.selectedID(), "1")
     }
 
@@ -157,11 +157,11 @@ final class TunnelServerStoreTests: XCTestCase {
 
     func testDedupeFlagRunsOncePerContainer() {
         let (_, defaults) = makeStore()
-        let first = TunnelServerStore(defaults: defaults)
+        let first = TunnelServerStore(defaults: defaults, vault: TestCredentialVault.forDefaults(defaults))
         XCTAssertTrue(first.needsDedupe())
         first.markDeduped()
 
-        let second = TunnelServerStore(defaults: defaults)
+        let second = TunnelServerStore(defaults: defaults, vault: TestCredentialVault.forDefaults(defaults))
         XCTAssertFalse(second.needsDedupe())
     }
 

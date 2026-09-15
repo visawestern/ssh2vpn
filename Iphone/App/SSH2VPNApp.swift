@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import Network
 @preconcurrency import NetworkExtension
 import VPNCore
@@ -53,11 +54,8 @@ final class AppModel: ObservableObject {
     // Settings still obeys the kernel gate because the extension checks the
     // same ledger on start.
     @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
-    /// True while the ad stub is "playing" (disables the button).
+    /// True while the ad is "playing" (disables the button).
     @Published var adPlaying = false
-    /// True while the own-promo fallback screen is shown (the 30s animated
-    /// paywall-style promo displayed when the ad networks have no fill).
-    @Published var promoFallbackPlaying = false
     /// Short-lived in-button notice after a failed rewarded attempt
     /// (no fill / early dismissal). Shown by the button for ~5s.
     @Published var adNoticeKey: CopyKey?
@@ -79,26 +77,38 @@ final class AppModel: ObservableObject {
     /// StoreKit purchase + entitlement restore for Unlimited.
     let store = StoreManager()
 
-    // MARK: - Paywall (double-offer flow)
-    // Stage 1: full-price unlimited ($10 one-time). If dismissed, stage 2
-    // shows a one-time $6 discount offer. If THAT is dismissed, the discount
-    // is never offered again on this device — only the full price. Not shown
+    // MARK: - Paywall (intro-offer flow)
+    // FIRST presentation ever: the one-time $6 intro offer. Every later
+    // presentation: the regular full price. Dismissing always just closes —
+    // the close button never escalates, never locks, never timers. Not shown
     // to users who already own Unlimited.
     enum PaywallStage: Equatable {
         case full
         case discount
     }
+    /// Legacy flag from the old double-offer flow (declined-once). Kept for
+    /// migration read only: anyone who saw either stage before has consumed
+    /// the intro.
     private static let paywallDiscountDeclinedKey = "ssh2vpn.paywallDiscountDeclined.v1"
     static var paywallDiscountDeclined: Bool {
         get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
         set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
+    }
+    private static let paywallIntroOfferShownKey = "ssh2vpn.paywallIntroOfferShown.v1"
+    static var paywallIntroOfferShown: Bool {
+        get { UserDefaults.standard.bool(forKey: paywallIntroOfferShownKey) }
+        set { UserDefaults.standard.set(newValue, forKey: paywallIntroOfferShownKey) }
+    }
+    /// True once the user has seen any offer stage: intro is one-time.
+    static var paywallIntroConsumed: Bool {
+        paywallIntroOfferShown || paywallDiscountDeclined
     }
     @Published var paywallStage = PaywallStage.full
     @Published var isPaywallPresented = false
 
     func showPaywall() {
         guard !isUnlimited else { return }
-        paywallStage = .full
+        paywallStage = Self.paywallIntroConsumed ? .full : .discount
         isPaywallPresented = true
     }
 
@@ -107,17 +117,12 @@ final class AppModel: ObservableObject {
         isPaywallPresented = false
     }
 
-    /// Dismisses the paywall (user closed it). Full price -> escalate to the
-    /// $6 discount offer unless it was already declined once; discount ->
-    /// mark declined forever, never offer it again. No timers, no locks —
-    /// the close always works immediately.
+    /// Dismisses the paywall (user closed it). Always just closes — no
+    /// escalation, no timers, no locks. Dismissing the intro stage consumes
+    /// it: next time only the full price is offered.
     func dismissPaywall() {
-        if paywallStage == .full, !Self.paywallDiscountDeclined {
-            paywallStage = .discount
-            return
-        }
         if paywallStage == .discount {
-            Self.paywallDiscountDeclined = true
+            Self.paywallIntroOfferShown = true
         }
         isPaywallPresented = false
     }
@@ -254,11 +259,11 @@ final class AppModel: ObservableObject {
 
     /// Adds or updates a server locally (instant UI), then best-effort syncs
     /// it to the extension (applies when the tunnel/manager is reachable).
-    func saveServer(_ profile: ServerProfile) {
+    func saveServer(_ profile: ServerProfile) throws {
         var p = profile
         p.hasPassword = p.password?.isEmpty == false
         p.hasPrivateKey = p.privateKey?.isEmpty == false
-        localStore.save(p)
+        guard localStore.save(p) else { throw CredentialVaultError.unavailable(-1) }
         localStore.select(id: p.id)
         loadServerList()
         Task { @MainActor in
@@ -1144,7 +1149,7 @@ final class AppModel: ObservableObject {
         // The credentials reliably reach the extension via providerConfiguration
         // in performConnectionAttempt(); the extension also persists them into
         // its own store on every startTunnel.
-        saveServer(selected)
+        do { try saveServer(selected) } catch { connection = .failed(error.localizedDescription); return }
         connection = .connecting
         // No TCP probe here: performConnectionAttempt() already gates every
         // attempt with exactly one ping. Probing twice per tap burns SYNs and
@@ -1682,8 +1687,8 @@ final class AppModel: ObservableObject {
     /// US round dollars only while the products haven't loaded yet (sandbox
     /// hiccup) — the UI never invents a price: buy() refuses to run without
     /// the real product, so what the button shows is what Apple charges.
-    var fullPriceString: String { store.product?.displayPrice ?? "$10" }
-    var discountPriceString: String { store.discountProduct?.displayPrice ?? "$6" }
+    var fullPriceString: String { store.product?.displayPrice ?? "…" }
+    var discountPriceString: String { store.discountProduct?.displayPrice ?? "…" }
 
     /// Normalized [0...1] fraction remaining (for the ring/progress).
     var quotaFraction: Double {
@@ -1701,19 +1706,8 @@ final class AppModel: ObservableObject {
 
     /// True when an ad may be creditable (not unlimited, cooldown over,
     /// bank under the 12h cap, tunnel DOWN so geo targeting is honest).
-    /// The own-promo fallback counts as "playing" too — the button must
-    /// stay disabled while it's on screen.
     var canWatchAd: Bool {
-        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying && !promoFallbackPlaying
-    }
-
-    /// Called by PromoFallbackView when the user closes it (via the X or
-    /// the paywall CTA) — releases the ad button back to normal. The promo
-    /// grants NO free-time credit: rewards come only from a completed real
-    /// rewarded ad (creditAdView, called from the .earned path of watchAd).
-    func promoFallbackFinished() {
-        promoFallbackPlaying = false
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo fallback finished (no reward)")
+        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
     }
 
     /// Reward-credit path for a COMPLETED real rewarded ad only: writes
@@ -1744,27 +1738,15 @@ final class AppModel: ObservableObject {
         adPlaying = true
         ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (AdMob)")
         Task { @MainActor [weak self] in
-            // ATT first (once ever — the system shows it only while
-            // undetermined): the privacy policy promises this prompt, and
-            // the ad SDK uses the answer for personalized ads. Either
-            // way the rewarded ad still plays (non-personalized when
-            // denied), so the tap is never wasted.
-            if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
-                _ = await ATTrackingManager.requestTrackingAuthorization()
-            }
             let outcome = await RewardedAdRouter.presentRewarded()
             guard let self else { return }
             self.adPlaying = false
+            self.refreshAdvertisingPrivacy()
             switch outcome {
             case .earned:
                 break
             case .noFill:
-                // No ad from the networks: show our own honest promo
-                // (instantly closable, grants NOTHING — free-time credit
-                // comes only from a completed real ad). The button stays
-                // busy while the promo is on screen, then re-enables.
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate) — showing own promo (no reward)")
-                self.promoFallbackPlaying = true
+                self.showAdNotice(.adNoFillShort)
             case .dismissedEarly:
                 ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early)")
                 self.showAdNotice(.adRewardNotCredited)
@@ -1819,12 +1801,16 @@ final class AppModel: ObservableObject {
 
     /// Restore button: re-checks App Store entitlements and, if owned,
     /// re-applies unlimited to the shared ledger.
+    @Published var purchaseNotice: String?
+    @Published var advertisingPrivacyAvailable = false
+    func refreshAdvertisingPrivacy() { advertisingPrivacyAvailable = AdvertisingPrivacy.optionsRequired }
     func restorePurchase() async {
-        let owned = await store.refreshEntitlement()
-        reloadQuota()
-        ConsoleLogStore.shared.log(level: owned ? .success : .info,
-                                   tag: "IAP",
-                                   message: owned ? "unlimited restored" : "no previous purchase found")
+        do {
+            try await AppStore.sync()
+            let owned = await store.refreshEntitlementClearingIfRevoked()
+            reloadQuota()
+            purchaseNotice = owned ? copy.text(.purchaseOwned) : copy.text(.restoreError)
+        } catch { purchaseNotice = copy.text(.restoreError) }
     }
 
     /// Polls the extension status every 2s while connected: SSH pool size,
@@ -1985,17 +1971,13 @@ private final class VPNController {
             // save→reload→start fix; a Code=1 now surfaces via automation.
             configurationProtocol.includeAllNetworks = configuration.includeAllNetworks
 
-            // Embed credentials directly in the tunnel provider configuration
-            // (plain local storage, matching how the profile is persisted) so
-            // the packet-tunnel extension needs no Keychain dependency and
-            // cannot fail with keychainUnavailable.
             var providerConfig = configuration.providerConfiguration
-            if !password.isEmpty {
-                providerConfig["password"] = password
-            }
-            if !privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                providerConfig["privateKey"] = privateKey
-            }
+            let credentialID = ServerSecrets.account(host: profile.host, port: profile.port, username: profile.username)
+            do {
+                let secrets = ServerSecrets(password: password.isEmpty ? nil : password, privateKey: privateKey.isEmpty ? nil : privateKey)
+                try KeychainCredentialVault().write(JSONEncoder().encode(secrets), account: credentialID)
+            } catch { completion(error); return }
+            providerConfig["credentialID"] = credentialID
             // Pre-resolved server IPv4 (avoids blocking DNS in extension startTunnel,
             // which caused early-death flake where iOS killed the extension for slow launch).
             if let serverIP {
@@ -2266,6 +2248,27 @@ private final class VPNController {
                     for dupe in dupes.dropFirst() {
                         dupe.removeFromPreferences { _ in }
                     }
+                }
+                // Migrate the old system VPN configuration before any new start.
+                if let manager = self.manager,
+                   let proto = manager.protocolConfiguration as? NETunnelProviderProtocol,
+                   var config = proto.providerConfiguration,
+                   config["password"] != nil || config["privateKey"] != nil {
+                    do {
+                        let host = config["host"] as? String ?? ""
+                        let port = (config["port"] as? NSNumber)?.intValue ?? 22
+                        let username = config["username"] as? String ?? ""
+                        let account = ServerSecrets.account(host: host, port: port, username: username)
+                        let secrets = ServerSecrets(password: config["password"] as? String, privateKey: config["privateKey"] as? String)
+                        try KeychainCredentialVault().write(JSONEncoder().encode(secrets), account: account)
+                        config.removeValue(forKey: "password")
+                        config.removeValue(forKey: "privateKey")
+                        config["credentialID"] = account
+                        proto.providerConfiguration = config
+                        manager.protocolConfiguration = proto
+                        manager.saveToPreferences { error in sendableCompletion(error) }
+                    } catch { sendableCompletion(error) }
+                    return
                 }
                 sendableCompletion(nil)
             }

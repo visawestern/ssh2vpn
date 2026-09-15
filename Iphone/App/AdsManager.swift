@@ -3,6 +3,7 @@ import VPNCore
 import GoogleMobileAds
 import UserMessagingPlatform
 import UIKit
+import AppTrackingTransparency
 
 // MARK: - Ad config
 
@@ -58,11 +59,11 @@ final class AdLoadBox: @unchecked Sendable {
 
     func resume(_ ad: RewardedAd?) {
         lock.lock()
-        let c = continuation
+        guard let c = continuation else { lock.unlock(); return }
         continuation = nil
         loadedAd = ad
         lock.unlock()
-        c?.resume(returning: ad != nil)
+        c.resume(returning: ad != nil)
     }
 
     /// MainActor pulls the parked ad after the continuation resumes.
@@ -94,8 +95,17 @@ enum RewardedOutcome {
 enum RewardedAdRouter {
     @MainActor
     static func presentRewarded() async -> RewardedOutcome {
-        AdMobRewardedProvider.shared.initialize()
         return await AdMobRewardedProvider.shared.presentRewarded()
+    }
+}
+
+@MainActor
+enum AdvertisingPrivacy {
+    static var optionsRequired: Bool {
+        ConsentInformation.shared.privacyOptionsRequirementStatus == .required
+    }
+    static func showOptions() async throws {
+        try await ConsentForm.presentPrivacyOptionsForm(from: await TopVCFinder.find())
     }
 }
 
@@ -149,13 +159,10 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
         // Present the form only if consent is actually required; errors and
         // the "not required" case both fall through to the ad load.
         let formVC = await TopVCFinder.find()
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            let box = ResumeOnceBox(c)
-            ConsentForm.loadAndPresentIfRequired(from: formVC) { _ in box.resume() }
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(15))
-                box.resume()
-            }
+        do {
+            try await ConsentForm.loadAndPresentIfRequired(from: formVC)
+        } catch {
+            return .noFill
         }
         ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "UMP consent flow finished (status \(ConsentInformation.shared.consentStatus.rawValue))")
 
@@ -163,6 +170,12 @@ final class AdMobRewardedProvider: NSObject, @unchecked Sendable {
             ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "UMP: canRequestAds false after consent flow")
             return .noFill
         }
+
+        // The SDK is started only for a user-requested ad, after applicable consent.
+        if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
+            _ = await ATTrackingManager.requestTrackingAuthorization()
+        }
+        initialize()
 
         // 2. Load (20s no-fill timeout). AdLoadBox parks the ad behind
         // its lock; the continuation only carries the ok flag.

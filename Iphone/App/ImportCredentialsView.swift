@@ -10,6 +10,7 @@ struct ImportCredentialsView: View {
 
     @State private var raw = ""
     @State private var parsed: CredentialParser.Parsed?
+    @State private var label = ""
     @State private var host = ""
     @State private var port = "22"
     @State private var username = "root"
@@ -47,6 +48,11 @@ struct ImportCredentialsView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        // Live length cap for the alias field while typing / pasting —
+        // full sanitizing happens on save via normalizedLabel.
+        .onChange(of: label) { _, new in
+            label = TextInputSanitizer.capped(new)
+        }
     }
 
     // MARK: - Paste (before parse)
@@ -102,6 +108,9 @@ struct ImportCredentialsView: View {
     private var previewSection: some View {
         VStack(spacing: 14) {
             VStack(spacing: 6) {
+                fieldRow(title: model.copy.text(.serverLabelOptional),
+                        placeholder: model.copy.text(.serverLabelPlaceholder),
+                        text: $label)
                 fieldRow(title: model.copy.text(.address),
                         placeholder: model.copy.text(.addressPlaceholder),
                         text: $host)
@@ -162,6 +171,7 @@ struct ImportCredentialsView: View {
             let validPort = try ProfileValidator.validatePort(port)
             let validUsername = try ProfileValidator.validateUsername(username)
             try ProfileValidator.validateCredentials(password: password, privateKey: "")
+            let sanitizedLabel = ServerProfile.normalizedLabel(label)
 
             let profile = ServerProfile(
                 id: UUID().uuidString,
@@ -174,10 +184,11 @@ struct ImportCredentialsView: View {
                 hasPassword: !password.isEmpty,
                 hasPrivateKey: false,
                 password: password.isEmpty ? nil : password,
-                privateKey: nil
+                privateKey: nil,
+                label: sanitizedLabel
             )
-            model.saveServer(profile)
-            model.serverName = validHost
+            try model.saveServer(profile)
+            model.serverName = sanitizedLabel ?? validHost
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

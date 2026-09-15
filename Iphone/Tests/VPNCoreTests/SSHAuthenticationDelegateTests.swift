@@ -31,7 +31,7 @@ final class SSHAuthenticationDelegateTests: XCTestCase {
 
     // MARK: - PinnedHostKeyDelegate
 
-    func testHostKeyAcceptedWithoutPinning() {
+    func testHostKeyRejectedWithoutPinningOrTrustStore() {
         // TOFU: with no pinned key the first host key is accepted (host key is
         // an optional hardening, not a hard requirement when the user logs in
         // with a password). This must NOT throw.
@@ -40,7 +40,7 @@ final class SSHAuthenticationDelegateTests: XCTestCase {
         let promise = group.next().makePromise(of: Void.self)
         delegate.validateHostKey(hostKey: key.publicKey, validationCompletePromise: promise)
 
-        XCTAssertNoThrow(try promise.futureResult.wait())
+        XCTAssertThrowsError(try promise.futureResult.wait())
     }
 
     func testHostKeyFailsOnMismatch() {

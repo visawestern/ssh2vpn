@@ -2,7 +2,7 @@ import Foundation
 
 /// Duplicate-server hygiene shared by the app and the extension. Two records
 /// are the same machine when host+port+username match (host compared
-/// case-insensitively). Secrets, flags, names and dns never participate in
+/// case-insensitively). Secrets, flags, names, labels and dns never participate in
 /// identity — they are payload, not coordinates.
 public enum ServerDedupe {
     /// Ids that should be deleted: every duplicate group keeps the selected

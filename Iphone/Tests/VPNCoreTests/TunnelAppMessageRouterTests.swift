@@ -11,7 +11,7 @@ final class TunnelAppMessageRouterTests: XCTestCase {
     private func makeStore() -> (TunnelServerStore, UserDefaults) {
         let suite = "test.router-store.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        return (TunnelServerStore(defaults: defaults), defaults)
+        return (TunnelServerStore(defaults: defaults, vault: TestCredentialVault.forDefaults(defaults)), defaults)
     }
 
     private func sample(id: String = "aaa", host: String = "1.2.3.4", password: String? = "secret", privateKey: String? = nil) -> ServerProfile {
@@ -223,6 +223,61 @@ final class TunnelAppMessageRouterTests: XCTestCase {
         _ = responseData(makeRouter(store: store), cmd: "serverSet", args: update)!
 
         XCTAssertEqual(store.load(id: "1")?.password, "new", "explicit password must replace")
+    }
+
+    // MARK: - Label merge
+
+    func testServerSetStoresLabel() {
+        let (store, _) = makeStore()
+        var profile = sample(id: "1")
+        profile.label = "My Hetzner"
+        _ = responseData(makeRouter(store: store), cmd: "serverSet", args: profile.toJSONDict())!
+
+        XCTAssertEqual(store.load(id: "1")?.displayLabel, "My Hetzner")
+    }
+
+    func testServerSetClearsLabelOnEmptyString() {
+        let (store, _) = makeStore()
+        var original = sample(id: "1")
+        original.label = "Old"
+        store.save(original)
+
+        var cleared = sample(id: "1")
+        cleared.label = nil
+        var args = cleared.toJSONDict()
+        // encodeServerSet always sends the key ("" = clear); mirror that here.
+        args["label"] = ""
+        _ = responseData(makeRouter(store: store), cmd: "serverSet", args: args)!
+
+        XCTAssertNil(store.load(id: "1")?.displayLabel, "empty label must clear the stored alias")
+    }
+
+    func testServerSetPreservesLabelWhenOmitted() {
+        let (store, _) = makeStore()
+        var original = sample(id: "1")
+        original.label = "Keep me"
+        store.save(original)
+
+        // Old client without label support: no "label" key at all.
+        var args = sample(id: "1", host: "9.9.9.9").toJSONDict()
+        args.removeValue(forKey: "label")
+        _ = responseData(makeRouter(store: store), cmd: "serverSet", args: args)!
+
+        XCTAssertEqual(store.load(id: "1")?.displayLabel, "Keep me")
+        XCTAssertEqual(store.load(id: "1")?.host, "9.9.9.9")
+    }
+
+    func testServerListPreservesLabelWithoutSecrets() {
+        let (store, _) = makeStore()
+        var profile = sample(id: "1", password: "p")
+        profile.label = "My Hetzner"
+        store.save(profile)
+
+        let r = responseData(makeRouter(store: store), cmd: "serverList")!
+        let data = r["data"] as? [String: String]
+        let servers = try! JSONDecoder().decode([ServerProfile].self, from: Data((data?["servers"] ?? "[]").utf8))
+        XCTAssertEqual(servers.first?.displayLabel, "My Hetzner")
+        XCTAssertNil(servers.first?.password)
     }
 
     // MARK: - serverDelete

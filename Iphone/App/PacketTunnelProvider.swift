@@ -227,10 +227,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 merged["port"] = selected.port
                 merged["username"] = selected.username
                 merged["hostKey"] = selected.hostKey
-                if let pwd = selected.password, !pwd.isEmpty { merged["password"] = pwd }
-                else { merged.removeValue(forKey: "password") }
-                if let key = selected.privateKey, !key.isEmpty { merged["privateKey"] = key }
-                else { merged.removeValue(forKey: "privateKey") }
+                let account = ServerSecrets.account(host: selected.host, port: selected.port, username: selected.username)
+                let secrets = ServerSecrets(password: selected.password, privateKey: selected.privateKey)
+                try KeychainCredentialVault().write(JSONEncoder().encode(secrets), account: account)
+                merged["credentialID"] = account
+                // Secrets NEVER go back into the system VPN configuration:
+                // the extension reads them from the shared Keychain via
+                // credentialID (legacy password/privateKey keys are scrubbed
+                // by the app-side migration and never re-added here).
+                merged.removeValue(forKey: "password")
+                merged.removeValue(forKey: "privateKey")
                 // Keep the app-provided DNS when present; fall back to the
                 // stored profile only when the app sent nothing (first start,
                 // on-demand launch without the app).
@@ -263,10 +269,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 storedProfile.dnsServers = configuration.dnsServers
             }
             storedProfile.password = configuration.password
-            storedProfile.privateKey = (providerConfiguration?["privateKey"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            storedProfile.privateKey = configuration.rawPrivateKey
             storedProfile.hasPassword = storedProfile.password?.isEmpty == false
             storedProfile.hasPrivateKey = storedProfile.privateKey?.isEmpty == false
-            serverStore.save(storedProfile)
+            guard serverStore.save(storedProfile) else { throw CredentialVaultError.unavailable(-1) }
             serverStore.select(id: persistID)
 
             // UNUSED (TUN mode removed — no root on server): endpoint resolution,
@@ -281,7 +287,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             let factory = try SSHTransportFactory(pinnedOpenSSHHostKey: configuration.hostKey)
             let credentials = SSHCredentials(host: configuration.host, port: configuration.port,
                                             username: configuration.username,
-                                            password: configuration.password, privateKey: nil)
+                                            password: configuration.password, privateKey: configuration.privateKey)
             let sshChannel = try factory.connect(credentials).wait()
             let sshHandler = try extractSSHHandler(sshChannel)
             tunnelPhase = "ssh-connected"
@@ -625,6 +631,7 @@ private struct TunnelConfiguration {
     let username: String
     let password: String?
     let privateKey: NIOSSHPrivateKey?
+    let rawPrivateKey: String?
     let hostKey: String?
     let dnsServers: [String]
     let serverIP: String?
@@ -638,14 +645,20 @@ private struct TunnelConfiguration {
         let port = (providerConfiguration["port"] as? NSNumber)?.intValue ?? 22
         guard (1...65535).contains(port) else { throw SSHPacketTunnelError.invalidConfiguration }
         self.host = host; self.port = port; self.username = username
-        // Credentials are embedded directly in the provider configuration by
-        // the app (plain local storage in the shared profile), so no Keychain
-        // dependency is required here.
-        self.password = (providerConfiguration["password"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        if let rawKey = providerConfiguration["privateKey"] as? String, !rawKey.isEmpty {
-            self.privateKey = try SSHPrivateKeyImporter.importEd25519(
-                SSHPrivateKeyImporter.canonicalSeed(from: Data(rawKey.utf8))
-            )
+        let vault = KeychainCredentialVault()
+        let credentialID = providerConfiguration["credentialID"] as? String ?? ServerSecrets.account(host: host, port: port, username: username)
+        let secrets: ServerSecrets
+        if let data = try vault.read(credentialID) {
+            secrets = try JSONDecoder().decode(ServerSecrets.self, from: data)
+        } else {
+            // Compatibility with an existing system VPN profile. App migration removes these fields.
+            secrets = ServerSecrets(password: providerConfiguration["password"] as? String, privateKey: providerConfiguration["privateKey"] as? String)
+            try vault.write(JSONEncoder().encode(secrets), account: credentialID)
+        }
+        self.rawPrivateKey = secrets.privateKey
+        self.password = secrets.password.flatMap { $0.isEmpty ? nil : $0 }
+        if let rawKey = secrets.privateKey, !rawKey.isEmpty {
+            self.privateKey = try SSHPrivateKeyImporter.importEd25519(SSHPrivateKeyImporter.canonicalSeed(from: Data(rawKey.utf8)))
         } else { self.privateKey = nil }
         // Host key (TOFU hardening) is optional: when absent the transport
         // accepts the first key. Only fail if there is no way to authenticate

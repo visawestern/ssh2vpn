@@ -61,6 +61,7 @@ enum Tab: Int, CaseIterable {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @AppStorage("privacyDisclosureAcknowledged.v2") private var privacyAcknowledged = false
     @State private var selectedTab: Tab = .connect
     @State private var isConsoleOpen: Bool = false
 
@@ -108,24 +109,32 @@ struct RootView: View {
                 Color.clear.onAppear { isConsoleOpen = false }
             }
 
+            if !model.needsLanguageSelection && !privacyAcknowledged {
+                VStack(spacing: 16) {
+                    Text(model.copy.text(.privacyPolicyTitle)).font(.title2.bold())
+                    DocsView(page: .privacy, language: model.selectedLanguage?.rawValue)
+                    Button(model.copy.text(.ok)) { privacyAcknowledged = true }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.bottom)
+                }
+                .padding(.top)
+                .background(Color.appBg.ignoresSafeArea())
+            }
             if model.needsLanguageSelection {
                 LanguageOverlay()
                     .transition(.opacity)
             }
         }
+        .alert(model.copy.text(.restorePurchase), isPresented: Binding(
+            get: { model.purchaseNotice != nil && !model.isPaywallPresented },
+            set: { if !$0 { model.purchaseNotice = nil } }
+        )) { Button(model.copy.text(.ok)) { model.purchaseNotice = nil } }
+        message: { Text(model.purchaseNotice ?? "") }
         .fullScreenCover(isPresented: $model.isPaywallPresented) {
             PaywallView()
                 .environmentObject(model)
         }
-        // Own-promo fallback (rewarded no-fill): a 30s animated promo that
-        // taps through into the paywall above. Full watch credits +3h via
-        // the model (same as a real rewarded ad). Presented separately so
-        // both covers can coexist (promo -> paywall) without dismissal
-        // conflicts.
-        .fullScreenCover(isPresented: $model.promoFallbackPlaying) {
-            PromoFallbackView()
-                .environmentObject(model)
-        }
+        .environment(\.layoutDirection, model.selectedLanguage == .arabic ? .rightToLeft : .leftToRight)
         .preferredColorScheme(.light)
     }
 }
@@ -908,6 +917,23 @@ struct UsernameChip: View {
     }
 }
 
+/// Badge for the DNS-rules settings row: total of custom rules plus
+/// curated-list domains (both feed the same tunnel filter). Split out of
+/// the settings card so the card stays below the type-checker limit.
+private struct DNSRulesBadge: View {
+    let count: Int
+
+    var body: some View {
+        let tint: Color = count == 0 ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)
+        Text("\(count)")
+            .font(.openSans(11, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.12), in: Capsule())
+    }
+}
+
 // MARK: - Locations View
 
 struct LocationsView: View {
@@ -1317,12 +1343,9 @@ struct SettingsViewNew: View {
                                  Spacer()
                                  // Badge counts custom rules + curated-list
                                  // domains (both feed the same tunnel filter).
-                                 Text("\(model.settings.dnsRules.count + model.curatedDomainCount)")
-                                     .font(.openSans(11, weight: .semibold))
-                                     .foregroundStyle((model.settings.dnsRules.isEmpty && model.curatedDomainCount == 0) ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
-                                     .padding(.horizontal, 8)
-                                     .padding(.vertical, 3)
-                                     .background(((model.settings.dnsRules.isEmpty && model.curatedDomainCount == 0) ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)).opacity(0.12), in: Capsule())
+                                 // Extracted subview: keeps the giant settings
+                                 // card below the type-checker limit.
+                                 DNSRulesBadge(count: model.settings.dnsRules.count + model.curatedDomainCount)
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(Color.octGray40)
@@ -1376,6 +1399,17 @@ struct SettingsViewNew: View {
                             .padding(.bottom, 8)
 
                         // App Store-required legal documents.
+                        if model.advertisingPrivacyAvailable {
+                            Button {
+                                Task {
+                                    do { try await AdvertisingPrivacy.showOptions() }
+                                    catch { model.purchaseNotice = model.copy.text(.unknownError) }
+                                    model.refreshAdvertisingPrivacy()
+                                }
+                            } label: {
+                                settingsRow(icon: "hand.raised", title: model.copy.text(.advertisingPrivacy), desc: model.copy.text(.privacyPolicyDesc))
+                            }.buttonStyle(.plain)
+                        }
                         NavigationLink(destination: DocsView(page: .privacy, language: model.selectedLanguage?.rawValue)) {
                             settingsRow(icon: "hand.raised.fill", title: model.copy.text(.privacyPolicyTitle), desc: model.copy.text(.privacyPolicyDesc))
                         }
@@ -1810,7 +1844,7 @@ struct AddServerView: View {
 
                             // Persist locally (instant UI) then close. Extension
                             // sync happens best-effort in the background.
-                            model.saveServer(profile)
+                            try model.saveServer(profile)
                             model.serverName = sanitizedLabel ?? validHost
                             dismiss()
                         } catch {

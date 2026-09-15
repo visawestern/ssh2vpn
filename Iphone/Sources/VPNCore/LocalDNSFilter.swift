@@ -293,12 +293,19 @@ public struct LocalDNSFilter: Equatable, Sendable {
 
     // MARK: - private
 
-    private static func normalize(_ raw: String) -> String? {
+    /// Normalizes a raw domain string (trim, lowercase, trailing dots) and
+    /// rejects anything that is not a plausible hostname. Public: the curated
+    /// hosts-list parser shares the exact same notion of a valid domain.
+    public static func normalizedDomain(_ raw: String) -> String? {
         var d = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         while d.hasSuffix(".") { d.removeLast() }
         guard !d.isEmpty, d != "." else { return nil }
         guard d.allSatisfy({ $0.isLetter || $0.isNumber || "-_.".contains($0) }) else { return nil }
         return d
+    }
+
+    private static func normalize(_ raw: String) -> String? {
+        normalizedDomain(raw)
     }
 }
 

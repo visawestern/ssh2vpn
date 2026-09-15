@@ -32,10 +32,10 @@ HOW IT WORKS
 WHY SSH2VPN
 • Your own server — no shared VPN infrastructure, nothing stored on anyone else's disk. Traffic goes device → your VPS → internet.
 • Nothing to install server-side: sshd is enough. No root, no TUN, no scripts, no containers.
-• Real system VPN: NetworkExtension-based, works with every app on your phone.
+• Real system VPN: NetworkExtension-based, carries every app's TCP traffic (UDP calls and most games are limited).
 • Built-in DNS with configurable presets and a local DNS filter.
 • Multi-server management, live connection stats.
-• 17 built-in languages, light/dark themes, VoiceOver support.
+• 17 built-in languages, VoiceOver support.
 • A hacker-style console for those who like to see the wires.
 
 FREE TO START
@@ -76,7 +76,7 @@ SSH2VPN — системный VPN-клиент, который гоняет т�
 ПОЧЕМУ SSH2VPN
 • Ваш собственный сервер — нет общей VPN-инфраструктуры, на чужих дисках ничего не хранится. Маршрут: устройство → ваш VPS → интернет.
 • На сервере ставить нечего: достаточно sshd. Без root, TUN, скриптов и контейнеров.
-• Настоящий системный VPN: на NetworkExtension, работает со всеми приложениями телефона.
+• Настоящий системный VPN: на NetworkExtension, несёт TCP-трафик всех приложений (UDP-звонки и большинство игр ограничены).
 • Встроенный DNS с пресетами и локальным DNS-фильтром.
 • Управление несколькими серверами, живая статистика подключения.
 • 17 языков интерфейса, светлая/тёмная темы, поддержка VoiceOver.
@@ -120,7 +120,7 @@ CÓMO FUNCIONA
 POR QUÉ SSH2VPN
 • Tu propio servidor: sin infraestructura VPN compartida, nada se guarda en discos ajenos. Ruta: dispositivo → tu VPS → internet.
 • Nada que instalar en el servidor: basta sshd. Sin root, sin TUN, sin scripts, sin contenedores.
-• VPN del sistema real: basada en NetworkExtension, funciona con todas tus apps.
+• VPN del sistema real: basada en NetworkExtension, lleva el tráfico TCP de todas tus apps (llamadas UDP y la mayoría de juegos, limitados).
 • DNS integrado con presets y filtro DNS local.
 • Gestión multiservidor y estadísticas en vivo.
 • 17 idiomas, tema claro/oscuro, soporte VoiceOver.
@@ -164,7 +164,7 @@ SO FUNKTIONIERT ES
 WARUM SSH2VPN
 • Dein eigener Server — keine geteilte VPN-Infrastruktur, nichts auf fremden Festplatten. Route: Gerät → dein VPS → Internet.
 • Serverseitig ist nichts zu installieren: sshd genügt. Kein Root, kein TUN, keine Skripte, keine Container.
-• Echtes System-VPN: auf NetworkExtension-Basis, funktioniert mit jeder App.
+• Echtes System-VPN: auf NetworkExtension-Basis, transportiert den TCP-Verkehr jeder App (UDP-Anrufe und die meisten Spiele sind eingeschränkt).
 • Eingebautes DNS mit Voreinstellungen und lokalem DNS-Filter.
 • Mehrere Server verwalten, Live-Statistiken.
 • 17 Sprachen, Hell-/Dunkelmodus, VoiceOver-Support.
@@ -208,7 +208,7 @@ COMMENT ÇA MARCHE
 POURQUOI SSH2VPN
 • Ton propre serveur — pas d'infrastructure VPN mutualisée, rien sur les disques d'autrui. Chemin : appareil → ton VPS → internet.
 • Rien à installer côté serveur : sshd suffit. Pas de root, pas de TUN, pas de scripts, pas de conteneurs.
-• Un vrai VPN système : basé sur NetworkExtension, fonctionne avec toutes tes apps.
+• Un vrai VPN système : basé sur NetworkExtension, transporte le TCP de toutes tes apps (appels UDP et la plupart des jeux limités).
 • DNS intégré avec préréglages et filtre DNS local.
 • Gestion multi-serveurs, statistiques en direct.
 • 17 langues, thème clair/sombre, support VoiceOver.
@@ -252,7 +252,7 @@ COME FUNZIONA
 PERCHÉ SSH2VPN
 • Il tuo server: nessuna infrastruttura VPN condivisa, nulla sui dischi altrui. Percorso: dispositivo → il tuo VPS → internet.
 • Nulla da installare sul server: basta sshd. No root, no TUN, no script, no container.
-• Vera VPN di sistema: basata su NetworkExtension, funziona con ogni app.
+• Vera VPN di sistema: basata su NetworkExtension, trasporta il traffico TCP di ogni app (chiamate UDP e gran parte dei giochi limitati).
 • DNS integrato con preset e filtro DNS locale.
 • Gestione multi-server, statistiche dal vivo.
 • 17 lingue, tema chiaro/scuro, supporto VoiceOver.
@@ -296,7 +296,7 @@ COMO FUNCIONA
 POR QUE SSH2VPN
 • Seu próprio servidor — sem infraestrutura VPN compartilhada, nada em discos de terceiros. Rota: dispositivo → seu VPS → internet.
 • Nada para instalar no servidor: o sshd basta. Sem root, sem TUN, sem scripts, sem containers.
-• VPN de sistema de verdade: baseada em NetworkExtension, funciona com todos os apps.
+• VPN de sistema de verdade: baseada em NetworkExtension, leva o tráfego TCP de todos os apps (chamadas UDP e a maioria dos jogos, limitados).
 • DNS embutido com presets e filtro DNS local.
 • Gerenciamento de vários servidores, estatísticas ao vivo.
 • 17 idiomas, tema claro/escuro, suporte VoiceOver.
@@ -340,7 +340,7 @@ SSH2VPNは、iPhoneの通信をすでに所有しているサーバーへ、純�
 SSH2VPNが選ばれる理由
 • 自分のサーバー — 共有VPNインフラなし、他人のディスクに保存されるものはありません。経路：デバイス → あなたのVPS → インターネット。
 • サーバー側にインストール不要：sshdだけで動作。root不要、TUN不要、スクリプト不要、コンテナ不要。
-• 本物のシステムVPN：NetworkExtensionベースで、電話のすべてのアプリで動作。
+• 本物のシステムVPN：NetworkExtensionベースで、すべてのアプリのTCP通信に対応（UDP通話・多くのゲームは制限あり）。
 • プリセットとローカルDNSフィルタを備えた内蔵DNS。
 • 複数サーバー管理、リアルタイム統計。
 • 17言語内蔵、ライト/ダークテーマ、VoiceOver対応。
@@ -384,7 +384,7 @@ SSH2VPN是一款系统级VPN客户端，通过纯SSH协议，把iPhone的流量�
 为什么选SSH2VPN
 • 你自己的服务器 — 没有共享VPN基础设施，不会在任何别人的磁盘上留下东西。路径：设备 → 你的VPS → 互联网。
 • 服务器端无需安装：有sshd就够了。不需要root、TUN、脚本或容器。
-• 真正的系统级VPN：基于NetworkExtension，对手机上的所有应用生效。
+• 真正的系统级VPN：基于NetworkExtension，承载所有应用的TCP流量（UDP通话和多数游戏受限）。
 • 内置DNS，支持预设和本地DNS过滤。
 • 多服务器管理、实时连接统计。
 • 内置17种语言、浅色/深色主题、支持VoiceOver。
@@ -428,7 +428,7 @@ SSH2VPN은 순수 SSH를 통해 iPhone 트래픽을 이미 소유한 서버로 �
 SSH2VPN을 선택해야 하는 이유
 • 내 서버 — 공유 VPN 인프라 없음, 남의 디스크에 저장되는 것 없음. 경로: 기기 → 내 VPS → 인터넷.
 • 서버에 설치할 것 없음: sshd면 충분. root, TUN, 스크립트, 컨테이너 불필요.
-• 진짜 시스템 VPN: NetworkExtension 기반, 폰의 모든 앱에서 동작.
+• 진짜 시스템 VPN: NetworkExtension 기반, 모든 앱의 TCP 트래픽 전송(UDP 통화·대부분 게임 제한).
 • 프리셋과 로컬 DNS 필터를 갖춘 내장 DNS.
 • 다중 서버 관리, 실시간 통계.
 • 17개 내장 언어, 라이트/다크 테마, VoiceOver 지원.
@@ -472,7 +472,7 @@ SSH2VPN هو عميل VPN على مستوى النظام يمرر حركة ال�
 لماذا SSH2VPN؟
 • خادمك أنت — لا بنية VPN مشتركة، ولا شيء يُحفظ على أقراص الغير. المسار: جهازك ← خادمك ← الإنترنت.
 • لا شيء لتثبيته على الخادم: يكفي sshd. بلا root، بلا TUN، بلا سكربتات، بلا حاويات.
-• VPN نظامي حقيقي: مبني على NetworkExtension ويعمل مع كل تطبيقاتك.
+• VPN نظامي حقيقي: مبني على NetworkExtension وينقل حركة TCP لكل تطبيقاتك (مكالمات UDP ومعظم الألعاب محدودة).
 • DNS مدمج مع إعدادات جاهزة ومرشح DNS محلي.
 • إدارة عدة خوادم وإحصاءات مباشرة.
 • 17 لغة مدمجة، وضع فاتح/داكن، دعم VoiceOver.
@@ -516,7 +516,7 @@ SSH2VPN एक सिस्टम-लेवल VPN क्लाइंट है 
 SSH2VPN क्यों
 • आपका अपना सर्वर — कोई शेयर्ड VPN इंफ्रा नहीं, किसी और की डिस्क पर कुछ सेव नहीं। रास्ता: डिवाइस → आपका VPS → इंटरनेट।
 • सर्वर पर कुछ इंस्टॉल नहीं करना: sshd काफ़ी है। न root, न TUN, न स्क्रिप्ट, न कंटेनर।
-• असली सिस्टम VPN: NetworkExtension आधारित, फ़ोन के हर ऐप के साथ चलता है।
+• असली सिस्टम VPN: NetworkExtension आधारित, हर ऐप का TCP ट्रैफ़िक ले जाता है (UDP कॉल और ज़्यादातर गेम सीमित)।
 • प्रीसेट और लोकल DNS फ़िल्टर के साथ इन-बिल्ट DNS।
 • मल्टी-सर्वर मैनेजमेंट, लाइव आँकड़े।
 • 17 इन-बिल्ट भाषाएँ, लाइट/डार्क थीम, VoiceOver समर्थन।
@@ -560,7 +560,7 @@ SSH2VPN เป็นไคลเอนต์ VPN ระดับระบบ ท
 ทำไมต้อง SSH2VPN
 • เซิร์ฟเวอร์ของคุณเอง — ไม่มีโครงสร้าง VPN ร่วม ไม่มีอะไรถูกเก็บบนดิสก์คนอื่น เส้นทาง: อุปกรณ์ → VPS ของคุณ → อินเทอร์เน็ต
 • ไม่ต้องติดตั้งอะไรบนเซิร์ฟเวอร์: มี sshd ก็พอ ไม่ต้อง root ไม่ต้อง TUN ไม่ต้องสคริปต์ ไม่ต้อง container
-• VPN ระดับระบบของแท้: ใช้ NetworkExtension ทำงานกับทุกแอปบนเครื่อง
+• VPN ระดับระบบของแท้: ใช้ NetworkExtension รับส่ง TCP ของทุกแอป (โทร UDP และเกมส่วนใหญ่ถูกจำกัด)
 • DNS ในตัว พร้อมพรีเซ็ตและตัวกรอง DNS ภายใน
 • จัดการหลายเซิร์ฟเวอร์ สถิติแบบเรียลไทม์
 • 17 ภาษาในตัว ธีมสว่าง/มืด รองรับ VoiceOver
@@ -604,7 +604,7 @@ NASIL ÇALIŞIR
 NEDEN SSH2VPN
 • Kendi sunucun — paylaşımlı VPN altyapısı yok, başkasının diskine kaydedilen hiçbir şey yok. Rota: cihaz → senin VPS → internet.
 • Sunucu tarafında kurulacak bir şey yok: sshd yeterli. Root yok, TUN yok, betik yok, konteyner yok.
-• Gerçek sistem VPN'i: NetworkExtension tabanlı, telefonda her uygulamayla çalışır.
+• Gerçek sistem VPN'i: NetworkExtension tabanlı, her uygulamanın TCP trafiğini taşır (UDP aramalar ve çoğu oyun kısıtlı).
 • Hazır ayarlar ve yerel DNS filtresiyle gömülü DNS.
 • Çoklu sunucu yönetimi, canlı bağlantı istatistikleri.
 • 17 yerleşik dil, açık/koyu tema, VoiceOver desteği.
@@ -648,7 +648,7 @@ JAK TO DZIAŁA
 DLACZEGO SSH2VPN
 • Twój własny serwer — brak współdzielonej infrastruktury VPN, nic nie zapisuje się na cudzych dyskach. Trasa: urządzenie → Twój VPS → internet.
 • Po stronie serwera nic nie instalujesz: wystarczy sshd. Bez roota, TUN, skryptów i kontenerów.
-• Prawdziwy systemowy VPN: oparty na NetworkExtension, działa z każdą aplikacją.
+• Prawdziwy systemowy VPN: oparty na NetworkExtension, przenosi ruch TCP każdej aplikacji (połączenia UDP i większość gier ograniczone).
 • Wbudowane DNS z presetami i lokalnym filtrem DNS.
 • Zarządzanie wieloma serwerami, statystyki na żywo.
 • 17 wbudowanych języków, jasny/ciemny motyw, obsługa VoiceOver.
@@ -692,7 +692,7 @@ HOE HET WERKT
 WAAROM SSH2VPN
 • Je eigen server — geen gedeelde VPN-infrastructuur, niets op andermans schijven. Route: apparaat → jouw VPS → internet.
 • Serverzijds niets te installeren: sshd is genoeg. Geen root, geen TUN, geen scripts, geen containers.
-• Echte systeem-VPN: gebaseerd op NetworkExtension, werkt met elke app.
+• Echte systeem-VPN: gebaseerd op NetworkExtension, draagt TCP-verkeer van elke app (UDP-gesprekken en meeste games beperkt).
 • Ingebouwde DNS met presets en een lokale DNS-filter.
 • Meerdere servers beheren, live verbindingsstatistieken.
 • 17 ingebouwde talen, licht/donker thema, VoiceOver-ondersteuning.
@@ -736,7 +736,7 @@ CÁCH HOẠT ĐỘNG
 VÌ SAO CHỌN SSH2VPN
 • Máy chủ của riêng bạn — không dùng chung hạ tầng VPN, không lưu gì trên đĩa của người khác. Đường đi: thiết bị → VPS của bạn → internet.
 • Không cần cài gì trên máy chủ: chỉ cần sshd. Không root, không TUN, không script, không container.
-• VPN hệ thống thật sự: dựa trên NetworkExtension, hoạt động với mọi app.
+• VPN hệ thống thật sự: dựa trên NetworkExtension, tải lưu lượng TCP của mọi app (gọi UDP và hầu hết game bị hạn chế).
 • DNS tích hợp với preset và bộ lọc DNS cục bộ.
 • Quản lý nhiều máy chủ, thống kê kết nối trực tiếp.
 • 17 ngôn ngữ tích hợp, giao diện sáng/tối, hỗ trợ VoiceOver.

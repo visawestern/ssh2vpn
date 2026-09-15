@@ -91,7 +91,7 @@ public struct AppSettingsCodec {
             "killSwitch": s.killSwitch,
             "connectOnDemand": s.connectOnDemand,
             "enableLogging": s.enableLogging,
-            "dnsRules": s.dnsRules.map { ["domain": $0.domain, "kind": $0.kind.rawValue, "ip": $0.ip] },
+            "dnsRules": s.dnsRules.map { ["domain": $0.domain, "kind": $0.kind.rawValue, "ip": $0.ip, "sub": $0.includeSubdomains] },
             "presetDNS": s.presetDNS
         ]
         guard JSONSerialization.isValidJSONObject(dict) else { throw AppSettingsError.encodingFailed }
@@ -110,11 +110,13 @@ public struct AppSettingsCodec {
             killSwitch: dict["killSwitch"] as? Bool ?? true,
             connectOnDemand: dict["connectOnDemand"] as? Bool ?? false,
             enableLogging: dict["enableLogging"] as? Bool ?? false,
-            dnsRules: (dict["dnsRules"] as? [[String: String]] ?? []).compactMap { row in
-                guard let domain = row["domain"],
-                      let kindRaw = row["kind"],
+            dnsRules: (dict["dnsRules"] as? [[String: Any]] ?? []).compactMap { row in
+                guard let domain = row["domain"] as? String,
+                      let kindRaw = row["kind"] as? String,
                       let kind = DNSBlocklistEntry.Kind(rawValue: kindRaw) else { return nil }
-                return DNSBlocklistEntry(domain: domain, kind: kind, ip: row["ip"] ?? "")
+                return DNSBlocklistEntry(domain: domain, kind: kind,
+                                         ip: row["ip"] as? String ?? "",
+                                         includeSubdomains: row["sub"] as? Bool ?? true)
             },
             presetDNS: dict["presetDNS"] as? [String] ?? []
         )

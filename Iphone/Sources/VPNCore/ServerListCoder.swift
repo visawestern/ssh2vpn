@@ -12,10 +12,15 @@ public enum ServerListCoder {
 
     /// Encodes a full profile (including secrets) into the `args` dictionary
     /// for a `serverSet` command. Only non-nil secrets are included.
+    /// `label` is ALWAYS sent as a string ("" = no alias): the router merges
+    /// field-by-field on key presence, so omitting it would make clearing an
+    /// alias a local-only change that the extension never sees. Empty
+    /// normalizes back to nil on decode.
     public static func encodeServerSet(_ profile: ServerProfile) -> [String: Any] {
         var dict: [String: Any] = [
             "id": profile.id,
             "name": profile.name,
+            "label": profile.displayLabel ?? "",
             "host": profile.host,
             "port": profile.port,
             "username": profile.username,

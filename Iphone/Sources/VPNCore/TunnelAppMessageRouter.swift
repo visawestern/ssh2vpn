@@ -133,7 +133,7 @@ public struct TunnelAppMessageRouter {
         } else {
             merged = incoming
         }
-        serverStore.save(merged)
+        guard serverStore.save(merged) else { return Response(ok: false, data: ["error": "secure storage unavailable"]) }
         return Response(ok: true, data: ["stored": "true"])
     }
 
@@ -145,6 +145,7 @@ public struct TunnelAppMessageRouter {
     private func merge(existing: ServerProfile, incoming: ServerProfile, args: [String: Any]) -> ServerProfile {
         var r = existing
         if args.keys.contains("name") { r.name = incoming.name }
+        if args.keys.contains("label") { r.label = ServerProfile.normalizedLabel(incoming.label) }
         if args.keys.contains("host") { r.host = incoming.host }
         if args.keys.contains("port") { r.port = incoming.port }
         if args.keys.contains("username") { r.username = incoming.username }
@@ -214,7 +215,7 @@ private extension ServerProfile {
             id: id, name: name, host: host, port: port, username: username,
             hostKey: hostKey, dnsServers: dnsServers,
             hasPassword: hasPassword, hasPrivateKey: hasPrivateKey,
-            password: nil, privateKey: nil
+            password: nil, privateKey: nil, label: displayLabel
         )
     }
 }

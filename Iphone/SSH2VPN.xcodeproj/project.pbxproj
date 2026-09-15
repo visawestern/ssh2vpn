@@ -37,7 +37,6 @@
 		A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
 		A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
 		A10000010000000000000055 /* Docs/shot-connected.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000055 /* Docs/shot-connected.png */; };
-		A10000010000000000000056 /* PromoFallbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000056 /* PromoFallbackView.swift */; };
 		A10000010000000000000060 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000060 /* InfoPlist.strings */; };
 		A1000001000000000000009A /* CopyDNS.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000009B /* CopyDNS.swift */; };
 		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
@@ -112,7 +111,6 @@
 		A20000010000000000000052 /* Docs/logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Docs/logo.png; sourceTree = "<group>"; };
 		A20000010000000000000053 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A20000010000000000000055 /* Docs/shot-connected.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Docs/shot-connected.png"; sourceTree = "<group>"; };
-		A20000010000000000000056 /* PromoFallbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromoFallbackView.swift; sourceTree = "<group>"; };
 		A20000010000000000000061 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A20000010000000000000062 /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A20000010000000000000063 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -182,7 +180,6 @@
 				A20000010000000000000046 /* AddServerChooserView.swift */,
 				A20000010000000000000047 /* ImportCredentialsView.swift */,
 				A20000010000000000000051 /* AdsManager.swift */,
-				A20000010000000000000056 /* PromoFallbackView.swift */,
 				A20000010000000000000044 /* Docs/index.html */,
 				A20000010000000000000053 /* PrivacyInfo.xcprivacy */,
 				A20000010000000000000052 /* Docs/logo.png */,
@@ -418,7 +415,6 @@
 				A10000010000000000000046 /* AddServerChooserView.swift in Sources */,
 				A10000010000000000000047 /* ImportCredentialsView.swift in Sources */,
 				A10000010000000000000051 /* AdsManager.swift in Sources */,
-				A10000010000000000000056 /* PromoFallbackView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
