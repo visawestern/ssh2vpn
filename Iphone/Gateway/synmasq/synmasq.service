@@ -1,0 +1,18 @@
+[Unit]
+Description=SYN masquerader (egress SYNs wear the iOS fingerprint)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# (Re)install the NFQUEUE taps idempotently, then run the daemon.
+ExecStartPre=/bin/sh -c 'iptables -t mangle -C OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0 2>/dev/null || iptables -t mangle -A OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0'
+ExecStartPre=/bin/sh -c 'ip6tables -t mangle -C OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0 2>/dev/null || ip6tables -t mangle -A OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0'
+ExecStart=/opt/synmasq/venv/bin/python /opt/synmasq/synmasq.py 0
+ExecStopPost=/bin/sh -c 'iptables -t mangle -D OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0 2>/dev/null; ip6tables -t mangle -D OUTPUT -p tcp --syn -j NFQUEUE --queue-num 0 2>/dev/null; true'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
