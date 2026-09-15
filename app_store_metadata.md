@@ -39,7 +39,7 @@ WHY SSH2VPN
 • A hacker-style console for those who like to see the wires.
 
 FREE TO START
-Every install includes 1 free hour of tunnel time. A short rewarded ad adds 3 more hours (once per hour, up to 12 in total). No account required.
+Every install includes 1 free hour of tunnel time, starting on first use. A short rewarded ad adds 3 more hours (once per hour, up to 12 in total). No account required.
 
 REQUIREMENTS
 • Your own VPS or any server with SSH access — a $3–5/month droplet is enough.
@@ -83,7 +83,7 @@ SSH2VPN — системный VPN-клиент, который гоняет т�
 • Консоль в стиле хакера — для тех, кто любит видеть «провода».
 
 БЕСПЛАТНО ДЛЯ СТАРТА
-Каждая установка включает 1 бесплатный час туннеля. Короткое рекламное видео добавляет ещё 3 часа (не чаще раза в час, всего до 12). Регистрация не нужна.
+Каждая установка включает 1 бесплатный час туннеля — он стартует при первом использовании. Короткое рекламное видео добавляет ещё 3 часа (не чаще раза в час, всего до 12). Регистрация не нужна.
 
 ТРЕБОВАНИЯ
 • Свой VPS или любой сервер с SSH-доступом — хватит дроплета за $3–5 в месяц.
@@ -127,7 +127,7 @@ POR QUÉ SSH2VPN
 • Una consola estilo hacker para quien le gusta ver los cables.
 
 EMPIEZA GRATIS
-Cada instalación incluye 1 hora gratis de túnel. Un anuncio corto suma 3 horas más (una vez por hora, hasta 12 en total). Sin registro.
+Cada instalación incluye 1 hora gratis de túnel, desde el primer uso. Un anuncio corto suma 3 horas más (una vez por hora, hasta 12 en total). Sin registro.
 
 REQUISITOS
 • Tu propio VPS o cualquier servidor con acceso SSH — basta un droplet de $3–5/mes.
@@ -171,7 +171,7 @@ WARUM SSH2VPN
 • Eine Hacker-Konsole für alle, die die Kabel sehen wollen.
 
 KOSTENLOS STARTEN
-Jede Installation enthält 1 kostenlose Stunde Tunnelzeit. Eine kurze Rewarded-Anzeige bringt 3 weitere Stunden (einmal pro Stunde, bis zu 12 insgesamt). Kein Konto nötig.
+Jede Installation enthält 1 kostenlose Stunde Tunnelzeit, ab der ersten Nutzung. Eine kurze Rewarded-Anzeige bringt 3 weitere Stunden (einmal pro Stunde, bis zu 12 insgesamt). Kein Konto nötig.
 
 VORAUSSETZUNGEN
 • Ein eigener VPS oder jeder Server mit SSH-Zugang — ein 3–5 $/Monat-Droplet reicht.
@@ -215,7 +215,7 @@ POURQUOI SSH2VPN
 • Une console façon hacker pour ceux qui aiment voir les câbles.
 
 GRATUIT POUR COMMENCER
-Chaque installation inclut 1 heure gratuite de tunnel. Une courte pub récompensée ajoute 3 heures (une fois par heure, jusqu'à 12 au total). Sans compte.
+Chaque installation inclut 1 heure gratuite de tunnel, dès le premier usage. Une courte pub récompensée ajoute 3 heures (une fois par heure, jusqu'à 12 au total). Sans compte.
 
 CONFIGURATION REQUISE
 • Ton propre VPS ou n'importe quel serveur en SSH — un droplet à 3–5 $/mois suffit.
@@ -259,7 +259,7 @@ PERCHÉ SSH2VPN
 • Una console in stile hacker per chi ama vedere i cavi.
 
 INIZIA GRATIS
-Ogni installazione include 1 ora gratuita di tunnel. Una breve pubblicità a premio aggiunge 3 ore (una volta all'ora, fino a 12 in totale). Senza registrazione.
+Ogni installazione include 1 ora gratuita di tunnel, dal primo utilizzo. Una breve pubblicità a premio aggiunge 3 ore (una volta all'ora, fino a 12 in totale). Senza registrazione.
 
 REQUISITI
 • Il tuo VPS o qualunque server con accesso SSH — basta un droplet da 3–5 $/mese.
@@ -303,7 +303,7 @@ POR QUE SSH2VPN
 • Um console estilo hacker para quem gosta de ver os fios.
 
 COMECE GRÁTIS
-Cada instalação inclui 1 hora grátis de túnel. Um anúncio curto adiciona mais 3 horas (uma vez por hora, até 12 no total). Sem cadastro.
+Cada instalação inclui 1 hora grátis de túnel, a partir do primeiro uso. Um anúncio curto adiciona mais 3 horas (uma vez por hora, até 12 no total). Sem cadastro.
 
 REQUISITOS
 • Seu próprio VPS ou qualquer servidor com acesso SSH — um droplet de US$ 3–5/mês basta.
@@ -347,7 +347,7 @@ SSH2VPNが選ばれる理由
 • 配線が見えるハッカー風コンソール。
 
 無料でスタート
-インストールごとに1時間の無料トンネル時間が付きます。短いリワード広告で3時間追加（1時間に1回、合計最大12時間）。アカウント登録は不要。
+インストールごとに1時間の無料トンネル時間が付きます（初回利用時に開始）。短いリワード広告で3時間追加（1時間に1回、合計最大12時間）。アカウント登録は不要。
 
 必要環境
 • 自分のVPS、またはSSHアクセスできる任意のサーバー — 月3〜5ドルのドロップレットで十分。
@@ -391,7 +391,7 @@ SSH2VPN是一款系统级VPN客户端，通过纯SSH协议，把iPhone的流量�
 • 黑客风控制台，看得见每个细节。
 
 免费开始
-每次安装包含1小时免费隧道时长。观看一段简短的激励视频可再加3小时（每小时一次，总计最多12小时）。无需注册账号。
+每次安装包含1小时免费隧道时长（首次使用时开始）。观看一段简短的激励视频可再加3小时（每小时一次，总计最多12小时）。无需注册账号。
 
 要求
 • 你自己的VPS或任何可SSH访问的服务器 — 每月3–5美元的小型云主机即可。
@@ -435,7 +435,7 @@ SSH2VPN을 선택해야 하는 이유
 • 배선이 보이는 해커 스타일 콘솔.
 
 무료로 시작
-설치마다 1시간 무료 터널 시간 제공. 짧은 보상형 광고로 3시간 추가(1시간에 1회, 총 최대 12시간). 계정 가입 불필요.
+설치마다 1시간 무료 터널 시간 제공(첫 사용 시 시작). 짧은 보상형 광고로 3시간 추가(1시간에 1회, 총 최대 12시간). 계정 가입 불필요.
 
 요구 사항
 • 내 VPS 또는 SSH 접근이 가능한 아무 서버 — 월 $3–5 드롭릿이면 충분.
@@ -479,7 +479,7 @@ SSH2VPN هو عميل VPN على مستوى النظام يمرر حركة ال�
 • وحدة تحكم بأسلوب الهاكرز لمن يحب رؤية الأسلاك.
 
 ابدأ مجانًا
-كل تثبيت يشمل ساعة نفق مجانية واحدة. إعلان مكافأة قصير يضيف 3 ساعات (مرة كل ساعة، حتى 12 في المجموع). لا حاجة لإنشاء حساب.
+كل تثبيت يشمل ساعة نفق مجانية واحدة تبدأ عند أول استخدام. إعلان مكافأة قصير يضيف 3 ساعات (مرة كل ساعة، حتى 12 في المجموع). لا حاجة لإنشاء حساب.
 
 المتطلبات
 • خادم VPS خاص بك أو أي خادم بوصول SSH — يكفي خادم بـ 3–5 دولارات شهريًا.
@@ -523,7 +523,7 @@ SSH2VPN क्यों
 • हैकर-स्टाइल कंसोल — जो तार देखना पसंद करते हैं उनके लिए।
 
 मुफ़्त शुरुआत
-हर इंस्टॉल में 1 घंटे का मुफ़्त टनल-टाइम शामिल है। छोटा रिवॉर्डेड विज्ञापन 3 घंटे और जोड़ता है (प्रति घंटे एक बार, कुल अधिकतम 12)। खाता बनाने की ज़रूरत नहीं।
+हर इंस्टॉल में 1 घंटे का मुफ़्त टनल-टाइम शामिल है, जो पहले उपयोग पर शुरू होता है। छोटा रिवॉर्डेड विज्ञापन 3 घंटे और जोड़ता है (प्रति घंटे एक बार, कुल अधिकतम 12)। खाता बनाने की ज़रूरत नहीं।
 
 आवश्यकताएँ
 • अपना VPS या SSH-एक्सेस वाला कोई भी सर्वर — $3–5/माह का ड्रॉपलेट काफ़ी है।
@@ -567,7 +567,7 @@ SSH2VPN เป็นไคลเอนต์ VPN ระดับระบบ ท
 • คอนโซลสไตล์แฮ็กเกอร์ สำหรับคนชอบดูสายไฟ
 
 เริ่มใช้ฟรี
-ทุกการติดตั้งมีเวลาทันเนลฟรี 1 ชั่วโมง ดูโฆษณารับรางวัลสั้น ๆ เพิ่มได้อีก 3 ชั่วโมง (ชั่วโมงละครั้ง รวมสูงสุด 12) ไม่ต้องสมัครบัญชี
+ทุกการติดตั้งมีเวลาทันเนลฟรี 1 ชั่วโมง เริ่มเมื่อใช้ครั้งแรก ดูโฆษณารับรางวัลสั้น ๆ เพิ่มได้อีก 3 ชั่วโมง (ชั่วโมงละครั้ง รวมสูงสุด 12) ไม่ต้องสมัครบัญชี
 
 ความต้องการ
 • VPS ของคุณเอง หรือเซิร์ฟเวอร์ใดก็ได้ที่เข้าถึงด้วย SSH — ดรอปเล็ต $3–5/เดือนก็เพียงพอ
@@ -611,7 +611,7 @@ NEDEN SSH2VPN
 • Kabloları görmekten hoşlananlara hacker tarzı bir konsol.
 
 ÜCRETSİZ BAŞLA
-Her kurulum 1 saat ücretsiz tünel süresi içerir. Kısa bir ödüllü reklam 3 saat daha ekler (saatte bir kez, toplamda en fazla 12). Hesap gerekmez.
+Her kurulum 1 saat ücretsiz tünel süresi içerir, ilk kullanımda başlar. Kısa bir ödüllü reklam 3 saat daha ekler (saatte bir kez, toplamda en fazla 12). Hesap gerekmez.
 
 GEREKLER
 • Kendi VPS'in veya SSH erişimi olan herhangi bir sunucu — ayda 3–5 $'lık bir sunucu yeter.
@@ -655,7 +655,7 @@ DLACZEGO SSH2VPN
 • Konsola w stylu hackerowskim dla tych, którzy lubią widzieć kable.
 
 ZACZNIJ ZA DARMO
-Każda instalacja zawiera 1 godzinę darmowego czasu tunelu. Krótki klip nagradzany dodaje 3 kolejne godziny (raz na godzinę, łącznie do 12). Bez konta.
+Każda instalacja zawiera 1 godzinę darmowego czasu tunelu, startującą przy pierwszym użyciu. Krótki klip nagradzany dodaje 3 kolejne godziny (raz na godzinę, łącznie do 12). Bez konta.
 
 WYMAGANIA
 • Własny VPS lub dowolny serwer z dostępem SSH — wystarczy droplet za 3–5 $/mies.
@@ -699,7 +699,7 @@ WAAROM SSH2VPN
 • Een console in hackerstijl voor wie de draden wil zien.
 
 GRATIS BEGINNEN
-Elke installatie bevat 1 uur gratis tunneltijd. Een korte beloonde ad voegt 3 uur toe (eenmaal per uur, max. 12 in totaal). Geen account nodig.
+Elke installatie bevat 1 uur gratis tunneltijd, vanaf het eerste gebruik. Een korte beloonde ad voegt 3 uur toe (eenmaal per uur, max. 12 in totaal). Geen account nodig.
 
 VEREISTEN
 • Je eigen VPS of elke server met SSH-toegang — een droplet van $3–5/maand volstaat.
@@ -743,7 +743,7 @@ VÌ SAO CHỌN SSH2VPN
 • Console kiểu hacker cho ai thích nhìn thấy từng dây dẫn.
 
 DÙNG THỬ MIỄN PHÍ
-Mỗi lượt cài đặt gồm 1 giờ tunnel miễn phí. Xem một quảng cáo ngắn được thêm 3 giờ (mỗi giờ một lần, tối đa tổng 12 giờ). Không cần tài khoản.
+Mỗi lượt cài đặt gồm 1 giờ tunnel miễn phí, bắt đầu từ lần dùng đầu. Xem một quảng cáo ngắn được thêm 3 giờ (mỗi giờ một lần, tối đa tổng 12 giờ). Không cần tài khoản.
 
 YÊU CẦU
 • VPS của bạn hoặc bất kỳ máy chủ nào truy cập được SSH — một droplet $3–5/tháng là đủ.

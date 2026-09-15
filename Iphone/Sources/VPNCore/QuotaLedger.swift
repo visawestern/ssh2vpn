@@ -8,14 +8,15 @@ import Security
 /// WHY the extension is the source of truth:
 ///   A naive implementation meters a session inside the app UI, so starting the
 ///   tunnel from iOS Settings (which bypasses the app entirely) never touches
-///   the budget — the "3 hours" never tick and an expired user keeps connecting.
+///   the budget — the free hour never ticks and an expired user keeps connecting.
 ///   This ledger is written/read by BOTH sides, but only the extension ENFORCES
 ///   it: on every startTunnel it reads it from the keychain and refuses if the
 ///   wall-clock budget is gone. The app cannot be bypassed because the check
 ///   happens in the running extension regardless of how the tunnel was started.
 ///
 /// Accounting model — WALL CLOCK (decided with the owner):
-///   - fresh install: 1 real hour granted at first launch (expiry = now + 1h);
+///   - first use (first Connect tap or first rewarded ad, never install):
+///     1 real hour granted (expiry = now + 1h);
 ///   - one rewarded ad: +3 real hours, but only one press per hour (cooldown);
 ///   - the bank can never exceed 12 real hours total at any moment (cap);
 ///   - $10 one-time purchase: `unlimited = true`, ads removed, gate removed;

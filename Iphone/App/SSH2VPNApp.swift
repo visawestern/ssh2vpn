@@ -47,13 +47,15 @@ final class AppModel: ObservableObject {
     @Published var tunnelDownBytes = 0
     private var statsPollTask: Task<Void, Never>?
 
-    // MARK: - Usage budget (3h free wall-clock, then rewarded-ad refills, or
-    // unlimited one-time purchase). The ENFORCEMENT lives in the extension
-    // (QuotaLedgerStore, shared keychain); the app only displays it and
+    // MARK: - Usage budget (1h free wall-clock from FIRST USE, then rewarded-ad refills, or
+    // unlimited one-time purchase). The grant starts on the first Connect tap
+    // or the first rewarded ad — never on install, so a fresh-looking app
+    // never shows an already-burned 0:00. The ENFORCEMENT lives in the
+    // extension (QuotaLedgerStore, shared keychain); the app only displays it and
     // writes credit (ad view / purchase). Starting the tunnel from iOS
     // Settings still obeys the kernel gate because the extension checks the
     // same ledger on start.
-    @Published var quota: QuotaLedger = QuotaLedgerStore().load().withInitialGrant(now: Date())
+    @Published var quota: QuotaLedger = QuotaLedgerStore().load()
     /// True while the ad is "playing" (disables the button).
     @Published var adPlaying = false
     /// Short-lived in-button notice after a failed rewarded attempt
@@ -1122,11 +1124,14 @@ final class AppModel: ObservableObject {
             return
         }
         // Free-tier gate: no opens > 0 → no tunnel. Unlimited users always
-        // have budget (`allowsConnection`). Re-read the shared ledger so an
-        // expiry caught by the kernel (or a purchase made elsewhere) is
-        // reflected here without a failed-connect flash. This is the ONLY
+        // have budget (`allowsConnection`). First-use grant BEFORE the gate:
+        // the free hour starts on the first Connect tap, never on install.
+        // Then re-read the shared ledger so an expiry caught by the kernel
+        // (or a purchase made elsewhere) is reflected here without a
+        // failed-connect flash. This is the ONLY
         // place the app re-reads the countdown outside launch — after that the
         // UI runs its own in-memory countdown until the next connect tap.
+        ensureInitialGrant()
         reloadQuota()
         guard quota.allowsConnection(now: Date()) else {
             ConsoleLogStore.shared.log(level: .error, tag: "QUOTA", message: "Connect blocked: free time exhausted — watch an ad to earn +3h")
@@ -1678,8 +1683,26 @@ final class AppModel: ObservableObject {
 
     // MARK: - Live tunnel stats + usage budget
 
+    /// Issues the initial free hour on FIRST USE (first Connect tap or
+    /// first rewarded ad — never on install). Idempotent: withInitialGrant
+    /// is a no-op once any expiry exists. Persisted at once so the
+    /// extension gate honors it even for tunnels started from Settings.
+    func ensureInitialGrant() {
+        let store = QuotaLedgerStore()
+        let current = store.load()
+        guard current.expires == nil, !current.isUnlimited else { return }
+        if store.save(current.withInitialGrant(now: Date())) {
+            ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "first-use grant: +1h wall-clock")
+        }
+    }
+
     /// Wall-clock seconds of budget remaining right now (0 when unlimited).
-    var remainingQuotaSeconds: TimeInterval { quota.remaining(now: Date()) }
+    /// Before the first use (no grant yet) shows the full free hour: it is
+    /// genuinely available — the next Connect tap issues it.
+    var remainingQuotaSeconds: TimeInterval {
+        if !quota.isUnlimited, quota.expires == nil { return QuotaLedger.initialGrantSeconds }
+        return quota.remaining(now: Date())
+    }
 
     var isUnlimited: Bool { quota.isUnlimited }
 
@@ -1768,10 +1791,10 @@ final class AppModel: ObservableObject {
     }
 
     /// Re-reads the shared ledger (after an ad view / purchase / app start).
+    /// Does NOT grant: the initial hour is issued only by first use
+    /// (ensureInitialGrant on Connect, or the ad-credit path).
     func reloadQuota() {
-        quota = QuotaLedgerStore().load().withInitialGrant(now: Date())
-        // ensure initial grant is persisted once
-        _ = QuotaLedgerStore().save(quota)
+        quota = QuotaLedgerStore().load()
         // The quota countdown may have (re)started ticking — spin the 1s
         // display timer even with the tunnel down so the mm:ss actually
         // decays on screen.

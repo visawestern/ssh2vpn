@@ -673,8 +673,8 @@ struct ConnectView: View {
         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
     }
 
-    /// "+3h free" while pressable, "58m" during the hourly cooldown, "MAX"
-    /// when the 12h bank is full. While the tunnel is up the button shows
+    /// "+3h free" while pressable, "58m" during the hourly cooldown,
+    /// "Bank full" when the 12h bank is full. While the tunnel is up the button shows
     /// a SHORT locked state (icon + word) — the .help hint carries the full
     /// explanation, so the pill never renders gray-on-gray mush.
     private var adButtonText: String {
@@ -688,7 +688,7 @@ struct ConnectView: View {
         if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
         let s = Int(model.adCooldownRemaining)
         if s > 0 { return "\(Int((s + 59) / 60))m" }
-        return "MAX"
+        return model.copy.text(.adBankFull)
     }
 }
 

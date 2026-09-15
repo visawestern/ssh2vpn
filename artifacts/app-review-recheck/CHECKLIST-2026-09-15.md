@@ -293,6 +293,7 @@ Apple 5.4 требует от VPN отдельного обязательств�
 - Подписанная Debug-сборка generic/platform=iOS: **BUILD SUCCEEDED** (починено: DNSRulesBadge + advertisingPrivacy ×17). Distribution archive не собран — нужен Xcode Archive на релизной схеме.
 - `git diff --check`: успешно.
 - `swift test` (VPNCore): **664 passed, 2 skipped, 0 failures**. Разгадка прошлых «transient» failures: это был CopyLocalizationTests — мой ключ advertisingPrivacy существовал только в EN+RU; после добавления ×17 всё зелёное. Не flaky, причина найдена и устранена.
+- Раунд first-use (по решению владельца): грант free-часа перенесён с install на первое использование (ensureInitialGrant в connect() + ad-credit path; init/reloadQuota больше не грантят; UI показывает полный час до гранта; QuotaLedger-комментарий обновлён). Тексты: support/guide/metadata — «first use» во всех 17 локалях (проверено заменами 1-в-1). Кнопка MAX → adBankFull ×17 («Bank full» и др.). Review Notes: hostname sslip.io + first-use модель. Проверено: BUILD SUCCEEDED, swift test 664/0/2 skipped, git diff --check чист.
 - Сайт: сверка после пуша 5f53296 — live раздаёт новое (support «starts with 1 hour», privacy без ipwhois). 4/4 страницы проверены после деплоя.
 - `git diff --check`: успешно.
 - `swift test` (VPNCore): **664 passed, 2 skipped, 0 failures**. Один промежуточный прогон показал 2 transient failures, не воспроизвелись — считать flaky, наблюдать.
