@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "VPNCore", targets: ["VPNCore"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio-ssh.git", from: "0.13.0"),
+        .package(path: "Vendor/swift-nio-ssh"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0")
     ],
