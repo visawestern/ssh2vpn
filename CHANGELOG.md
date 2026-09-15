@@ -1,5 +1,32 @@
 # SSH2VPN — Changelog
 
+## 1.0.5 (build 6)
+
+Crowd camouflage: the tunnel now handshakes like a Termux admin's OpenSSH 9.6.
+
+- **Spoofed plaintext handshake (TSPU-visible bytes).** Vendored
+  swift-nio-ssh 0.15.0 fork (`Iphone/Vendor/`, path dependency, no public
+  remote): version banner `SSH-2.0-OpenSSH_9.6`, KEXINIT proposal order
+  curve25519-first / aes128-gcm-first / nistp256-before-384 (OpenSSH 9.6
+  relative order among implemented primitives), channel max packet size
+  32768. Loopback golden test asserts the actual wire bytes.
+- **Protocol keepalive replaces the channel dance.** One
+  `keepalive@openssh.com` global request per connection per 60s (suppressed
+  while user traffic flows) — the exact bytes `ssh -o ServerAliveInterval`
+  sends. Any server reply (SUCCESS or RFC-mandated FAILURE) counts as
+  alive; only silence feeds dead-peer detection. No MaxSessions slot burned.
+- **Rekey on OpenSSH's 4G/1h schedule.** Pool counts relayed bytes per
+  connection and rotates session keys via the fork's new `rekey()` API.
+- **Upstream NIOSSH bug fixed in the fork.** Channel opens attempted
+  mid-rekey wedged forever (state machine throws, error swallowed, promise
+  never resolves). Opens now wait for the return to `.active`; disconnect
+  still fails fast. All 346 fork tests green.
+- **Probe chain hardened.** User DNS first, then 3 independent public
+  resolvers + :443, localhost fallback with 3 distinct verdicts
+  (forwarding disabled / egress blocked / auth stuck).
+- Tests: 705 pass + 4 live proofs against stock OpenSSH 9.6p1
+  (handshake interop, keepalive round-trip, rekey survival).
+
 ## 1.0.4 (build 5)
 
 Anti-fail2ban: the app no longer hammers the server with doomed attempts.
