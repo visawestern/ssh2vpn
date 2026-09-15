@@ -55,11 +55,6 @@
 	<string>ca-app-pub-1498434981323978~5326656863</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Your data is used to show you more relevant ads. No personal data is shared without your consent.</string>
 	<key>SKAdNetworkItems</key>

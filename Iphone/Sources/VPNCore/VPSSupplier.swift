@@ -44,9 +44,9 @@ public struct VPSSupplier: Identifiable, Equatable, Sendable {
 
 /// Hardcoded on purpose: updates ship as an App Store release (owner decision).
 ///
-/// URLs verified 8 Sep 2026 (Playwright, headless Chromium):
-/// every partner URL loads the actual signup/registration form directly —
-/// no homepage detour, no hunting for the button.
+/// REVIEW-HIDDEN: the Add Server chooser currently renders NONE of these
+/// (Guideline 5.6 pass — no third-party storefront inside the client).
+/// The data stays for a later return; nothing in the UI links out.
 public enum VPSSupplierCatalog {
     /// Own server first (never confuse a user who already has credentials),
     /// then affiliate partners sorted by user benefit, then non-affiliate

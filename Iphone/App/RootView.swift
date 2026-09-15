@@ -240,7 +240,7 @@ struct ConnectView: View {
 
                 Spacer(minLength: 8)
 
-                // Free-time quota + rewarded-ad refill (stub ad for now).
+                // Free-time quota + rewarded-ad refill (real AdMob rewarded).
                 // The whole card is hidden once Unlimited is owned — the
                 // entitlement is re-checked on every app launch.
                 if !model.isUnlimited {
@@ -473,7 +473,7 @@ struct ConnectView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(model.serverCountry.isEmpty ? model.serverName : model.serverCountry)
+                            Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
                                 .font(.openSans(15, weight: .semibold))
                                 .foregroundStyle(Color.octGray100)
                             if let ping = model.serverPingMs {
@@ -485,9 +485,17 @@ struct ConnectView: View {
                                     .background(Color.prim50.opacity(0.12), in: Capsule())
                             }
                         }
-                        Text("\(model.profile.host):\(model.profile.port)")
-                            .font(.openSans(12))
-                            .foregroundStyle(Color.octGray60)
+                        HStack(spacing: 6) {
+                            Text(model.selectedServer?.displayAddress ?? "\(model.profile.host):\(model.profile.port)")
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            if model.selectedServer?.hasCustomLabel != true,
+                               !model.profile.username.isEmpty {
+                                UsernameChip(username: model.profile.username)
+                            }
+                        }
                     }
                 }
 
@@ -777,7 +785,11 @@ struct WorldMapView: View {
                     }
                 }
 
-                if hasServer {
+                // The pulsing dot is shown ONLY for a measured position
+                // (LAN badge). Remote servers have no GeoIP lookup
+                // (privacy), so no dot is ever guessed for them — the
+                // callout below still shows host + live ping.
+                if hasServer && model.hasServerGeo {
                     // Pulsing animated server dot
                     ZStack {
                         Circle()
@@ -793,8 +805,15 @@ struct WorldMapView: View {
                     }
                     .position(x: dotX, y: dotY)
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: dotX)
+                }
 
-                    // Compact callout badge with country flag, location name and live ping
+                if hasServer {
+                    // Compact callout badge with country flag, location name and live ping.
+                    // Without a measured position it sits centered instead of
+                    // pointing at a guessed spot on the map.
+                    let calloutPos = model.hasServerGeo
+                        ? CGPoint(x: dotX, y: max(18, dotY - 24))
+                        : CGPoint(x: mapWidth / 2, y: 22)
                     HStack(spacing: 5) {
                         Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
                             .font(.system(size: 11))
@@ -803,7 +822,7 @@ struct WorldMapView: View {
                             .fill(model.connection == .connected ? Color.prim50 : (model.connection == .connecting ? Color.orange : Color.sec20))
                             .frame(width: 5, height: 5)
 
-                        Text(model.serverCountry.isEmpty ? (model.serverName.isEmpty ? model.profile.host : model.serverName) : model.serverCountry)
+                        Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
                             .font(.openSans(11, weight: .semibold))
                             .foregroundStyle(Color.octGray100)
                             .lineLimit(1)
@@ -832,7 +851,7 @@ struct WorldMapView: View {
                             .fill(Color.white)
                             .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
                     )
-                    .position(x: dotX, y: max(18, dotY - 24))
+                    .position(x: calloutPos.x, y: calloutPos.y)
                     .animation(.spring(response: 0.45, dampingFraction: 0.75), value: dotX)
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.7).combined(with: .opacity).combined(with: .offset(y: 8)),
@@ -871,6 +890,22 @@ struct ServerDot: Identifiable {
     let id = UUID()
     let x: CGFloat
     let y: CGFloat
+}
+
+/// Username chip shown after host:port when the server has no custom label.
+/// Compact capsule so a long login never pushes the address out.
+struct UsernameChip: View {
+    let username: String
+
+    var body: some View {
+        Text(username)
+            .font(.openSans(11, weight: .semibold))
+            .foregroundStyle(Color.sec20)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.sec20.opacity(0.10), in: Capsule())
+            .lineLimit(1)
+    }
 }
 
 // MARK: - Locations View
@@ -993,7 +1028,7 @@ struct LocationsView: View {
         let country: String = {
             if isSelected && !model.serverCountry.isEmpty { return model.serverCountry }
             if let geo { return geo.country }
-            return server.name.isEmpty ? server.host : server.name
+            return server.displayLabel ?? (server.name.isEmpty ? server.host : server.name)
         }()
 
         // Server switching is only possible while fully disconnected: tapping
@@ -1026,9 +1061,16 @@ struct LocationsView: View {
                                 .frame(width: 8, height: 8)
                         }
                     }
-                    Text("\(server.host):\(server.port)")
-                        .font(.openSans(12))
-                        .foregroundStyle(Color.octGray60)
+                    HStack(spacing: 6) {
+                        Text(server.displayAddress)
+                            .font(.openSans(12))
+                            .foregroundStyle(Color.octGray60)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if !server.hasCustomLabel, !server.username.isEmpty {
+                            UsernameChip(username: server.username)
+                        }
+                    }
                 }
                 Spacer()
                 if isSelected {
@@ -1116,7 +1158,7 @@ struct SettingsViewNew: View {
                                     }
                                     Text(model.store.isPurchasing
                                          ? model.copy.text(.purchasing)
-                                         : model.copy.text(.buyUnlimited, price: "$10"))
+                                         : model.copy.text(.buyUnlimited, price: model.fullPriceString))
                                         .font(.openSans(12, weight: .semibold))
                                 }
                                 .foregroundStyle(.white)
@@ -1272,13 +1314,15 @@ struct SettingsViewNew: View {
                                         .font(.openSans(12))
                                         .foregroundStyle(Color.octGray60)
                                 }
-                                Spacer()
-                                Text("\(model.settings.dnsRules.count)")
-                                    .font(.openSans(11, weight: .semibold))
-                                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background((model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)).opacity(0.12), in: Capsule())
+                                 Spacer()
+                                 // Badge counts custom rules + curated-list
+                                 // domains (both feed the same tunnel filter).
+                                 Text("\(model.settings.dnsRules.count + model.curatedDomainCount)")
+                                     .font(.openSans(11, weight: .semibold))
+                                     .foregroundStyle((model.settings.dnsRules.isEmpty && model.curatedDomainCount == 0) ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                                     .padding(.horizontal, 8)
+                                     .padding(.vertical, 3)
+                                     .background(((model.settings.dnsRules.isEmpty && model.curatedDomainCount == 0) ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)).opacity(0.12), in: Capsule())
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(Color.octGray40)
@@ -1539,6 +1583,7 @@ struct AddServerView: View {
     var editing: Bool = false
     /// When editing, the server being modified (nil = adding new).
     var editingServer: ServerProfile? = nil
+    @State private var label = ""
     @State private var address = ""
     @State private var username = ""
     @State private var port = "22"
@@ -1547,6 +1592,12 @@ struct AddServerView: View {
     @State private var hostKey = ""
     @State private var errorMessage: String?
     @State private var showErrorAlert = false
+    /// File-picker for the Ed25519 private key (Files / iCloud Drive).
+    @State private var showKeyImporter = false
+    @State private var showKeyHint = false
+    /// Inline result chip under the key editor after a file import.
+    @State private var keyImportMessage: String?
+    @State private var keyImportOK = false
 
     var body: some View {
         NavigationStack {
@@ -1562,6 +1613,11 @@ struct AddServerView: View {
                             .padding(.bottom, 6)
 
                         VStack(spacing: 6) {
+                            fieldRow(
+                                title: model.copy.text(.serverLabelOptional),
+                                placeholder: model.copy.text(.serverLabelPlaceholder),
+                                text: $label
+                            )
                             fieldRow(
                                 title: model.copy.text(.address),
                                 placeholder: model.copy.text(.addressPlaceholder),
@@ -1590,12 +1646,37 @@ struct AddServerView: View {
 
                     // Private Key section
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(model.copy.text(.ed25519PrivateKeyOptional))
-                            .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
-                            .padding(.bottom, 2)
+                        HStack(spacing: 8) {
+                            Text(model.copy.text(.ed25519PrivateKeyOptional))
+                                .font(.openSans(13, weight: .semibold))
+                                .foregroundStyle(Color.octGray60)
+                            InfoDotButton(isVisible: $showKeyHint)
+                            Spacer()
+                            // Import from Files / iCloud Drive — one tap
+                            // instead of copy-paste gymnastics.
+                            Button {
+                                showKeyImporter = true
+                            } label: {
+                                Label(model.copy.text(.keyImportFromFile), systemImage: "folder")
+                                    .font(.openSans(12, weight: .semibold))
+                                    .foregroundStyle(Color.sec50)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.sec50.opacity(0.10), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(model.copy.text(.keyImportFromFile))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 2)
+
+                        if showKeyHint {
+                            InfoBubble(title: model.copy.text(.ed25519PrivateKeyOptional),
+                                       message: model.copy.text(.ed25519Hint))
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 6)
+                        }
 
                         ZStack(alignment: .topLeading) {
                             if privateKey.isEmpty {
@@ -1618,9 +1699,37 @@ struct AddServerView: View {
                                 .stroke(Color.octGray05, lineWidth: 1)
                         )
                         .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
+
+                        // Live validation + import result chip: the user sees
+                        // IMMEDIATELY whether the pasted/imported key parses —
+                        // no more mystery tunnel failures at connect time.
+                        if let keyImportMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: keyImportOK ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(keyImportOK ? Color.prim50 : Color(red: 1.0, green: 0.25, blue: 0.35))
+                                Text(keyImportMessage)
+                                    .font(.openSans(11))
+                                    .foregroundStyle(Color.octGray60)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        } else if !privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                  SSHPrivateKeyImporter.validatePEM(privateKey) == nil {
+                            Label(model.copy.text(.keyImportedOK), systemImage: "checkmark.circle.fill")
+                                .font(.openSans(11, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        } else {
+                            Color.clear.frame(height: 0).padding(.bottom, 0)
+                        }
                     }
                     .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .fileImporter(isPresented: $showKeyImporter, allowedContentTypes: [.data, .text, .plainText]) { result in
+                        importKeyFile(result)
+                    }
 
                     // Host Key
                     VStack(alignment: .leading, spacing: 0) {
@@ -1639,11 +1748,29 @@ struct AddServerView: View {
                             let validHost = try ProfileValidator.validateHost(address)
                             let validPort = try ProfileValidator.validatePort(port)
                             let validUsername = try ProfileValidator.validateUsername(username)
+                            // Entry-time pinned host key check: a fingerprint
+                            // or multi-line paste must fail HERE with a clear
+                            // localized message, not as a mystery connect
+                            // failure later.
+                            let validHostKey: String
+                            do {
+                                validHostKey = try ProfileValidator.validateHostKey(hostKey)
+                            } catch ProfileValidationError.invalidHostKey(let reason) {
+                                errorMessage = model.hostKeyErrorMessage(reason)
+                                showErrorAlert = true
+                                return
+                            }
                             // In edit mode we may be leaving the credential
                             // fields blank to keep what is already saved; only
                             // validate when the user actually entered something.
                             if !password.isEmpty || !privateKey.isEmpty {
                                 try ProfileValidator.validateCredentials(password: password, privateKey: privateKey)
+                                // Parse-check the entered key NOW: a structurally
+                                // broken key must fail HERE with a clear message,
+                                // not as an extError=none tunnel flap at connect.
+                                if !privateKey.isEmpty, let issue = SSHPrivateKeyImporter.validatePEM(privateKey) {
+                                    throw ProfileValidationError.invalidPrivateKey(message: model.keyImportErrorMessage(issue))
+                                }
                             }
 
                             // Resolve the id: reuse the edited server's id (or the
@@ -1664,6 +1791,7 @@ struct AddServerView: View {
                             }
                             let resolvedPassword = password.isEmpty ? (existingPassword ?? "") : password
                             let resolvedPrivateKey = privateKey.isEmpty ? (existingPrivateKey ?? "") : privateKey
+                            let sanitizedLabel = ServerProfile.normalizedLabel(label)
 
                             let profile = ServerProfile(
                                 id: id,
@@ -1671,18 +1799,19 @@ struct AddServerView: View {
                                 host: validHost,
                                 port: validPort,
                                 username: validUsername,
-                                hostKey: hostKey,
+                                hostKey: validHostKey,
                                 dnsServers: [],
                                 hasPassword: !resolvedPassword.isEmpty,
                                 hasPrivateKey: !resolvedPrivateKey.isEmpty,
                                 password: resolvedPassword.isEmpty ? nil : resolvedPassword,
-                                privateKey: resolvedPrivateKey.isEmpty ? nil : resolvedPrivateKey
+                                privateKey: resolvedPrivateKey.isEmpty ? nil : resolvedPrivateKey,
+                                label: sanitizedLabel
                             )
 
                             // Persist locally (instant UI) then close. Extension
                             // sync happens best-effort in the background.
                             model.saveServer(profile)
-                            model.serverName = validHost
+                            model.serverName = sanitizedLabel ?? validHost
                             dismiss()
                         } catch {
                             errorMessage = error.localizedDescription
@@ -1722,6 +1851,7 @@ struct AddServerView: View {
                 // Instant pre-fill from the captured profile, then refresh
                 // from the EXTENSION's authoritative store (serverGet) —
                 // secrets never come back, everything else stays live-fresh.
+                label = server.displayLabel ?? ""
                 address = server.host
                 username = server.username
                 port = String(server.port)
@@ -1739,12 +1869,18 @@ struct AddServerView: View {
                         // Only overwrite non-secret fields the user hasn't
                         // touched in the meantime (they can't have — this
                         // runs within milliseconds of the sheet opening).
+                        label = fresh.displayLabel ?? ""
                         address = fresh.host
                         username = fresh.username
                         port = String(fresh.port)
                         hostKey = fresh.hostKey
                     }
                 }
+            }
+            // Live length cap while typing / pasting — full sanitizing
+            // (invisible chars, zalgo…) happens on save via normalizedLabel.
+            .onChange(of: label) { _, new in
+                label = TextInputSanitizer.capped(new)
             }
             .alert(model.copy.text(.invalidInput), isPresented: $showErrorAlert) {
                 Button(model.copy.text(.ok), role: .cancel) { }
@@ -1790,6 +1926,46 @@ struct AddServerView: View {
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.octGray05, lineWidth: 1)
                 )
+        }
+    }
+
+    /// Reads the picked file into the key field with full validation feedback.
+    /// Security-restricted files (without .startAccessingSecurityScopedData)
+    /// must never crash — every failure becomes a friendly localized chip.
+    private func importKeyFile(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure:
+            keyImportMessage = model.copy.text(.keyImportReadFailed)
+            keyImportOK = false
+        case .success(let url):
+            let secured = url.startAccessingSecurityScopedResource()
+            defer { if secured { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                // A real Ed25519 key is <1KB PEM / <100B seed; anything huge is
+                // not a key (picked the wrong file — e.g. a disk image).
+                guard data.count <= 16_384 else {
+                    keyImportMessage = model.copy.text(.keyImportTooLarge)
+                    keyImportOK = false
+                    return
+                }
+                guard let text = String(data: data, encoding: .utf8) else {
+                    keyImportMessage = model.copy.text(.keyImportUnsupported)
+                    keyImportOK = false
+                    return
+                }
+                if let issue = SSHPrivateKeyImporter.validatePEM(text) {
+                    keyImportMessage = model.keyImportErrorMessage(issue)
+                    keyImportOK = false
+                    return
+                }
+                privateKey = text
+                keyImportMessage = model.copy.text(.keyImportedOK)
+                keyImportOK = true
+            } catch {
+                keyImportMessage = model.copy.text(.keyImportReadFailed)
+                keyImportOK = false
+            }
         }
     }
 }
@@ -2350,69 +2526,34 @@ struct DNSView: View {
 
 // MARK: - Local DNS rules (VPN-settings level screen)
 
+/// Two-tab screen: "Custom" holds the user's own hand-written rules (with
+/// file import/export); "Lists" holds AdAway-style curated subscriptions
+/// downloaded from open sources. Both feed the same tunnel filter.
 struct LocalDNSRulesView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showRulesInfo = false
     @State private var showAddRule = false
     @State private var editingRule: DNSBlocklistEntry?
+    @State private var selectedTab: Int = 0
+    // Custom-tab file import/export
+    @State private var showRulesImporter = false
+    @State private var pendingImport: [DNSBlocklistEntry]?
+    @State private var importMessage: String?
+    @State private var showExportSuccess = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 8) {
-                        Text(model.copy.text(.dnsLocalRulesTitle))
-                            .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
-                        InfoDotButton(isVisible: $showRulesInfo)
-                        Spacer()
-                        Text("\(model.settings.dnsRules.count) \(model.copy.text(.dnsRulesCount))")
-                            .font(.openSans(11, weight: .semibold))
-                            .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
-                        Button {
-                            showAddRule = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 26, height: 26)
-                                .background(Color.sec50, in: Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(model.copy.text(.dnsAddRule))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-
-                    if showRulesInfo {
-                        InfoBubble(title: model.copy.text(.dnsLocalRulesInfoTitle),
-                                   message: model.copy.text(.dnsLocalRulesInfoBody))
-                            .padding(.horizontal, 14)
-                            .padding(.bottom, 12)
-                    }
-
-                    if model.settings.dnsRules.isEmpty {
-                        Text(model.copy.text(.dnsRulesEmpty))
-                            .font(.openSans(12))
-                            .foregroundStyle(Color.octGray40)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 14)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(model.settings.dnsRules.enumerated()), id: \.element.id) { index, rule in
-                                if index > 0 {
-                                    Divider().background(Color.octGray05).padding(.horizontal, 16)
-                                }
-                                dnsRuleRow(rule)
-                            }
-                        }
-                        .padding(.bottom, 4)
-                    }
+                // Segmented Custom / Lists picker, Apple-style.
+                Picker("", selection: $selectedTab) {
+                    Text(model.copy.text(.dnsTabCustom)).tag(0)
+                    Text(model.copy.text(.dnsTabLists)).tag(1)
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .pickerStyle(.segmented)
 
-                Text(model.copy.text(.dnsRulesHint))
+                if selectedTab == 0 { customTab } else { listsTab }
+
+                Text(model.copy.text(selectedTab == 0 ? .dnsRulesHint : .dnsListInfoBody))
                     .font(.openSans(11))
                     .foregroundStyle(Color.octGray40)
                     .padding(.horizontal, 16)
@@ -2431,7 +2572,297 @@ struct LocalDNSRulesView: View {
             AddDNSRuleView(editing: rule)
                 .presentationDetents([.medium])
         }
+        .sheet(isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })) {
+            if let entries = pendingImport {
+                DNSImportPreviewView(entries: entries) { replace in
+                    model.applyImportedRules(entries, replace: replace)
+                    pendingImport = nil
+                }
+                .presentationDetents([.medium])
+            }
+        }
+        .fileImporter(isPresented: $showRulesImporter, allowedContentTypes: [.text, .plainText, .data]) { result in
+            importRulesFile(result)
+        }
+        .alert(model.copy.text(.dnsExportSaved), isPresented: $showExportSuccess) {
+            Button(model.copy.text(.ok), role: .cancel) { }
+        }
     }
+
+    // MARK: Custom tab (own rules + file import/export)
+
+    private var customTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(model.copy.text(.dnsLocalRulesTitle))
+                    .font(.openSans(13, weight: .semibold))
+                    .foregroundStyle(Color.octGray60)
+                InfoDotButton(isVisible: $showRulesInfo)
+                Spacer()
+                Text("\(model.settings.dnsRules.count) \(model.copy.text(.dnsRulesCount))")
+                    .font(.openSans(11, weight: .semibold))
+                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                // Import from file (hosts format).
+                Button {
+                    showRulesImporter = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.sec50)
+                        .frame(width: 26, height: 26)
+                        .background(Color.sec50.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.dnsImportFromFile))
+                // Export to hosts file via share sheet.
+                Button {
+                    exportRules()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color.sec50)
+                        .frame(width: 26, height: 26)
+                        .background(model.settings.dnsRules.isEmpty ? Color.octGray05 : Color.sec50.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.settings.dnsRules.isEmpty)
+                .accessibilityLabel(model.copy.text(.dnsExportFile))
+                Button {
+                    showAddRule = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(Color.sec50, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.dnsAddRule))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            if showRulesInfo {
+                InfoBubble(title: model.copy.text(.dnsLocalRulesInfoTitle),
+                           message: model.copy.text(.dnsLocalRulesInfoBody))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
+
+            if let importMessage {
+                Text(importMessage)
+                    .font(.openSans(11))
+                    .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+
+            if model.settings.dnsRules.isEmpty {
+                Text(model.copy.text(.dnsRulesEmpty))
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(model.settings.dnsRules.enumerated()), id: \.element.id) { index, rule in
+                        if index > 0 {
+                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        }
+                        dnsRuleRow(rule)
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+        }
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: Lists tab (curated open-source blocklists, AdAway-style)
+
+    private var listsTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(model.copy.text(.dnsListsTitle))
+                    .font(.openSans(13, weight: .semibold))
+                    .foregroundStyle(Color.octGray60)
+                Spacer()
+                if !model.subscribedLists.isEmpty {
+                    Text(String(format: model.copy.text(.dnsListsActiveCount), model.subscribedLists.count, model.curatedDomainCount))
+                        .font(.openSans(11, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.85, green: 0.45, blue: 0.1))
+                    Button {
+                        model.refreshAllSubscribedLists()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.sec50)
+                            .frame(width: 26, height: 26)
+                            .background(Color.sec50.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.dnsListsRefreshAll))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Text(model.copy.text(.dnsListsSubtitle))
+                .font(.openSans(11))
+                .foregroundStyle(Color.octGray40)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(DNSListCatalog.all.enumerated()), id: \.element.id) { index, source in
+                    if index > 0 {
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    }
+                    curatedListRow(source)
+                }
+            }
+            .padding(.bottom, 6)
+        }
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// One curated source row: subscribe state, domain count, category chip.
+    private func curatedListRow(_ source: DNSListSource) -> some View {
+        let subscribed = model.isSubscribed(source)
+        let state = model.listRefreshState[source.id]
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(source.name)
+                        .font(.openSans(14, weight: .medium))
+                        .foregroundStyle(Color.octGray100)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(categoryLabel(source.category))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(categoryColor(source.category))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(categoryColor(source.category).opacity(0.12), in: Capsule())
+                }
+                if subscribed, let sub = model.subscribedLists.first(where: { $0.sourceID == source.id }) {
+                    Text(String(format: model.copy.text(.dnsListsDomainsBlocked), sub.domains.count))
+                        .font(.openSans(11))
+                        .foregroundStyle(Color.octGray40)
+                } else {
+                    Text("~\(source.entryCount)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.octGray40)
+                }
+                // Status line while loading / after failure.
+                if state == "loading" {
+                    Text(model.copy.text(.dnsListDownloading))
+                        .font(.openSans(10, weight: .semibold))
+                        .foregroundStyle(Color.prim50)
+                } else if state == "failed" {
+                    Text(model.copy.text(.dnsListFailed))
+                        .font(.openSans(10, weight: .semibold))
+                        .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                } else if state == "empty" {
+                    Text(model.copy.text(.dnsListEmpty))
+                        .font(.openSans(10))
+                        .foregroundStyle(Color.octGray40)
+                }
+            }
+            Spacer()
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if state == "failed" || state == "empty" {
+                        model.refreshList(source)
+                    } else {
+                        model.toggleListSubscription(source)
+                    }
+                }
+            } label: {
+                Text(state == "loading"
+                     ? "…"
+                     : (subscribed ? model.copy.text(.dnsListSubscribed) : "+"))
+                    .font(.openSans(12, weight: .bold))
+                    .foregroundStyle(subscribed ? Color.prim50 : Color.sec50)
+                    .frame(minWidth: 46)
+                    .padding(.vertical, 6)
+                    .background((subscribed ? Color.prim50 : Color.sec50).opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(state == "loading")
+            .accessibilityLabel(source.name)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: File import/export (Custom tab)
+
+    /// Reads a picked hosts file, parses rules, opens the merge/replace sheet.
+    private func importRulesFile(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure:
+            importMessage = model.copy.text(.dnsImportReadFailed)
+        case .success(let url):
+            let secured = url.startAccessingSecurityScopedResource()
+            defer { if secured { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                // A hosts file beyond 8MB is not a filter list someone would
+                // hand-import; refuse instead of churning the parser.
+                guard data.count <= 8_388_608 else {
+                    importMessage = model.copy.text(.dnsImportReadFailed)
+                    return
+                }
+                let text = String(decoding: data, as: UTF8.self)
+                let entries = DNSListStore.parseHostsEntries(text)
+                guard !entries.isEmpty else {
+                    importMessage = model.copy.text(.dnsImportEmptyFile)
+                    return
+                }
+                importMessage = nil
+                pendingImport = entries
+            } catch {
+                importMessage = model.copy.text(.dnsImportReadFailed)
+            }
+        }
+    }
+
+    /// Writes the current custom rules to a temp hosts file and share-sheets it.
+    private func exportRules() {
+        let text = DNSListStore.hostsText(for: model.settings.dnsRules)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ssh2vpn-dns-filter-\(Int(Date().timeIntervalSince1970)).hosts")
+        do {
+            try text.data(using: .utf8)?.write(to: url)
+            showExportSuccess = true
+            // Share sheet over whatever is currently presented (SwiftUI's
+            // hosted VC is usually the topmost already).
+            let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            activity.popoverPresentationController?.sourceView = nil
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            var top: UIViewController?
+            for scene in scenes {
+                guard let root = scene.keyWindow?.rootViewController else { continue }
+                var vc: UIViewController = root
+                while let presented = vc.presentedViewController { vc = presented }
+                if top == nil { top = vc }
+            }
+            if let top {
+                if let pop = activity.popoverPresentationController, top.view != nil {
+                    pop.sourceView = top.view
+                    pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+                }
+                top.present(activity, animated: true)
+            }
+        } catch {
+            importMessage = model.copy.text(.dnsExportFailed)
+        }
+    }
+
+    // MARK: Rule row (Custom tab, unchanged visuals)
 
     private func dnsRuleRow(_ rule: DNSBlocklistEntry) -> some View {
         HStack(spacing: 12) {
@@ -2488,6 +2919,105 @@ struct LocalDNSRulesView: View {
             .accessibilityLabel(model.copy.text(.dnsRuleDelete))
         }
         .padding(14)
+    }
+
+    // MARK: Category chips
+
+    private func categoryLabel(_ category: DNSListSource.Category) -> String {
+        switch category {
+        case .general: return model.copy.text(.dnsListCategoryGeneral)
+        case .ads: return model.copy.text(.dnsListCategoryAds)
+        case .privacy: return model.copy.text(.dnsListCategoryPrivacy)
+        case .malware: return model.copy.text(.dnsListCategoryMalware)
+        case .regional: return model.copy.text(.dnsListCategoryRegional)
+        }
+    }
+
+    private func categoryColor(_ category: DNSListSource.Category) -> Color {
+        switch category {
+        case .general: return Color.octGray40
+        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .malware: return Color(red: 1.0, green: 0.25, blue: 0.35)
+        case .regional: return Color(red: 0.1, green: 0.55, blue: 0.55)
+        }
+    }
+}
+
+/// Merge/Replace choice sheet shown after a hosts-file import.
+struct DNSImportPreviewView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let entries: [DNSBlocklistEntry]
+    /// True = replace all existing rules, false = merge. Cancel applies nothing.
+    let apply: (_ replace: Bool) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsImportParsedTitle))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(Color.octGray100)
+                    Text(String(format: model.copy.text(.dnsImportSaved), entries.count))
+                        .font(.openSans(13))
+                        .foregroundStyle(Color.octGray60)
+                    // First few domains as a preview, monospaced.
+                    Text(entries.prefix(5).map { entryLine($0) }.joined(separator: "\n")
+                         + (entries.count > 5 ? "\n…" : ""))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.octGray40)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Spacer()
+
+                Button {
+                    apply(false)
+                    dismiss()
+                } label: {
+                    Text(model.copy.text(.dnsImportMerge))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.sec50, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    apply(true)
+                    dismiss()
+                } label: {
+                    Text(model.copy.text(.dnsImportReplace))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color(red: 1.0, green: 0.25, blue: 0.35).opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+            .adaptiveCenterColumn()
+            .background(Color.appBg)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(model.copy.text(.cancel)) { dismiss() }
+                        .foregroundStyle(Color.sec50)
+                }
+            }
+        }
+    }
+
+    private func entryLine(_ e: DNSBlocklistEntry) -> String {
+        switch e.kind {
+        case .block: return "0.0.0.0 \(e.domain)"
+        case .override: return "\(e.ip) \(e.domain)"
+        }
     }
 }
 

@@ -3,6 +3,7 @@ import Network
 @preconcurrency import NetworkExtension
 import VPNCore
 import os
+import AppTrackingTransparency
 
 @main
 struct SSH2VPNApp: App {
@@ -92,28 +93,8 @@ final class AppModel: ObservableObject {
         get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
         set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
     }
-    /// When the $6 offer expires for good (honest urgency: the countdown on
-    /// the paywall is REAL — hit zero and the discount is gone forever).
-    private static let paywallDiscountDeadlineKey = "ssh2vpn.paywallDiscountDeadline.v1"
-    static var paywallDiscountDeadline: Date? {
-        get { UserDefaults.standard.object(forKey: paywallDiscountDeadlineKey) as? Date }
-        set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeadlineKey) }
-    }
-    /// Instance accessor for the view layer (the deadline is device-global).
-    var discountDeadline: Date? {
-        get { Self.paywallDiscountDeadline }
-        set { Self.paywallDiscountDeadline = newValue }
-    }
     @Published var paywallStage = PaywallStage.full
     @Published var isPaywallPresented = false
-
-    /// Marks the $6 offer as expired: declined forever, any later paywall
-    /// shows only the full price.
-    func expireDiscountOffer() {
-        Self.paywallDiscountDeclined = true
-        Self.paywallDiscountDeadline = nil
-        if paywallStage == .discount { paywallStage = .full }
-    }
 
     func showPaywall() {
         guard !isUnlimited else { return }
@@ -127,20 +108,16 @@ final class AppModel: ObservableObject {
     }
 
     /// Dismisses the paywall (user closed it). Full price -> escalate to the
-    /// $6 discount offer unless it was already declined once; discount -> mark
-    /// declined forever, never offer it again.
+    /// $6 discount offer unless it was already declined once; discount ->
+    /// mark declined forever, never offer it again. No timers, no locks —
+    /// the close always works immediately.
     func dismissPaywall() {
         if paywallStage == .full, !Self.paywallDiscountDeclined {
             paywallStage = .discount
-            // Start the 10-minute one-time offer window on first escalation.
-            if Self.paywallDiscountDeadline == nil {
-                Self.paywallDiscountDeadline = Date().addingTimeInterval(600)
-            }
             return
         }
         if paywallStage == .discount {
             Self.paywallDiscountDeclined = true
-            Self.paywallDiscountDeadline = nil
         }
         isPaywallPresented = false
     }
@@ -197,6 +174,12 @@ final class AppModel: ObservableObject {
     @Published var serverLatitude: Double = 50.1109
     @Published var serverLongitude: Double = 8.6821
     @Published var isResolvingMetadata: Bool = false
+    /// True only when the selected server has a real map position. External
+    /// GeoIP was removed (privacy: no IP is ever sent to a geo service), so
+    /// remote servers show host/ping with no map dot; only local-network
+    /// servers keep their LAN badge. The map never implies a location we
+    /// did not measure.
+    @Published var hasServerGeo = false
     /// GeoIP runs once per host (on server-list updates), never on every
     /// connect/reconnect — ping stays live, geo does not spam.
     private var lastGeoHost: String? = nil
@@ -482,6 +465,7 @@ final class AppModel: ObservableObject {
         serverLatitude = 50.1109
         serverLongitude = 8.6821
         serverPingMs = nil
+        hasServerGeo = false
     }
 
     init() {
@@ -872,31 +856,16 @@ final class AppModel: ObservableObject {
 
     var needsLanguageSelection: Bool { selectedLanguage == nil }
 
-    /// Resolves the device-language + IP-country hints for the first-launch
-    /// language overlay. 10s hard cap: the overlay shows a loader meanwhile,
-    /// then renders whatever is known (device language alone is enough —
-    /// the IP hint is a bonus).
+    /// Resolves the device-language + region hints for the first-launch
+    /// language overlay. Fully LOCAL: device locale + region, no network
+    /// (privacy: the device IP is never sent to any geo service).
     func resolveLanguageHints() {
         guard userCountryCode == nil else { return }
-        languageHintsResolving = true
-        Task { @MainActor [weak self] in
-            let country = await withTaskGroup(of: String?.self) { group in
-                group.addTask { await ServerMetadataResolver.resolveOwnCountry() }
-                group.addTask {
-                    try? await Task.sleep(for: .seconds(10))
-                    return nil
-                }
-                let first = await group.next() ?? nil
-                group.cancelAll()
-                return first
-            }
-            guard let self else { return }
-            if let country {
-                self.userCountryCode = country
-                ConsoleLogStore.shared.log(level: .info, tag: "LANG", message: "language hint: IP country \(country)")
-            }
-            self.languageHintsResolving = false
+        if let region = Locale.current.region?.identifier {
+            userCountryCode = region
+            ConsoleLogStore.shared.log(level: .info, tag: "LANG", message: "language hint: device region \(region)")
         }
+        languageHintsResolving = false
     }
 
     func choose(_ language: AppLanguage) {
@@ -905,16 +874,21 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .system, tag: "LANG", message: "Interface language updated -> \(language.title)")
     }
 
-    /// GeoIP only (no TCP ping): every port-22 SYN counts against the VPS
-    /// per-source rate limiter (~6/30s), so SYNs are spent ONLY on real SSH
-    /// connects plus the slow ping loop. Ping freshness comes from the
-    /// load-time sweep, the minutely selected-only tick and the list view.
+    /// Local metadata only (no TCP ping here, no GeoIP anywhere): every
+    /// port-22 SYN counts against the VPS per-source rate limiter (~6/30s),
+    /// so SYNs are spent ONLY on real SSH connects plus the slow ping loop.
+    /// Ping freshness comes from the load-time sweep, the minutely
+    /// selected-only tick and the list view. Country/flag come from the
+    /// LOCAL resolver only (LAN badge for private addresses); for remote
+    /// servers the UI shows host + ping with no map dot — we never query
+    /// an external geo service (privacy) and never guess a location.
     func refreshServerMetadata() {
         guard !profile.host.isEmpty else {
             serverCountry = ""
             serverFlag = "🌐"
             serverCity = ""
             serverPingMs = nil
+            hasServerGeo = false
             return
         }
 
@@ -925,8 +899,9 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .info, tag: "PROBE", message: "Analyzing remote server \(currentHost):\(currentPort)...")
 
         Task {
-            // GeoIP only for a host we haven't located yet (failures are not
-            // cached, so an offline lookup simply retries next time).
+            // Local only: LAN badge for private addresses, nil otherwise
+            // (no external GeoIP — failures are not cached, an offline
+            // lookup simply retries next time).
             let geo: ServerGeoInfo? = (lastGeoHost == currentHost) ? nil : await ServerMetadataResolver.resolveGeo(host: currentHost)
 
             await MainActor.run {
@@ -939,18 +914,29 @@ final class AppModel: ObservableObject {
                     self.serverCity = geo.city
                     self.serverLatitude = geo.lat
                     self.serverLongitude = geo.lon
+                    // Only a LAN entry carries a (badge) position; remote
+                    // servers have no measured coordinates → no map dot.
+                    self.hasServerGeo = ServerMetadataResolver.isLocalOrPrivate(currentHost)
                     if self.serverName.isEmpty || self.serverName == "My VPS" || self.serverName == currentHost {
                         self.serverName = "\(geo.flag) \(geo.country)"
                     }
                     ConsoleLogStore.shared.log(level: .success, tag: "GEOIP", message: "GeoIP located: \(geo.flag) \(geo.country) (\(geo.city)) [\(geo.lat), \(geo.lon)]")
+                } else {
+                    // Remote server, no external lookup: show the hostname
+                    // honestly instead of a guessed country.
+                    self.serverCountry = ""
+                    self.serverFlag = "🌐"
+                    self.serverCity = ""
+                    self.hasServerGeo = false
                 }
                 self.isResolvingMetadata = false
             }
         }
     }
 
-    /// Fetch GeoIP + ping for all servers in the list (runs in background,
+    /// Fetch ping for all servers in the list (runs in background,
     /// populates per-server caches). Called on every server-list load.
+    /// Geo is local-only (LAN badge); remote servers get ping badges.
     func refreshAllServerMetadata() {
         let targets = servers
         guard !targets.isEmpty else { return }
@@ -960,9 +946,9 @@ final class AppModel: ObservableObject {
             await withTaskGroup(of: (String, ServerGeoInfo?, Int?).self) { group in
                 for server in targets {
                     group.addTask {
-                        // Ping FIRST (user-visible badge); GeoIP lags behind.
-                        // Previously geo (up to 6s) blocked the ping.
+                        // Ping FIRST (user-visible badge); no GeoIP lag.
                         let ping = await ServerMetadataResolver.measurePing(host: server.host, port: server.port)
+                        // Local only — never leaves the device.
                         let geo = await ServerMetadataResolver.resolveGeo(host: server.host)
                         return (server.id, geo, ping)
                     }
@@ -1338,7 +1324,7 @@ final class AppModel: ObservableObject {
         }
         effectiveProfile.dnsServers = dns
         // Local rules travel with the profile to the extension (JSON).
-        effectiveProfile.dnsRules = DNSBlocklistEntry.encodeList(settings.dnsRules) ?? "[]"
+        effectiveProfile.dnsRules = DNSBlocklistEntry.encodeList(effectiveDNSRules()) ?? "[]"
         // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
         let serverIP = cachedServerIPv4
 
@@ -1346,7 +1332,7 @@ final class AppModel: ObservableObject {
         // (extension has a 10s connect timeout), and every extra port-22 SYN
         // feeds the VPS per-source rate limiter. One tap = one SSH SYN.
         ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-            message: "tunnel will use DNS: \(dns.isEmpty ? "8.8.8.8 (default)" : dns.joined(separator: ", "))\(settings.dnsRules.isEmpty ? "" : " + \(settings.dnsRules.count) local rule(s)")")
+            message: "tunnel will use DNS: \(dns.isEmpty ? "8.8.8.8 (default)" : dns.joined(separator: ", "))\(effectiveProfile.dnsRules.isEmpty ? "" : " + \(settings.dnsRules.count) custom rule(s)\(curatedDomainCount > 0 ? " + \(curatedDomainCount) curated domain(s)" : "")")")
         self.vpn.start(profile: effectiveProfile, serverIP: serverIP,
                        onDemandEnabled: settings.connectOnDemand) { [weak self] error in
             guard let self = self else { return }
@@ -1552,7 +1538,137 @@ final class AppModel: ObservableObject {
     @MainActor
     private func pushDNSRulesLive() {
         guard connection == .connected else { return }
-        VPNExtensionAPI.pushDNSRules(settings.dnsRules, to: vpn.diagnosticManager())
+        VPNExtensionAPI.pushDNSRules(effectiveDNSRules(), to: vpn.diagnosticManager())
+    }
+
+    // MARK: - Curated hosts lists (AdAway-style subscriptions)
+
+    /// Persisted curated-list subscriptions (downloads + parse results).
+    @Published var subscribedLists: [SubscribedDNSList] = DNSListStore.load() {
+        didSet { DNSListStore.save(subscribedLists) }
+    }
+    /// Per-source download state for the UI (spinner / error chips).
+    @Published var listRefreshState: [String: String] = [:]
+
+    /// The full ruleset the tunnel should enforce: the user's own rules PLUS
+    /// every curated-list domain as a subtree block. Custom rules keep their
+    /// exact/subtree scope; curated domains always block subdomains too.
+    func effectiveDNSRules() -> [DNSBlocklistEntry] {
+        var rules = settings.dnsRules
+        let curated = DNSListStore.mergedDomains(subscribedLists)
+        guard !curated.isEmpty else { return rules }
+        let existing = Set(rules.map(\.domain))
+        rules.append(contentsOf: curated.filter { !existing.contains($0) }
+            .map { DNSBlocklistEntry(domain: $0, kind: .block, ip: "", includeSubdomains: true) })
+        return rules
+    }
+
+    /// Total domains blocked across subscribed curated lists (deduped).
+    var curatedDomainCount: Int {
+        DNSListStore.mergedDomains(subscribedLists).count
+    }
+
+    /// True when `source` is currently subscribed.
+    func isSubscribed(_ source: DNSListSource) -> Bool {
+        subscribedLists.contains { $0.sourceID == source.id }
+    }
+
+    /// Subscribes (downloads the list for the first time) or unsubscribes.
+    /// Any failure surfaces a short localized error chip, never an alert.
+    func toggleListSubscription(_ source: DNSListSource) {
+        if isSubscribed(source) {
+            subscribedLists.removeAll { $0.sourceID == source.id }
+            listRefreshState[source.id] = nil
+            ConsoleLogStore.shared.log(level: .info, tag: "DNSLIST",
+                message: "unsubscribed from curated list \(source.name) (\(source.id))")
+            pushDNSRulesLive()
+            return
+        }
+        refreshList(source)
+    }
+
+    /// Downloads/updates one curated list. On success the parsed domains
+    /// replace the previous copy for that source (idempotent refresh).
+    func refreshList(_ source: DNSListSource) {
+        guard listRefreshState[source.id] != "loading" else { return }
+        listRefreshState[source.id] = "loading"
+        ConsoleLogStore.shared.log(level: .info, tag: "DNSLIST", message: "fetching curated list \(source.name): \(source.url)")
+        Task { @MainActor in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: URL(string: source.url)!)
+                let text = String(data: data, encoding: .utf8)
+                    ?? String(decoding: data, as: UTF8.self)
+                let domains = DNSListStore.parseHosts(text)
+                guard !domains.isEmpty else {
+                    self.listRefreshState[source.id] = "empty"
+                    ConsoleLogStore.shared.log(level: .warning, tag: "DNSLIST",
+                        message: "curated list \(source.name) parsed 0 domains — kept as-is")
+                    return
+                }
+                // Replace-or-append the source's entry.
+                var lists = self.subscribedLists.filter { $0.sourceID != source.id }
+                lists.append(SubscribedDNSList(sourceID: source.id, updatedAt: Date(), domains: domains))
+                self.subscribedLists = lists
+                self.listRefreshState[source.id] = nil
+                ConsoleLogStore.shared.log(level: .success, tag: "DNSLIST",
+                    message: "curated list \(source.name) loaded: \(domains.count) domains (total curated \(self.curatedDomainCount))")
+                self.pushDNSRulesLive()
+            } catch {
+                self.listRefreshState[source.id] = "failed"
+                ConsoleLogStore.shared.log(level: .error, tag: "DNSLIST",
+                    message: "curated list \(source.name) fetch failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Refreshes every subscribed list (manual pull or launch check).
+    func refreshAllSubscribedLists() {
+        let ids = DNSListStore.subscribedIDs(subscribedLists)
+        for source in DNSListCatalog.all where ids.contains(source.id) {
+            refreshList(source)
+        }
+    }
+
+    /// Localized, actionable message for a failed private-key import.
+    func keyImportErrorMessage(_ issue: SSHPrivateKeyImporter.ImportError) -> String {
+        switch issue {
+        case .empty: return copy.text(.keyImportEmpty)
+        case .encryptedKeyUnsupported: return copy.text(.keyImportEncrypted)
+        case .unsupportedAlgorithm, .unsupportedFormat: return copy.text(.keyImportUnsupported)
+        case .malformedKey: return copy.text(.keyImportMalformed)
+        }
+    }
+
+    /// Localized message for a failed pinned-host-key entry validation.
+    /// Title prefix + reason keeps the alert self-explanatory in every locale.
+    func hostKeyErrorMessage(_ reason: HostKeyInvalidReason) -> String {
+        let title = copy.text(.hostKeyErrTitle)
+        let body: String
+        switch reason {
+        case .multiLine: body = copy.text(.hostKeyErrMultiLine)
+        case .invisibleScalars: body = copy.text(.hostKeyErrInvisible)
+        case .expectedFormat: body = copy.text(.hostKeyErrExpectedFormat)
+        case .unknownType(let t): body = copy.text(.hostKeyErrUnknownType, substitute: t)
+        case .badBase64: body = copy.text(.hostKeyErrBadBase64)
+        }
+        return "\(title): \(body)"
+    }
+
+    /// Applies a hosts-file import: merge (dedupe by domain, imported wins on
+    /// conflict) or replace-all. Custom curated-list domains stay separate —
+    /// only the user's own rules live in settings.dnsRules.
+    func applyImportedRules(_ entries: [DNSBlocklistEntry], replace: Bool) {
+        guard !entries.isEmpty else { return }
+        if replace {
+            settings.dnsRules = entries
+        } else {
+            var byDomain = Dictionary(settings.dnsRules.map { ($0.domain, $0) }, uniquingKeysWith: { a, _ in a })
+            for e in entries { byDomain[e.domain] = e }
+            settings.dnsRules = byDomain.values.map { $0 }
+        }
+        ConsoleLogStore.shared.log(level: .success, tag: "DNSFILTER",
+            message: "hosts import \(replace ? "replaced" : "merged") \(entries.count) rule(s) — now \(settings.dnsRules.count) custom rule(s)")
+        pushDNSRulesLive()
     }
 
     // MARK: - Live tunnel stats + usage budget
@@ -1561,6 +1677,13 @@ final class AppModel: ObservableObject {
     var remainingQuotaSeconds: TimeInterval { quota.remaining(now: Date()) }
 
     var isUnlimited: Bool { quota.isUnlimited }
+
+    /// StoreKit-localized prices for the paywall buttons. Falls back to the
+    /// US round dollars only while the products haven't loaded yet (sandbox
+    /// hiccup) — the UI never invents a price: buy() refuses to run without
+    /// the real product, so what the button shows is what Apple charges.
+    var fullPriceString: String { store.product?.displayPrice ?? "$10" }
+    var discountPriceString: String { store.discountProduct?.displayPrice ?? "$6" }
 
     /// Normalized [0...1] fraction remaining (for the ring/progress).
     var quotaFraction: Double {
@@ -1584,27 +1707,19 @@ final class AppModel: ObservableObject {
         adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying && !promoFallbackPlaying
     }
 
-    /// Called by PromoFallbackView when its 30 seconds elapse or the user
-    /// dismisses it — releases the ad button back to normal.
+    /// Called by PromoFallbackView when the user closes it (via the X or
+    /// the paywall CTA) — releases the ad button back to normal. The promo
+    /// grants NO free-time credit: rewards come only from a completed real
+    /// rewarded ad (creditAdView, called from the .earned path of watchAd).
     func promoFallbackFinished() {
         promoFallbackPlaying = false
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo fallback finished")
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo fallback finished (no reward)")
     }
 
-    /// The user watched the full 30s of our own promo — the same real
-    /// attention a rewarded ad buys, so it earns the same +3h. Closes the
-    /// promo, credits the ledger via the shared path (bank caps, cooldown,
-    /// persistence all apply), and re-checks the connection gate.
-    func promoFallbackWatchedToEarn() {
-        promoFallbackPlaying = false
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "own promo watched to the end — crediting +3h")
-        creditAdView()
-    }
-
-    /// Shared reward-credit path for both real rewarded ads and the own-
-    /// promo fallback: writes the ledger, reloads the UI state, logs the
-    /// outcome. No-ops safely when the bank is full or the user is
-    /// unlimited (creditingAdView == nil).
+    /// Reward-credit path for a COMPLETED real rewarded ad only: writes
+    /// the ledger, reloads the UI state, logs the outcome. No-ops safely
+    /// when the bank is full or the user is unlimited
+    /// (creditingAdView == nil). The own-promo fallback never calls this.
     private func creditAdView() {
         let now = Date()
         var ledger = QuotaLedgerStore().load().withInitialGrant(now: now)
@@ -1618,24 +1733,24 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Rewarded ad via the active provider (AdMob production unit; MAX
-    /// wired but asleep until its SDK key lands).
+    /// Rewarded ad via AdMob (production unit) — the only ad SDK.
     ///
-    /// Geo rule: the user's real country is resolved through the SAME geo
-    /// endpoints the server list uses, but ONLY while the tunnel is down
+    /// Geo rule: ads are offered ONLY while the tunnel is down
     /// (adsAvailable gate) — through the tunnel the egress country would
-    /// be the server's, skewing the ad network's country targeting.
+    /// be the server's, skewing the ad network's country targeting. No
+    /// own geo lookup is performed: the ad SDK does its own targeting.
     func watchAd() {
         guard canWatchAd else { return }
         adPlaying = true
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (\(AdsProvider.active == .admob ? "AdMob" : "AppLovin MAX"))")
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded ad requested (AdMob)")
         Task { @MainActor [weak self] in
-            // Resolve the user's real country through the un-tunneled
-            // interface BEFORE loading — networks serve country-matched
-            // demand.
-            if let code = await ServerMetadataResolver.resolveOwnCountry() {
-                self?.userCountryCode = code
-                ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "ad geo targeting: user country \(code) (tunnel down)")
+            // ATT first (once ever — the system shows it only while
+            // undetermined): the privacy policy promises this prompt, and
+            // the ad SDK uses the answer for personalized ads. Either
+            // way the rewarded ad still plays (non-personalized when
+            // denied), so the tap is never wasted.
+            if ATTrackingManager.trackingAuthorizationStatus == .notDetermined {
+                _ = await ATTrackingManager.requestTrackingAuthorization()
             }
             let outcome = await RewardedAdRouter.presentRewarded()
             guard let self else { return }
@@ -1644,11 +1759,11 @@ final class AppModel: ObservableObject {
             case .earned:
                 break
             case .noFill:
-                // No ad from the networks: instead of a dead-end notice,
-                // play our own 30s animated promo (paywall-styled, tap
-                // opens the real paywall). The button stays busy for the
-                // promo's duration, then re-enables normally.
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate) — showing own promo fallback")
+                // No ad from the networks: show our own honest promo
+                // (instantly closable, grants NOTHING — free-time credit
+                // comes only from a completed real ad). The button stays
+                // busy while the promo is on screen, then re-enables.
+                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (no fill / consent gate) — showing own promo (no reward)")
                 self.promoFallbackPlaying = true
             case .dismissedEarly:
                 ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "reward not earned (dismissed early)")

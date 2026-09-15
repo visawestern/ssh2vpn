@@ -39,11 +39,11 @@ WHY SSH2VPN
 • A hacker-style console for those who like to see the wires.
 
 FREE TO START
-Every install gets 3 hours of tunnel time. A short rewarded ad adds 3 more hours (up to 3 banked). No account required.
+Every install includes 1 free hour of tunnel time. A short rewarded ad adds 3 more hours (once per hour, up to 12 in total). No account required.
 
 REQUIREMENTS
 • Your own VPS or any server with SSH access — a $3–5/month droplet is enough.
-• iOS 16 or later.
+• iOS 18 or later.
 
 PRIVACY
 SSH2VPN operates no servers and never sees your traffic. Credentials and keys stay on your device; the tunnel runs strictly between you and your server. See the in-app privacy policy.
@@ -83,11 +83,11 @@ SSH2VPN — системный VPN-клиент, который гоняет т�
 • Консоль в стиле хакера — для тех, кто любит видеть «провода».
 
 БЕСПЛАТНО ДЛЯ СТАРТА
-Каждая установка получает 3 часа туннеля. Короткое рекламное видео добавляет ещё 3 часа (до 3 в запасе). Регистрация не нужна.
+Каждая установка включает 1 бесплатный час туннеля. Короткое рекламное видео добавляет ещё 3 часа (не чаще раза в час, всего до 12). Регистрация не нужна.
 
 ТРЕБОВАНИЯ
 • Свой VPS или любой сервер с SSH-доступом — хватит дроплета за $3–5 в месяц.
-• iOS 16 или новее.
+• iOS 18 или новее.
 
 ПРИВАТНОСТЬ
 У SSH2VPN нет своих серверов, и он не видит ваш трафик. Пароли и ключи остаются на устройстве; туннель работает строго между вами и вашим сервером. Подробности — в политике конфиденциальности внутри приложения.
@@ -127,11 +127,11 @@ POR QUÉ SSH2VPN
 • Una consola estilo hacker para quien le gusta ver los cables.
 
 EMPIEZA GRATIS
-Cada instalación recibe 3 horas de túnel. Un anuncio corto suma 3 horas más (hasta 3 acumuladas). Sin registro.
+Cada instalación incluye 1 hora gratis de túnel. Un anuncio corto suma 3 horas más (una vez por hora, hasta 12 en total). Sin registro.
 
 REQUISITOS
 • Tu propio VPS o cualquier servidor con acceso SSH — basta un droplet de $3–5/mes.
-• iOS 16 o superior.
+• iOS 18 o superior.
 
 PRIVACIDAD
 SSH2VPN no opera servidores y nunca ve tu tráfico. Credenciales y claves permanecen en tu dispositivo; el túnel corre estrictamente entre tú y tu servidor. Consulta la política de privacidad en la app.
@@ -171,11 +171,11 @@ WARUM SSH2VPN
 • Eine Hacker-Konsole für alle, die die Kabel sehen wollen.
 
 KOSTENLOS STARTEN
-Jede Installation erhält 3 Stunden Tunnelzeit. Eine kurze Rewarded-Anzeige bringt 3 weitere Stunden (bis zu 3 angespart). Kein Konto nötig.
+Jede Installation enthält 1 kostenlose Stunde Tunnelzeit. Eine kurze Rewarded-Anzeige bringt 3 weitere Stunden (einmal pro Stunde, bis zu 12 insgesamt). Kein Konto nötig.
 
 VORAUSSETZUNGEN
 • Ein eigener VPS oder jeder Server mit SSH-Zugang — ein 3–5 $/Monat-Droplet reicht.
-• iOS 16 oder neuer.
+• iOS 18 oder neuer.
 
 DATENSCHUTZ
 SSH2VPN betreibt keine Server und sieht deinen Traffic nie. Zugangsdaten und Schlüssel bleiben auf deinem Gerät; der Tunnel läuft strikt nur zwischen dir und deinem Server. Details in der Datenschutzerklärung in der App.
@@ -215,11 +215,11 @@ POURQUOI SSH2VPN
 • Une console façon hacker pour ceux qui aiment voir les câbles.
 
 GRATUIT POUR COMMENCER
-Chaque installation offre 3 heures de tunnel. Une courte pub récompensée ajoute 3 heures (jusqu'à 3 en réserve). Sans compte.
+Chaque installation inclut 1 heure gratuite de tunnel. Une courte pub récompensée ajoute 3 heures (une fois par heure, jusqu'à 12 au total). Sans compte.
 
 CONFIGURATION REQUISE
 • Ton propre VPS ou n'importe quel serveur en SSH — un droplet à 3–5 $/mois suffit.
-• iOS 16 ou ultérieur.
+• iOS 18 ou ultérieur.
 
 CONFIDENTIALITÉ
 SSH2VPN n'exploite aucun serveur et ne voit jamais ton trafic. Identifiants et clés restent sur ton appareil ; le tunnel passe strictement entre toi et ton serveur. Détails dans la politique de confidentialité intégrée.
@@ -259,11 +259,11 @@ PERCHÉ SSH2VPN
 • Una console in stile hacker per chi ama vedere i cavi.
 
 INIZIA GRATIS
-Ogni installazione riceve 3 ore di tunnel. Una breve pubblicità a premio aggiunge 3 ore (fino a 3 in banca). Senza registrazione.
+Ogni installazione include 1 ora gratuita di tunnel. Una breve pubblicità a premio aggiunge 3 ore (una volta all'ora, fino a 12 in totale). Senza registrazione.
 
 REQUISITI
 • Il tuo VPS o qualunque server con accesso SSH — basta un droplet da 3–5 $/mese.
-• iOS 16 o successivo.
+• iOS 18 o successivo.
 
 PRIVACY
 SSH2VPN non gestisce server e non vede mai il tuo traffico. Credenziali e chiavi restano sul dispositivo; il tunnel corre esclusivamente tra te e il tuo server. Dettagli nell'informativa privacy in app.
@@ -303,11 +303,11 @@ POR QUE SSH2VPN
 • Um console estilo hacker para quem gosta de ver os fios.
 
 COMECE GRÁTIS
-Cada instalação ganha 3 horas de túnel. Um anúncio curto adiciona 3 horas (até 3 guardadas). Sem cadastro.
+Cada instalação inclui 1 hora grátis de túnel. Um anúncio curto adiciona mais 3 horas (uma vez por hora, até 12 no total). Sem cadastro.
 
 REQUISITOS
 • Seu próprio VPS ou qualquer servidor com acesso SSH — um droplet de US$ 3–5/mês basta.
-• iOS 16 ou superior.
+• iOS 18 ou superior.
 
 PRIVACIDADE
 O SSH2VPN não opera servidores e nunca vê seu tráfego. Credenciais e chaves ficam no seu dispositivo; o túnel roda estritamente entre você e seu servidor. Detalhes na política de privacidade dentro do app.
@@ -347,11 +347,11 @@ SSH2VPNが選ばれる理由
 • 配線が見えるハッカー風コンソール。
 
 無料でスタート
-インストールごとに3時間のトンネル時間をプレゼント。短いリワード広告で3時間追加（最大3時間貯蔵）。アカウント登録は不要。
+インストールごとに1時間の無料トンネル時間が付きます。短いリワード広告で3時間追加（1時間に1回、合計最大12時間）。アカウント登録は不要。
 
 必要環境
 • 自分のVPS、またはSSHアクセスできる任意のサーバー — 月3〜5ドルのドロップレットで十分。
-• iOS 16以降。
+• iOS 18以降。
 
 プライバシー
 SSH2VPNはサーバーを運用せず、あなたの通信を見ることはありません。認証情報と鍵は端末内に留まり、トンネルはあなたとサーバーの間だけで動作します。詳細はアプリ内のプライバシーポリシーをご覧ください。
@@ -391,11 +391,11 @@ SSH2VPN是一款系统级VPN客户端，通过纯SSH协议，把iPhone的流量�
 • 黑客风控制台，看得见每个细节。
 
 免费开始
-每次安装赠送3小时隧道时长。观看一段简短的激励视频可再加3小时（最多存3小时）。无需注册账号。
+每次安装包含1小时免费隧道时长。观看一段简短的激励视频可再加3小时（每小时一次，总计最多12小时）。无需注册账号。
 
 要求
 • 你自己的VPS或任何可SSH访问的服务器 — 每月3–5美元的小型云主机即可。
-• iOS 16或更高版本。
+• iOS 18或更高版本。
 
 隐私
 SSH2VPN不运营任何服务器，也绝不会看到你的流量。凭据和密钥只保存在你的设备上；隧道只在你和你的服务器之间运行。详见应用内隐私政策。
@@ -435,11 +435,11 @@ SSH2VPN을 선택해야 하는 이유
 • 배선이 보이는 해커 스타일 콘솔.
 
 무료로 시작
-설치마다 3시간 터널 시간 제공. 짧은 보상형 광고로 3시간 추가(최대 3시간 적립). 계정 가입 불필요.
+설치마다 1시간 무료 터널 시간 제공. 짧은 보상형 광고로 3시간 추가(1시간에 1회, 총 최대 12시간). 계정 가입 불필요.
 
 요구 사항
 • 내 VPS 또는 SSH 접근이 가능한 아무 서버 — 월 $3–5 드롭릿이면 충분.
-• iOS 16 이상.
+• iOS 18 이상.
 
 개인정보 보호
 SSH2VPN은 서버를 운영하지 않으며 트래픽을 절대 보지 않습니다. 자격 증명과 키는 기기에만 남고, 터널은 나와 내 서버 사이에서만 작동합니다. 자세한 내용은 앱 내 개인정보처리방침 참고.
@@ -479,11 +479,11 @@ SSH2VPN هو عميل VPN على مستوى النظام يمرر حركة ال�
 • وحدة تحكم بأسلوب الهاكرز لمن يحب رؤية الأسلاك.
 
 ابدأ مجانًا
-كل تثبيت يحصل على 3 ساعات نفق. إعلان مكافأة قصير يضيف 3 ساعات (حتى 3 مخزنة). لا حاجة لإنشاء حساب.
+كل تثبيت يشمل ساعة نفق مجانية واحدة. إعلان مكافأة قصير يضيف 3 ساعات (مرة كل ساعة، حتى 12 في المجموع). لا حاجة لإنشاء حساب.
 
 المتطلبات
 • خادم VPS خاص بك أو أي خادم بوصول SSH — يكفي خادم بـ 3–5 دولارات شهريًا.
-• iOS 16 أو أحدث.
+• iOS 18 أو أحدث.
 
 الخصوصية
 لا يدير SSH2VPN أي خوادم ولا يرى حركتك أبدًا. تبقى بيانات الدخول والمفاتيح على جهازك؛ ويعمل النفق بينك وبين خادمك فقط. التفاصيل في سياسة الخصوصية داخل التطبيق.
@@ -523,11 +523,11 @@ SSH2VPN क्यों
 • हैकर-स्टाइल कंसोल — जो तार देखना पसंद करते हैं उनके लिए।
 
 मुफ़्त शुरुआत
-हर इंस्टॉल को 3 घंटे का टनल-टाइम मिलता है। छोटा रिवॉर्डेड विज्ञापन 3 घंटे और जोड़ता है (अधिकतम 3 जमा)। खाता बनाने की ज़रूरत नहीं।
+हर इंस्टॉल में 1 घंटे का मुफ़्त टनल-टाइम शामिल है। छोटा रिवॉर्डेड विज्ञापन 3 घंटे और जोड़ता है (प्रति घंटे एक बार, कुल अधिकतम 12)। खाता बनाने की ज़रूरत नहीं।
 
 आवश्यकताएँ
 • अपना VPS या SSH-एक्सेस वाला कोई भी सर्वर — $3–5/माह का ड्रॉपलेट काफ़ी है।
-• iOS 16 या नया।
+• iOS 18 या नया।
 
 प्राइवेसी
 SSH2VPN कोई सर्वर नहीं चलाता और आपका ट्रैफ़िक कभी नहीं देखता। क्रेडेंशियल और कीज़ आपके डिवाइस पर रहते हैं; टनल सिर्फ़ आपके और आपके सर्वर के बीच चलता है। विवरण ऐप के भीतर प्राइवेसी पॉलिसी में।
@@ -567,11 +567,11 @@ SSH2VPN เป็นไคลเอนต์ VPN ระดับระบบ ท
 • คอนโซลสไตล์แฮ็กเกอร์ สำหรับคนชอบดูสายไฟ
 
 เริ่มใช้ฟรี
-ทุกการติดตั้งได้เวลาทันเนล 3 ชั่วโมง ดูโฆษณารับรางวัลสั้น ๆ เพิ่มได้อีก 3 ชั่วโมง (สะสมได้สูงสุด 3) ไม่ต้องสมัครบัญชี
+ทุกการติดตั้งมีเวลาทันเนลฟรี 1 ชั่วโมง ดูโฆษณารับรางวัลสั้น ๆ เพิ่มได้อีก 3 ชั่วโมง (ชั่วโมงละครั้ง รวมสูงสุด 12) ไม่ต้องสมัครบัญชี
 
 ความต้องการ
 • VPS ของคุณเอง หรือเซิร์ฟเวอร์ใดก็ได้ที่เข้าถึงด้วย SSH — ดรอปเล็ต $3–5/เดือนก็เพียงพอ
-• iOS 16 ขึ้นไป
+• iOS 18 ขึ้นไป
 
 ความเป็นส่วนตัว
 SSH2VPN ไม่ได้ดำเนินการเซิร์ฟเวอร์ใด ๆ และไม่เห็นทราฟฟิกของคุณ ข้อมูลรับรองและกุญแจอยู่บนอุปกรณ์ของคุณ ทันเนลทำงานเฉพาะระหว่างคุณกับเซิร์ฟเวอร์ของคุณ รายละเอียดดูได้ในนโยบายความเป็นส่วนตัวในแอป
@@ -611,11 +611,11 @@ NEDEN SSH2VPN
 • Kabloları görmekten hoşlananlara hacker tarzı bir konsol.
 
 ÜCRETSİZ BAŞLA
-Her kurulum 3 saat tünel süresi alır. Kısa bir ödüllü reklam 3 saat daha ekler (en fazla 3 biriktirilir). Hesap gerekmez.
+Her kurulum 1 saat ücretsiz tünel süresi içerir. Kısa bir ödüllü reklam 3 saat daha ekler (saatte bir kez, toplamda en fazla 12). Hesap gerekmez.
 
 GEREKLER
 • Kendi VPS'in veya SSH erişimi olan herhangi bir sunucu — ayda 3–5 $'lık bir sunucu yeter.
-• iOS 16 veya sonrası.
+• iOS 18 veya sonrası.
 
 GİZLİLİK
 SSH2VPN hiçbir sunucu işletmez ve trafiğini asla görmez. Kimlik bilgileri ve anahtarlar cihazında kalır; tünel yalnızca seninle sunucun arasında çalışır. Ayrıntılar uygulama içindeki gizlilik politikasında.
@@ -655,11 +655,11 @@ DLACZEGO SSH2VPN
 • Konsola w stylu hackerowskim dla tych, którzy lubią widzieć kable.
 
 ZACZNIJ ZA DARMO
-Każda instalacja dostaje 3 godziny czasu tunelu. Krótki reklamowy klip nagradzany dodaje 3 kolejne godziny (do 3 w zapasie). Bez konta.
+Każda instalacja zawiera 1 godzinę darmowego czasu tunelu. Krótki klip nagradzany dodaje 3 kolejne godziny (raz na godzinę, łącznie do 12). Bez konta.
 
 WYMAGANIA
 • Własny VPS lub dowolny serwer z dostępem SSH — wystarczy droplet za 3–5 $/mies.
-• iOS 16 lub nowszy.
+• iOS 18 lub nowszy.
 
 PRYWATNOŚĆ
 SSH2VPN nie prowadzi żadnych serwerów i nigdy nie widzi Twojego ruchu. Dane logowania i klucze zostają na urządzeniu; tunel działa wyłącznie między Tobą a Twoim serwerem. Szczegóły w polityce prywatności w aplikacji.
@@ -699,11 +699,11 @@ WAAROM SSH2VPN
 • Een console in hackerstijl voor wie de draden wil zien.
 
 GRATIS BEGINNEN
-Elke installatie krijgt 3 uur tunneltijd. Een korte beloonde ad voegt 3 uur toe (max. 3 gespaard). Geen account nodig.
+Elke installatie bevat 1 uur gratis tunneltijd. Een korte beloonde ad voegt 3 uur toe (eenmaal per uur, max. 12 in totaal). Geen account nodig.
 
 VEREISTEN
 • Je eigen VPS of elke server met SSH-toegang — een droplet van $3–5/maand volstaat.
-• iOS 16 of nieuwer.
+• iOS 18 of nieuwer.
 
 PRIVACY
 SSH2VPN beheert geen servers en ziet je verkeer nooit. Inloggegevens en sleutels blijven op je apparaat; de tunnel loopt strikt tussen jou en je server. Details in het privacybeleid in de app.
@@ -743,11 +743,11 @@ VÌ SAO CHỌN SSH2VPN
 • Console kiểu hacker cho ai thích nhìn thấy từng dây dẫn.
 
 DÙNG THỬ MIỄN PHÍ
-Mỗi lượt cài đặt được 3 giờ tunnel. Xem một quảng cáo ngắn được thêm 3 giờ (tối đa cộng dồn 3 giờ). Không cần tài khoản.
+Mỗi lượt cài đặt gồm 1 giờ tunnel miễn phí. Xem một quảng cáo ngắn được thêm 3 giờ (mỗi giờ một lần, tối đa tổng 12 giờ). Không cần tài khoản.
 
 YÊU CẦU
 • VPS của bạn hoặc bất kỳ máy chủ nào truy cập được SSH — một droplet $3–5/tháng là đủ.
-• iOS 16 trở lên.
+• iOS 18 trở lên.
 
 QUYỀN RIÊNG TƯ
 SSH2VPN không vận hành máy chủ nào và không bao giờ nhìn thấy lưu lượng của bạn. Thông tin đăng nhập và khóa nằm trên thiết bị của bạn; tunnel chỉ chạy giữa bạn và máy chủ của bạn. Chi tiết xem trong chính sách riêng tư trong ứng dụng.

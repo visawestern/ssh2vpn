@@ -3,10 +3,12 @@
 <!-- App privacy manifest (required since Spring 2024 for required-reason APIs).
      - NSPrivacyAccessedAPICategoryUserDefaults / CA92.1: the app stores only
        its own settings (language, paywall state, quota ledger) in UserDefaults.
-     - NSPrivacyTracking=false: this target's own code does not track. The
-       bundled ad-mediation SDKs (CAS.AI + adapters) ship their own privacy
-       manifests and their data practices are disclosed in the App Store
-       Connect privacy questionnaire, not here. -->
+     - NSPrivacyTracking=true: the free tier shows Google AdMob rewarded ads
+       (plus Google UMP consent). AdMob may use the advertising identifier
+       for personalized ads when the user allows tracking — see the App Store
+       Connect privacy questionnaire + in-app privacy policy (Advertising).
+       The app's own code collects nothing and sends nothing anywhere except
+       the user-configured VPN servers. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyAccessedAPITypes</key>
@@ -23,8 +25,11 @@
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array/>
 	<key>NSPrivacyTracking</key>
-	<false/>
+	<true/>
 	<key>NSPrivacyTrackingDomains</key>
-	<array/>
+	<array>
+		<string>googleads.g.doubleclick.net</string>
+		<string>pagead2.googlesyndication.com</string>
+	</array>
 </dict>
 </plist>

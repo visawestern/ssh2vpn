@@ -4,23 +4,25 @@ import SwiftUI
 ///
 /// Double-offer flow (persisted across launches):
 ///  - `.full`   : one-time price ($10) — dismiss escalates to `.discount`.
-///  - `.discount`: one-time $6 offer. Its close button is locked for 3s to
-///    hold attention; dismissing it marks the discount as declined forever,
-///    so only the full price is ever offered again on this device.
+///  - `.discount`: one-time $6 offer. Dismissing it marks the discount as
+///    declined forever, so only the full price is ever offered again on
+///    this device.
+///
+/// Review compliance: NO countdown timer, NO locked close button, NO fake
+/// urgency — the close is always enabled and the discount is a plain
+/// second-chance offer, not a pressured flash sale.
 struct PaywallView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var closeAllowedAt = Date.distantPast
     @State private var showUnavailable = false
     /// Drives the "hot offer" breathing animation on the discount CTA.
     @State private var pulse = false
 
     private var isDiscount: Bool { model.paywallStage == .discount }
 
-    /// The price shown in the UI: always round dollars, no cents. $10 full,
-    /// $6 discount. App Store Connect must use the $10.00 price point so the
-    /// Apple sheet matches exactly.
-    private var displayPrice: String? {
-        isDiscount ? "$6" : "$10"
+    /// The price shown in the UI comes from StoreKit (localized). Falls
+    /// back to round US dollars only until the products load.
+    private var displayPrice: String {
+        isDiscount ? model.discountPriceString : model.fullPriceString
     }
 
     var body: some View {
@@ -60,14 +62,6 @@ struct PaywallView: View {
             .padding(.bottom, 24)
         }
         .preferredColorScheme(.dark)
-        .onAppear { armClose(after: isDiscount ? 3 : 0) }
-        .onChange(of: model.isPaywallPresented) {
-            if model.isPaywallPresented { armClose(after: isDiscount ? 3 : 0) }
-        }
-        .onChange(of: model.paywallStage) {
-            // Escalating full -> discount re-locks the close button for 3s.
-            armClose(after: isDiscount ? 3 : 0)
-        }
         .alert(model.copy.text(.purchaseUnavailable), isPresented: $showUnavailable) {
             Button(model.copy.text(.ok), role: .cancel) {}
         }
@@ -86,31 +80,19 @@ struct PaywallView: View {
                     .foregroundStyle(.white)
             }
             Spacer()
-            // 4 Hz while the close is locked (3-2-1 digit steps cleanly),
-            // paused otherwise — no idle redraws on the full-price stage.
-            TimelineView(.periodic(from: .now, by: isDiscount ? 0.25 : 3600)) { context in
-                let locked = isDiscount && context.date < closeAllowedAt
-                Button {
-                    model.dismissPaywall()
-                } label: {
-                    Group {
-                        if locked {
-                            Text("\(max(1, Int(ceil(closeAllowedAt.timeIntervalSince(context.date)))))")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                        } else {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                    }
+            // The close is ALWAYS enabled — no lock, no countdown. Forcing
+            // attention on a paid offer is a dark pattern (Guideline 5.6).
+            Button {
+                model.dismissPaywall()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 34, height: 34)
                     .background(.white.opacity(0.10), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(locked)
-                .accessibilityLabel(model.copy.text(.cancel))
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.copy.text(.cancel))
         }
     }
 
@@ -202,7 +184,7 @@ struct PaywallView: View {
                 discountPricing
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
+                    Text(displayPrice)
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                     Spacer()
@@ -216,43 +198,17 @@ struct PaywallView: View {
         }
     }
 
-    /// The $6 flash-offer block: crossed-out $10 anchor, glowing $6, "SAVE
-    /// 40%" capsule, and a REAL countdown — hit zero and the offer is gone
-    /// forever (persisted deadline, no fake-reset dark pattern).
+    /// The $6 second-chance block: crossed-out $10 anchor, $6, "−40%"
+    /// capsule. No countdown, no expiry theatrics — a plain offer the user
+    /// can take or leave (Guideline 5.6: no pressured flash-sale UX).
     private var discountPricing: some View {
         VStack(spacing: 14) {
-            // Live offer timer — the urgency is honest: expiry is persisted
-            // and permanently kills the discount. TimelineView drives its
-            // own redraws every second, so the digits never freeze (a plain
-            // Text with Date() in body has nothing to invalidate it).
-            if let deadline = model.discountDeadline {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    HStack(spacing: 6) {
-                        Image(systemName: "timer")
-                            .font(.system(size: 12, weight: .bold))
-                        Text(discountCountdown(deadline, now: context.date))
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule().fill(
-                            LinearGradient(colors: [Color(red: 0.95, green: 0.25, blue: 0.20), Color(red: 0.85, green: 0.12, blue: 0.10)],
-                                           startPoint: .leading, endPoint: .trailing)
-                        )
-                    )
-                    .shadow(color: Color(red: 0.95, green: 0.25, blue: 0.20).opacity(0.5), radius: 10, y: 2)
-                }
-            }
-
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(model.copy.text(.paywallOldPrice))
+                Text(model.fullPriceString)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .strikethrough(true, color: .white.opacity(0.55))
                     .foregroundStyle(.white.opacity(0.45))
-                Text(displayPrice ?? model.copy.text(.paywallFullPriceFallback))
+                Text(displayPrice)
                     .font(.system(size: 58, weight: .heavy, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.35), Color(red: 1.0, green: 0.60, blue: 0.15)],
@@ -282,18 +238,6 @@ struct PaywallView: View {
                         )
                 )
         )
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in
-            if let deadline = model.discountDeadline, now >= deadline {
-                model.expireDiscountOffer()
-            }
-        }
-    }
-
-    /// "m:ss" until the $6 offer dies. `now` comes from the TimelineView
-    /// context so each redraw reflects the tick, not a stale Date().
-    private func discountCountdown(_ deadline: Date, now: Date) -> String {
-        let s = max(0, Int(deadline.timeIntervalSince(now)))
-        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private var buyButton: some View {
@@ -374,11 +318,5 @@ struct PaywallView: View {
         case .userCancelled, .pending:
             break // keep the paywall open; user can retry or dismiss
         }
-    }
-
-    /// Locks the close button for `seconds` (e.g. forced attention on the
-    /// discount offer). 0 = immediately allowed.
-    private func armClose(after seconds: Int) {
-        closeAllowedAt = Date().addingTimeInterval(TimeInterval(max(0, seconds)))
     }
 }

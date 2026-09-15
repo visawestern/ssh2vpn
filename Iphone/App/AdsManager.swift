@@ -2,21 +2,9 @@ import Foundation
 import VPNCore
 import GoogleMobileAds
 import UserMessagingPlatform
-import AppLovinSDK
 import UIKit
 
-// MARK: - Provider routing
-
-/// Which ad backend the rewarded button uses. AdMob works instantly with
-/// the Google-published TEST app ID until the AdMob dashboard issues the
-/// real one; AppLovin MAX is wired but awaits account approval (write to
-/// account-approval@applovin.com from the developer email).
-enum AdsProvider {
-    case admob
-    case applovinMax
-
-    static let active: AdsProvider = .admob
-}
+// MARK: - Ad config
 
 enum AdsConfig {
     /// Own AdMob app ID + own Rewarded ad unit (both dashboard-issued).
@@ -25,9 +13,6 @@ enum AdsConfig {
     /// real users.
     static let gadAppID = "ca-app-pub-1498434981323978~5326656863"
     static let gadRewardedUnitID = "ca-app-pub-1498434981323978/9602260449"
-
-    /// AppLovin MAX SDK key — "PENDING" until account approval lands.
-    static let maxSDKKey = "PENDING"
 }
 
 // MARK: - Shared plumbing
@@ -103,23 +88,14 @@ enum RewardedOutcome {
     case dismissedEarly
 }
 
-/// Common entry the app calls: initializes the ACTIVE provider and runs the
-/// full rewarded flow (consent → load → present).
+/// Common entry the app calls: initializes AdMob and runs the full
+/// rewarded flow (consent → load → present). AdMob is the ONLY ad SDK in
+/// the binary (no mediation, no MAX) — one backend, one audit trail.
 enum RewardedAdRouter {
     @MainActor
     static func presentRewarded() async -> RewardedOutcome {
-        switch AdsProvider.active {
-        case .admob:
-            AdMobRewardedProvider.shared.initialize()
-            return await AdMobRewardedProvider.shared.presentRewarded()
-        case .applovinMax:
-            guard AdsConfig.maxSDKKey != "PENDING" else {
-                ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "MAX asleep: SDK key pending account approval")
-                return .noFill
-            }
-            MaxRewardedProvider.shared.initialize()
-            return await MaxRewardedProvider.shared.presentRewarded()
-        }
+        AdMobRewardedProvider.shared.initialize()
+        return await AdMobRewardedProvider.shared.presentRewarded()
     }
 }
 
@@ -321,130 +297,6 @@ extension AdMobRewardedProvider {
     }
 }
 
-// MARK: - AppLovin MAX (ASLEEP — awaiting account approval)
-
-/// Wires the AppLovin MAX SDK behind AdsProvider.applovinMax. Inactive
-/// until AdsConfig.maxSDKKey holds the real key from the MAX dashboard.
-final class MaxRewardedProvider: NSObject, @unchecked Sendable {
-    static let shared = MaxRewardedProvider()
-
-    private var rewarded: MARewardedAd?
-
-    private override init() {
-        super.init()
-    }
-
-    func initialize() {
-        guard rewarded == nil else { return }
-        guard AdsConfig.maxSDKKey != "PENDING" else { return }
-        let config = ALSdkInitializationConfiguration(sdkKey: AdsConfig.maxSDKKey) { builder in
-            builder.mediationProvider = ALMediationProviderMAX
-        }
-        ALSdk.shared().initialize(with: config) { _ in
-            ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "MAX SDK initialized")
-        }
-        let r = MARewardedAd.shared(withAdUnitIdentifier: "MAX_REWARDED_UNIT_ID")
-        r.delegate = self
-        rewarded = r
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "MAX rewarded ready")
-    }
-
-    @MainActor
-    func presentRewarded() async -> RewardedOutcome {
-        guard let rewarded else { return .noFill }
-        // MAX shows consent internally per network; load → show with the
-        // same safety-timeout discipline.
-        let loaded = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
-            MaxLoadBox.shared.arm(c, delegate: self)
-            rewarded.load()
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(20))
-                MaxLoadBox.shared.timeout()
-            }
-        }
-        guard loaded else { return .noFill }
-        var earned = false
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            let box = ResumeOnceBox(c)
-            MaxRewardBox.shared.arm { earnedFlag in
-                earned = earnedFlag
-                box.resume()
-            }
-            rewarded.show(forPlacement: nil)
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(120))
-                box.resume()
-            }
-        }
-        // Ad shown: earned = watched to the end, false = early dismiss.
-        return earned ? .earned : .dismissedEarly
-    }
-}
-
-/// Bridges the nonisolated MAX delegate callbacks into the awaiting
-/// continuations (delegate methods land on an arbitrary queue).
-final class MaxLoadBox: @unchecked Sendable {
-    static let shared = MaxLoadBox()
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Bool, Never>?
-
-    func arm(_ c: CheckedContinuation<Bool, Never>, delegate: MaxRewardedProvider) {
-        lock.lock()
-        continuation = c
-        lock.unlock()
-    }
-
-    func fire(_ ok: Bool) {
-        lock.lock()
-        let c = continuation
-        continuation = nil
-        lock.unlock()
-        c?.resume(returning: ok)
-    }
-
-    func timeout() { fire(false) }
-}
-
-final class MaxRewardBox: @unchecked Sendable {
-    static let shared = MaxRewardBox()
-    private let lock = NSLock()
-    private var handler: (@MainActor (Bool) -> Void)?
-    /// didRewardUser lands BEFORE didHide; remember it, didHide completes
-    /// the continuation (pending-reward pattern).
-    private var earned = false
-
-    func arm(_ h: @escaping @MainActor (Bool) -> Void) {
-        lock.lock()
-        handler = h
-        earned = false
-        lock.unlock()
-    }
-
-    func fire(_ earnedFlag: Bool) {
-        lock.lock()
-        let h = handler
-        handler = nil
-        lock.unlock()
-        guard let h else { return }
-        Task { @MainActor in
-            h(earnedFlag)
-        }
-    }
-
-    func setEarned(_ value: Bool) {
-        lock.lock()
-        earned = value
-        lock.unlock()
-    }
-
-    var lastEarned: Bool {
-        lock.lock()
-        let v = earned
-        lock.unlock()
-        return v
-    }
-}
-
 enum TopVCFinder {
     @MainActor
     static func find() async -> UIViewController? {
@@ -454,34 +306,5 @@ enum TopVCFinder {
         var top = window.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         return top
-    }
-}
-
-extension MaxRewardedProvider: MAAdDelegate, MARewardedAdDelegate {
-    nonisolated func didLoad(_ ad: MAAd) {
-        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "MAX rewarded loaded")
-        MaxLoadBox.shared.fire(true)
-    }
-
-    nonisolated func didFailToLoadAd(forAdUnitIdentifier id: String, withError error: MAError) {
-        ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "MAX load failed: \(error.message)")
-        MaxLoadBox.shared.fire(false)
-    }
-
-    nonisolated func didDisplay(_ ad: MAAd) {}
-    nonisolated func didClick(_ ad: MAAd) {}
-
-    nonisolated func didHide(_ ad: MAAd) {
-        // Reward already fired via didRewardUser before hide.
-        MaxRewardBox.shared.fire(MaxRewardBox.shared.lastEarned)
-    }
-
-    nonisolated func didFail(toDisplay ad: MAAd, withError error: MAError) {
-        MaxRewardBox.shared.fire(false)
-    }
-
-    nonisolated func didRewardUser(for ad: MAAd, with reward: MAReward) {
-        ConsoleLogStore.shared.log(level: .success, tag: "ADS", message: "MAX reward earned")
-        MaxRewardBox.shared.setEarned(true)
     }
 }
