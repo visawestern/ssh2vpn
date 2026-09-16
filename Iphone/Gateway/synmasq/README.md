@@ -48,6 +48,18 @@ expect `TCP/IP Detected OS = iOS` + green "Matches User-Agent".
 
 Rollback: `systemctl disable --now synmasq` (ExecStopPost removes the taps).
 
+## Rootless partial fallback
+
+If you have no root on the egress box, the daemon above cannot run
+(NFQUEUE needs `CAP_NET_ADMIN`, raw sockets need root). The only
+rootless lever is a per-socket MSS clamp — now built into
+`../gateway.py` (`TCP_MSS_CLAMP = 1400`, `TCP_MAXSEG` before connect).
+
+Proven live on the VPS (no root): `ss -ti` shows `mss 32768` →
+`mss 1388` once the clamp is on. It narrows the gap (iOS sends MSS 1400)
+but does **not** clear zardaxt: window scale (7 vs 6), ECN flags
+(2 vs 194), `ip_id` and packet length (60 vs 64) remain kernel-chosen.
+
 ## What this does NOT fix
 
 IP/ASN reputation verdicts ("datacenter IP") are a different layer — the

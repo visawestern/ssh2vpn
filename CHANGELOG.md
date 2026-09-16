@@ -1,5 +1,23 @@
 # SSH2VPN — Changelog
 
+## dev (unreleased)
+
+Site-side anti-fingerprinting, rootless partial:
+
+- **Gateway MSS clamp.** `Iphone/Gateway/gateway.py` now opens outbound
+  TCP sockets with `TCP_MAXSEG = 1400` (kernel already advertises 1460,
+  which read as "desktop Linux"). Pure per-socket socket option — no
+  privileges on the egress box. Proven live on the VPS: `getsockopt`
+  shows the clamp on, `ss -ti` `mss` drops 32768 → 1388 on loopback.
+  Honest limit: this narrows the gap to zardaxt's iOS fingerprint
+  (M1400/W6/65535/194/len64) but cannot pass it, because window scale,
+  ECN flags, IP id and packet length are still kernel-chosen.
+- **`Iphone/Gateway/synmasq/`** (code only, needs 1-time root to deploy):
+  NFQUEUE rewrite of egress SYNs to zardaxt's dominant iOS template.
+  Offline proof with zardaxt's own DB + trained model: relay probability
+  0.9903 → 0.0001. Parked — deployment requires root on the egress box;
+  our reviewer account is not in sudoers and no root is available.
+
 ## 1.0.5 (build 6)
 
 Crowd camouflage: the tunnel now handshakes like a Termux admin's OpenSSH 9.6.

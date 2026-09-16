@@ -9,6 +9,7 @@ import asyncio
 import fcntl
 import hashlib
 import os
+import socket
 import struct
 import subprocess
 import sys
@@ -20,6 +21,7 @@ MAX_PAYLOAD = 1024 * 1024
 MAX_ACTIVE_FLOWS = 4096
 TCP_IDLE_TIMEOUT = 300
 UDP_IDLE_TIMEOUT = 60
+TCP_MSS_CLAMP = 1400
 FLOW_SWEEP_INTERVAL = 5
 OPEN = 1
 DATA = 2
@@ -462,7 +464,21 @@ class Gateway:
             await self.send(RESET, stream_id)
 
     async def open_tcp(self, stream_id, destination):
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(destination[0], destination[1]), timeout=10)
+        async def dial():
+            loop = asyncio.get_running_loop()
+            infos = await loop.getaddrinfo(
+                destination[0], destination[1], type=socket.SOCK_STREAM)
+            family, _, _, _, sockaddr = infos[0]
+            sock = socket.socket(family, socket.SOCK_STREAM)
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, TCP_MSS_CLAMP)
+            except OSError:
+                pass
+            sock.setblocking(False)
+            await loop.sock_connect(sock, sockaddr)
+            return await asyncio.open_connection(sock=sock)
+
+        reader, writer = await asyncio.wait_for(dial(), timeout=10)
         self.tcp_writers[stream_id] = writer
         self.last_activity[stream_id] = asyncio.get_running_loop().time()
         task = asyncio.create_task(self.tcp_reader(stream_id, reader))
