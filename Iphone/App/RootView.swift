@@ -83,11 +83,9 @@ struct RootView: View {
                 OctohideTabBar(selected: $selectedTab, copy: model.copy)
             }
 
-            // Vuexy-style Floating terminal button — shown only when logging is
-            // enabled AND the session is live (connecting/connected) or still
-            // within the 2-minute post-disconnect grace window, so logs stay
-            // readable right after the tunnel drops. If logging is off there
-            // is nothing to read in the console.
+            // Floating diagnostics button — shown whenever logging is enabled,
+            // in every connection state. If logging is off there is nothing
+            // to read in the console.
             if model.showConsoleButton {
                 VStack {
                     Spacer()
@@ -100,9 +98,9 @@ struct RootView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
 
-            // Right sliding Diagnostics Console Sidebar — reachable exactly while
-            // the button is (see showConsoleButton); close it when the grace
-            // window lapses or logging is flipped off mid-open.
+            // Right sliding Diagnostics Console Sidebar — reachable whenever
+            // the button is (see showConsoleButton); close it when logging
+            // is flipped off mid-open.
             if model.showConsoleButton {
                 DiagnosticsConsoleSidebarView(isOpen: $isConsoleOpen)
             } else {
@@ -275,8 +273,8 @@ struct ConnectView: View {
                 model.startDisplayTimerIfNeeded()
             case .disconnected, .failed:
                 // Handles both cases: starts the 1s tick during the 2-minute
-                // console-grace window (button hides at exactly T+2:00), and
-                // stops it immediately when there is nothing to tick for.
+                // post-disconnect stats window, and stops it immediately when
+                // there is nothing to tick for.
                 model.startDisplayTimerIfNeeded()
             case .connecting:
                 break

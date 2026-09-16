@@ -2,6 +2,18 @@
 
 ## dev (unreleased)
 
+- **Privacy policy precision (all locales, site + in-app).** The "What
+  data we collect" section no longer opens with a blanket "we collect
+  nothing" — it now names the only two parties data can go to (your own
+  VPN server; Google AdMob in the free tier). The Keychain section now
+  states the exact boundary: credentials are stored only in the iOS
+  Keychain and are transmitted solely to the configured server during
+  SSH authentication — never to us.
+- **Diagnostics panel always visible when logging is on.** The floating
+  console button no longer depends on connection state or a grace
+  window — same UI for every user in every state, nothing that appears
+  or hides conditionally.
+
 Third-party-free self-check: the phone no longer queries any IP-echo or
 connectivity service.
 

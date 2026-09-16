@@ -31,9 +31,8 @@ final class AppModel: ObservableObject {
             updateConsoleGrace(previous: oldValue)
         }
     }
-    /// Wall-clock moment the last session ended (disconnect / failure). The
-    /// floating console button stays reachable for a short grace window after
-    /// that, so the user can still read logs once the tunnel drops.
+    /// Wall-clock moment the last session ended (disconnect / failure). Used
+    /// for the post-disconnect stats tick window.
     @Published var lastDisconnectAt: Date?
     @Published var serverName = "My VPS"
 
@@ -1454,7 +1453,7 @@ final class AppModel: ObservableObject {
     private var displayTimer: Timer?
 
     /// Keeps the 1s tick running while anything time-based is on screen:
-    /// a live session, the console-grace window, OR the free-quota countdown
+    /// a live session, the post-disconnect stats window, OR the free-quota countdown
     /// (which decays every second whether the tunnel is up or not). Stops
     /// itself once none applies so we never burn a wakeup when idle+unlimited.
     func startDisplayTimerIfNeeded() {
@@ -1483,10 +1482,10 @@ final class AppModel: ObservableObject {
         displayTimer = nil
     }
 
-    // MARK: - Console grace window
+    // MARK: - Post-disconnect stats window
 
-    /// True for 2 minutes after the last session ended, so the floating
-    /// console button stays usable (and readable) right after a disconnect.
+    /// True for 2 minutes after the last session ended, so the 1s stats
+    /// tick keeps running right after a disconnect.
     private func updateConsoleGrace(previous: ConnectionPresentation) {
         let wasActive: Bool
         switch previous {
@@ -1501,24 +1500,19 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// 2-minute window after a disconnect during which the console stays open
-    /// to the floating button.
+    /// 2-minute window after a disconnect during which the stats tick stays
+    /// alive.
     var consoleGraceActive: Bool {
         guard let t = lastDisconnectAt else { return false }
         return Date().timeIntervalSince(t) < 120
     }
 
     /// Single source of truth for the floating console button + sidebar:
-    /// only with logging enabled, and only while connecting/connected or
-    /// within the post-disconnect grace window.
+    /// visible whenever logging is enabled — no connection-state gating, so
+    /// the panel is equally discoverable before, during and after a session
+    /// (and identical for every user, including App Review).
     var showConsoleButton: Bool {
-        guard settings.enableLogging else { return false }
-        switch connection {
-        case .connecting, .connected:
-            return true
-        case .disconnected, .failed:
-            return consoleGraceActive
-        }
+        settings.enableLogging
     }
 
     var connectionActiveSeconds: Int { automation.activeSeconds }
