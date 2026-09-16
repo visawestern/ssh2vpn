@@ -91,11 +91,41 @@ public struct TunnelAppMessageRouter {
             let rules: [DNSBlocklistEntry] = (args?["rules"] as? String).map { DNSBlocklistEntry.decodeList(from: $0) } ?? []
             onDNSRulesChange(rules)
             return Response(ok: true, data: ["count": "\(rules.count)"])
+        /// Compact sibling of dnsRulesSet: curated block domains travel as a
+        /// plain [String] array (no per-entry UUID bloat) plus the user's
+        /// custom entries as JSON (custom scope wins, curated adds subtree
+        /// blocks). This is what keeps 10k-domain lists off the 512KB
+        /// providerConfiguration limit — they only cross the live
+        /// sendProviderMessage channel after the tunnel is up.
+        case "dnsRulesSetCompact":
+            let rules = Self.mergeCompactRules(args: args)
+            onDNSRulesChange(rules)
+            return Response(ok: true, data: ["count": "\(rules.count)"])
         case "logs":
             return handleLogs(args: args)
         default:
             return Response(ok: false, data: ["error": "unknown cmd: \(cmd)"])
         }
+    }
+
+    // MARK: - Compact DNS rules merge
+
+    /// Merges a dnsRulesSetCompact payload: `custom` = JSON string of
+    /// [DNSBlocklistEntry], `curated` = JSON string of [String] block
+    /// domains. Custom scope wins; curated adds subtree blocks for domains
+    /// the user didn't already rule (custom scope wins).
+    static func mergeCompactRules(args: [String: Any]?) -> [DNSBlocklistEntry] {
+        var rules: [DNSBlocklistEntry] = (args?["custom"] as? String).map { DNSBlocklistEntry.decodeList(from: $0) } ?? []
+        let curated: [String] = (args?["curated"] as? String).flatMap { json in
+            guard let data = json.data(using: .utf8),
+                  let domains = try? JSONDecoder().decode([String].self, from: data) else { return nil }
+            return domains
+        } ?? []
+        guard !curated.isEmpty else { return rules }
+        let existing = Set(rules.map(\.domain))
+        rules.append(contentsOf: curated.filter { !existing.contains($0) }
+            .map { DNSBlocklistEntry(domain: $0, kind: .block, ip: "", includeSubdomains: true) })
+        return rules
     }
 
     // MARK: - Server list

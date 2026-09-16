@@ -427,6 +427,7 @@ final class AppModel: ObservableObject {
             startStatsPolling()
             ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> TUNNEL ADOPTED (still/now running) << model state restored from NetworkExtension")
             logExtensionInventory()
+            pushFullDNSRulesAfterConnect()
         } else {
             attemptStartedAt = Date()
             startPhasePolling()
@@ -575,6 +576,7 @@ final class AppModel: ObservableObject {
             stopPhasePolling()
             ConsoleLogStore.shared.log(level: .success, tag: "TUNNEL", message: ">> ENCRYPTED TUNNEL ESTABLISHED << IP route 0.0.0.0/0 active")
             logExtensionInventory()
+            pushFullDNSRulesAfterConnect()
             schedulePostConnectCheck()
         case .disconnecting:
             ConsoleLogStore.shared.log(level: .info, tag: "TUNNEL", message: "PacketTunnel state -> DISCONNECTING...")
@@ -1349,8 +1351,14 @@ final class AppModel: ObservableObject {
                 message: "ignoring invalid custom DNS entries (kept \(dns.count)/\(rawDNS.count): \(dns.isEmpty ? "none valid — falling back to 8.8.8.8" : dns.joined(separator: ", ")))")
         }
         effectiveProfile.dnsServers = dns
-        // Local rules travel with the profile to the extension (JSON).
-        effectiveProfile.dnsRules = DNSBlocklistEntry.encodeList(effectiveDNSRules()) ?? "[]"
+        // Provider profile carries ONLY the user's own rules (a handful of
+        // entries, bytes). Curated lists (thousands of domains, ~1MB+ JSON)
+        // must NEVER enter providerConfiguration: iOS rejects the whole
+        // save past 512KB ("configuration is too large") and the tunnel
+        // never starts. Curated domains are pushed over the live
+        // sendProviderMessage channel right after connect instead
+        // (see pushFullDNSRulesAfterConnect).
+        effectiveProfile.dnsRules = DNSBlocklistEntry.encodeList(settings.dnsRules) ?? "[]"
         // Capture pre-resolved IP for this attempt (avoids blocking DNS in extension).
         let serverIP = cachedServerIPv4
 
@@ -1358,7 +1366,7 @@ final class AppModel: ObservableObject {
         // (extension has a 10s connect timeout), and every extra port-22 SYN
         // feeds the VPS per-source rate limiter. One tap = one SSH SYN.
         ConsoleLogStore.shared.log(level: .info, tag: "DNS",
-            message: "tunnel will use DNS: \(dns.isEmpty ? "8.8.8.8 (default)" : dns.joined(separator: ", "))\(effectiveProfile.dnsRules.isEmpty ? "" : " + \(settings.dnsRules.count) custom rule(s)\(curatedDomainCount > 0 ? " + \(curatedDomainCount) curated domain(s)" : "")")")
+            message: "tunnel will use DNS: \(dns.isEmpty ? "8.8.8.8 (default)" : dns.joined(separator: ", ")) + \(settings.dnsRules.count) custom rule(s) in profile\(curatedDomainCount > 0 ? " + \(curatedDomainCount) curated domain(s) pushed live after connect" : "")")
         self.vpn.start(profile: effectiveProfile, serverIP: serverIP,
                        onDemandEnabled: settings.connectOnDemand) { [weak self] error in
             guard let self = self else { return }
@@ -1564,7 +1572,29 @@ final class AppModel: ObservableObject {
     @MainActor
     private func pushDNSRulesLive() {
         guard connection == .connected else { return }
-        VPNExtensionAPI.pushDNSRules(effectiveDNSRules(), to: vpn.diagnosticManager())
+        pushFullDNSRulesNow()
+    }
+
+    /// Pushes custom rules + curated domains over the live message channel in
+    /// compact form (domains as plain strings, no per-entry UUID bloat).
+    /// Call only while connected — the channel is dead otherwise.
+    @MainActor
+    private func pushFullDNSRulesNow() {
+        let curated = DNSListStore.mergedDomains(subscribedLists)
+        VPNExtensionAPI.pushDNSRulesCompact(custom: settings.dnsRules, curatedDomains: curated, to: vpn.diagnosticManager())
+    }
+
+    /// Post-connect hook: the system profile carries custom rules only (512KB
+    /// iOS cap), so the full set — custom + curated — lands here, seconds
+    /// after the tunnel comes up. Called from every path that reaches
+    /// .connected (live event + drift-adopted tunnel).
+    @MainActor
+    private func pushFullDNSRulesAfterConnect() {
+        let curated = DNSListStore.mergedDomains(subscribedLists)
+        guard !curated.isEmpty else { return }
+        VPNExtensionAPI.pushDNSRulesCompact(custom: settings.dnsRules, curatedDomains: curated, to: vpn.diagnosticManager())
+        ConsoleLogStore.shared.log(level: .info, tag: "DNSFILTER",
+            message: "pushed \(curated.count) curated domain(s) live (\(settings.dnsRules.count) custom) — active now, no reconnect needed")
     }
 
     // MARK: - Curated hosts lists (AdAway-style subscriptions)
@@ -1575,19 +1605,6 @@ final class AppModel: ObservableObject {
     }
     /// Per-source download state for the UI (spinner / error chips).
     @Published var listRefreshState: [String: String] = [:]
-
-    /// The full ruleset the tunnel should enforce: the user's own rules PLUS
-    /// every curated-list domain as a subtree block. Custom rules keep their
-    /// exact/subtree scope; curated domains always block subdomains too.
-    func effectiveDNSRules() -> [DNSBlocklistEntry] {
-        var rules = settings.dnsRules
-        let curated = DNSListStore.mergedDomains(subscribedLists)
-        guard !curated.isEmpty else { return rules }
-        let existing = Set(rules.map(\.domain))
-        rules.append(contentsOf: curated.filter { !existing.contains($0) }
-            .map { DNSBlocklistEntry(domain: $0, kind: .block, ip: "", includeSubdomains: true) })
-        return rules
-    }
 
     /// Total domains blocked across subscribed curated lists (deduped).
     var curatedDomainCount: Int {
@@ -2025,8 +2042,19 @@ private final class VPNController {
             }
             // Local DNS rules (block/override): the extension answers these
             // domains locally before any upstream query (JSON-encoded list).
+            // PROFILE CARRIES CUSTOM RULES ONLY (see performConnectionAttempt).
+            // Hard size guard: iOS rejects saves past 512KB, so anything
+            // above 200KB of rules is dropped from the profile instead of
+            // killing the whole connect — the full set is pushed live after
+            // the tunnel comes up anyway.
             if !profile.dnsRules.isEmpty, profile.dnsRules != "[]" {
-                providerConfig["dnsRules"] = profile.dnsRules
+                let rulesBytes = profile.dnsRules.utf8.count
+                if rulesBytes > 200_000 {
+                    ConsoleLogStore.shared.log(level: .error, tag: "DNSFILTER",
+                        message: "custom rules too large for VPN profile (\(rulesBytes) bytes) — dropped from profile, will push live after connect")
+                } else {
+                    providerConfig["dnsRules"] = profile.dnsRules
+                }
             }
 
             // Reuse check: if the stored system configuration already equals
@@ -2126,15 +2154,33 @@ private final class VPNController {
     /// start/stop so a superseded wait never fires a stale completion.
     private var pendingCreationCompletion: ((Error?) -> Void)?
 
+    /// True for save errors no retry can heal: the iOS 512KB profile cap
+    /// ("too large" / "maximum size") or a rejected configuration. These
+    /// must surface immediately instead of burning the 2-minute wait.
+    private static func isDeterministicSaveError(_ error: Error?) -> Bool {
+        guard let error else { return false }
+        let text = error.localizedDescription.lowercased()
+        return text.contains("too large") || text.contains("maximum size") || text.contains("invalid")
+    }
+
     /// Waits for a freshly saved VPN profile to become creatable: retries the
     /// save every 5 seconds for up to 2 minutes (first install: the system
     /// consent dialog may still be pending), then surfaces the last error.
     /// Aborts silently when superseded by a newer start or by stop().
+    /// Deterministic errors (oversized/invalid configuration) fail FAST —
+    /// retrying them for 2 minutes can never help.
     private func waitForProfileCreation(
         epoch: Int,
         saveError: Error?,
         budget: RetryBudget
     ) {
+        if Self.isDeterministicSaveError(saveError) {
+            ConsoleLogStore.shared.log(level: .error, tag: "VPN", message: "VPN profile save failed permanently (\(saveError?.localizedDescription ?? "unknown error")) — not retrying")
+            guard let completion = pendingCreationCompletion else { return }
+            pendingCreationCompletion = nil
+            completion(saveError)
+            return
+        }
         var budget = budget
         guard budget.consume() else {
             ConsoleLogStore.shared.log(level: .error, tag: "VPN", message: "VPN profile was not created within 2 minutes — giving up")
@@ -2388,6 +2434,9 @@ enum VPNExtensionAPI {
         case serverSelect = "serverSelect"
         case logs = "logs"
         case dnsRulesSet = "dnsRulesSet"
+        /// Compact rules push: custom entries + curated domains as plain
+        /// strings (no UUID bloat). Replaces dnsRulesSet for large lists.
+        case dnsRulesSetCompact = "dnsRulesSetCompact"
         /// Server-reported egress check (extension runs SSH exec on the live
         /// pool; the phone contacts no third party for it).
         case egressCheck = "egressCheck"
@@ -2427,15 +2476,21 @@ enum VPNExtensionAPI {
         }
     }
 
-    /// Pushes the current local DNS rules to the extension so they take
-    /// effect immediately, without waiting for the next reconnect. Safe to
-    /// call only while the tunnel is connected (it no-ops otherwise).
+    /// Compact push of the effective ruleset: custom entries (JSON, tiny)
+    /// plus curated block domains (plain-string JSON array — ~6x smaller
+    /// than entry JSON with UUIDs). The extension merges them in
+    /// mergeCompactRules: custom scope wins, curated adds subtree blocks.
+    /// Safe to call only while connected.
     @MainActor
-    static func pushDNSRules(_ rules: [DNSBlocklistEntry], to manager: NETunnelProviderManager?) {
-        let list = DNSBlocklistEntry.encodeList(rules)
-        let args: [String: Any] = ["rules": list as Any]
+    static func pushDNSRulesCompact(custom: [DNSBlocklistEntry], curatedDomains: [String], to manager: NETunnelProviderManager?) {
+        let customJSON = DNSBlocklistEntry.encodeList(custom) ?? "[]"
+        let curatedJSON: String = {
+            guard let data = try? JSONEncoder().encode(curatedDomains) else { return "[]" }
+            return String(data: data, encoding: .utf8) ?? "[]"
+        }()
+        let args: [String: Any] = ["custom": customJSON, "curated": curatedJSON]
         Task {
-            _ = await call(from: manager, cmd: .dnsRulesSet, args: args)
+            _ = await call(from: manager, cmd: .dnsRulesSetCompact, args: args)
         }
     }
 

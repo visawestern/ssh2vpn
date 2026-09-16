@@ -317,6 +317,80 @@ final class TunnelAppMessageRouterTests: XCTestCase {
         XCTAssertEqual(r["ok"] as? Bool, false)
     }
 
+    // MARK: - dnsRulesSetCompact
+
+    private func compactArgs(custom: [DNSBlocklistEntry] = [], curated: [String] = []) -> [String: Any] {
+        let curatedJSON = String(data: try! JSONEncoder().encode(curated), encoding: .utf8)!
+        return ["custom": DNSBlocklistEntry.encodeList(custom) ?? "[]", "curated": curatedJSON]
+    }
+
+    /// Custom rules + curated domains merge: curated arrives as subtree
+    /// blocks, custom scope is preserved. This is the post-connect push that
+    /// keeps 10k-domain lists off the 512KB VPN profile.
+    func testCompactMergesCustomAndCurated() {
+        let (store, _) = makeStore()
+        var router = makeRouter(store: store)
+        var received: [DNSBlocklistEntry] = []
+        router.onDNSRulesChange = { received = $0 }
+
+        let custom = [DNSBlocklistEntry(domain: "home.lan", kind: .override, ip: "192.168.1.10")]
+        let r = responseData(router, cmd: "dnsRulesSetCompact",
+                             args: compactArgs(custom: custom, curated: ["ads.example.com", "tracker.example.com"]))!
+        XCTAssertEqual(r["ok"] as? Bool, true)
+        XCTAssertEqual((r["data"] as? [String: String])?["count"], "3")
+        XCTAssertEqual(received.count, 3)
+
+        let filter = LocalDNSFilter(entries: received)
+        XCTAssertEqual(filter.action(for: "ads.example.com"), .blocked)
+        XCTAssertEqual(filter.action(for: "sub.tracker.example.com"), .blocked, "curated blocks cover subdomains")
+        XCTAssertEqual(filter.action(for: "home.lan"), .override(ip: "192.168.1.10"))
+    }
+
+    /// A domain the user already ruled keeps the user's scope — curated
+    /// must not duplicate or widen it.
+    func testCompactCustomWinsOverCurated() {
+        let (store, _) = makeStore()
+        var router = makeRouter(store: store)
+        var received: [DNSBlocklistEntry] = []
+        router.onDNSRulesChange = { received = $0 }
+
+        let custom = [DNSBlocklistEntry(domain: "ads.example.com", kind: .block, ip: "", includeSubdomains: false)]
+        _ = responseData(router, cmd: "dnsRulesSetCompact",
+                         args: compactArgs(custom: custom, curated: ["ads.example.com", "other.example.com"]))!
+        XCTAssertEqual(received.count, 2, "curated duplicate of a custom domain must be skipped")
+
+        let filter = LocalDNSFilter(entries: received)
+        XCTAssertEqual(filter.action(for: "ads.example.com"), .blocked)
+        XCTAssertEqual(filter.action(for: "sub.ads.example.com"), .none, "user's exact scope must survive the merge")
+        XCTAssertEqual(filter.action(for: "other.example.com"), .blocked)
+    }
+
+    func testCompactEmptyCuratedReturnsCustomOnly() {
+        let (store, _) = makeStore()
+        var router = makeRouter(store: store)
+        var received: [DNSBlocklistEntry] = []
+        router.onDNSRulesChange = { received = $0 }
+
+        let custom = [DNSBlocklistEntry(domain: "a.example.com", kind: .block)]
+        let r = responseData(router, cmd: "dnsRulesSetCompact", args: compactArgs(custom: custom))!
+        XCTAssertEqual((r["data"] as? [String: String])?["count"], "1")
+        XCTAssertEqual(received, custom)
+    }
+
+    /// Legacy full-list push keeps working (old app builds in the wild).
+    func testLegacyDnsRulesSetStillWorks() {
+        let (store, _) = makeStore()
+        var router = makeRouter(store: store)
+        var received: [DNSBlocklistEntry] = []
+        router.onDNSRulesChange = { received = $0 }
+
+        let entries = [DNSBlocklistEntry(domain: "legacy.example.com", kind: .block)]
+        let r = responseData(router, cmd: "dnsRulesSet", args: ["rules": DNSBlocklistEntry.encodeList(entries)!])!
+        XCTAssertEqual(r["ok"] as? Bool, true)
+        XCTAssertEqual((r["data"] as? [String: String])?["count"], "1")
+        XCTAssertEqual(received, entries)
+    }
+
     // MARK: - Malformed / unknown
 
     func testMalformedRequestReturnsError() {
