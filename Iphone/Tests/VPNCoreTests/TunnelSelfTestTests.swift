@@ -94,6 +94,24 @@ final class TunnelSelfTestTests: XCTestCase {
         XCTAssertEqual(r.web, "204")
     }
 
+    func testParseRouteReport() {
+        let r = SSHExecCheck.parse("IP:192.250.228.44\nWEB:route\n")
+        XCTAssertEqual(r.ip, "192.250.228.44")
+        XCTAssertEqual(r.web, "route")
+    }
+
+    /// Regression guard for App Review 5.1.1: the server-side self-check
+    /// command must never fetch anything — no URLs, no curl/wget, only a
+    /// local `ip route` table read. If this fails, someone reintroduced a
+    /// third-party contact into the check.
+    func testEgressCommandSendsNoTrafficAnywhere() {
+        let cmd = SSHExecCheck.egressCommand
+        XCTAssertFalse(cmd.contains("://"), "command must contain no URLs")
+        XCTAssertFalse(cmd.contains("curl"), "command must not fetch")
+        XCTAssertFalse(cmd.contains("wget"), "command must not fetch")
+        XCTAssertTrue(cmd.contains("ip -4 route"), "egress must come from the local routing table")
+    }
+
     func testBannerRecognition() {
         XCTAssertTrue(SSHExecCheck.looksLikeSSHBanner(Data("SSH-2.0-OpenSSH_9.6\r\n".utf8)))
         XCTAssertFalse(SSHExecCheck.looksLikeSSHBanner(Data("HTTP/1.1 200 OK\r\n".utf8)))

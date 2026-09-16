@@ -16,6 +16,11 @@ connectivity service.
   curl/wget on the server → "unverified" warning, never a false bypass.
 - **Privacy text ×17.** Both privacy copies now state the self-check
   contacts only the user's own server; Review Notes updated the same way.
+- **Zero-traffic self-check.** The server-side egress probe no longer runs
+  curl/wget against any IP-echo service: it reads the server's own routing
+  table (`ip route`, a local lookup sending zero packets). Neither the
+  phone nor the server contacts any third party for the check. A regression
+  test fails the build if a URL ever reappears in the probe command.
 - **Dead-code purge (review hygiene).** Removed the unused TUN-gateway
   transport (`SSHPacketTunnelTransport`), the embedded `gateway.py`
   payload, the `python3 -c …exec(base64…)` command builders and all

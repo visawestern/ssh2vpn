@@ -925,8 +925,8 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     func byteTotals() -> (up: Int, down: Int) { (stateMachine.totalUpBytes, stateMachine.totalDownBytes) }
 
     /// One-shot remote command for the egress self-check: runs on the user's
-    /// own server over a transient SSH session channel. The phone itself
-    /// contacts nothing — the server reports its own public IP.
+    /// own server over a transient SSH session channel. Nobody contacts any
+    /// third party — the server only reads its own routing table locally.
     func execOnServer(command: String, timeoutSeconds: Int = 15,
                       completion: @escaping @Sendable (SSHConnectionPool.ExecResult) -> Void) {
         pool.exec(command: command, timeoutSeconds: timeoutSeconds, completion: completion)

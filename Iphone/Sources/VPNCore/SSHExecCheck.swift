@@ -3,26 +3,29 @@ import Foundation
 /// Server-side egress self-check: what the phone asks the USER'S OWN server
 /// to report about itself, over the already-authenticated SSH session.
 ///
-/// Privacy design (App Review 5.1.1 / 5.4): the phone itself contacts NO
-/// third-party service for this check. The only network peer of the phone
-/// here is the user's own server. The server — the user's own machine —
-/// reports its public IP (asking an IP-echo service itself, exactly as if
-/// the user ran curl there by hand) and its web reachability. If the server
-/// has no curl/wget, the check reports "unverified" instead of failing.
+/// Privacy design (App Review 5.1.1 / 5.4): NOTHING in this check contacts
+/// any third party — not from the phone, not from the server either. The
+/// phone's only network peer here is the user's own server, and the server
+/// only reads its OWN kernel routing table (a local lookup that sends zero
+/// packets anywhere). No curl, no wget, no IP-echo service, no fetch of any
+/// kind. If the server cannot answer (no iproute2), the check reports
+/// "unverified" instead of failing.
 public enum SSHExecCheck {
 
     /// Runs on the server via SSH exec. Prints two lines:
-    ///   IP:<public IPv4 or empty>
-    ///   WEB:<HTTP code from generate_204 or "none">
-    /// curl-first, wget fallback; every fetch is time-boxed so a filtered
-    /// network degrades to empty output instead of hanging the channel.
+    ///   IP:<egress source IPv4 from the routing table, or empty>
+    ///   WEB:<"route" when a default egress route exists, else "none">
+    /// `ip route get` is a LOCAL FIB lookup — it consults the kernel's
+    /// routing table and sends no traffic. Same for `ip route show`.
+    /// Worst case (no `ip` tool, no default route) degrades to empty
+    /// output — unverified, never a false claim in either direction.
     public static let egressCommand = """
-    echo "IP:$(curl -s --max-time 4 https://api.ipify.org 2>/dev/null || wget -qO- -T 4 https://api.ipify.org 2>/dev/null)"; \
-    echo "WEB:$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 https://www.google.com/generate_204 2>/dev/null || echo none)"
+    echo "IP:$(ip -4 route get 8.8.8.8 2>/dev/null | sed -n 's/.* src \\([0-9.]*\\).*/\\1/p')"; \
+    echo "WEB:$(ip -4 route show default 2>/dev/null | grep -q . && echo route || echo none)"
     """
 
     /// Parsed server report. Nil fields mean "the server could not tell"
-    /// (no curl/wget, filtered network) — unverified, never a bypass claim.
+    /// (no iproute2, no route) — unverified, never a bypass claim.
     public struct Report: Equatable, Sendable {
         public var ip: String?
         public var web: String?

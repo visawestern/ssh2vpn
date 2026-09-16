@@ -673,10 +673,11 @@ final class AppModel: ObservableObject {
             // Blocking DNS resolve stays off the main thread; awaits below
             // never block (NWConnection suspends, not spins).
             let resolved = await Task.detached { (try? SSHEndpointResolver.resolve(host))?.ipv4 ?? [] }.value
-            // Egress report comes from the extension: the SERVER reports its
-            // own public IP over SSH exec. Empty when the tunnel is down or
-            // the server cannot tell (no curl/wget) — then the check stays
-            // "unverified" instead of failing.
+            // Egress report comes from the extension: the SERVER reads its own
+            // routing table over SSH exec (local lookup, zero traffic sent
+            // anywhere). Empty when the tunnel is down or the server cannot
+            // tell (no iproute2) — then the check stays "unverified" instead
+            // of failing.
             let rsp = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .egressCheck, timeout: 25)
             let report = SSHExecCheck.parse(rsp["output"] ?? "")
             let egressOK = await TunnelSelfTester.run(
@@ -2527,14 +2528,15 @@ enum VPNExtensionAPI {
     }
 }
 
-/// Post-connect traffic self-test with ZERO third-party contacts from the
-/// phone. The phone talks only to the user's OWN server here:
+/// Post-connect traffic self-test with ZERO third-party contacts — neither
+/// the phone nor the server sends a single packet anywhere for this check.
+/// The phone talks only to the user's OWN server here:
 ///   0. SSH banner check: plain TCP to the server's own port through the
 ///      system stack (i.e. through the tunnel while VPN is up). A banner
 ///      proves routing + relay + server reachability in one round trip.
-///   1. Egress check: the server reports its OWN public IP over the existing
-///      SSH session (extension-side exec — the server asks an IP-echo
-///      service itself, as if the user ran curl there by hand). Compared
+///   1. Egress check: the server reads its OWN routing table over the
+///      existing SSH session (extension-side exec — a local `ip route`
+///      lookup, no traffic). The reported egress source IP is compared
 ///      against the server IP: equal means traffic really exits via the VPS.
 /// Runs detached (blocking DNS stays off the main thread); results go
 /// to the console log. Diagnostic only — never gates the UI state.
@@ -2582,12 +2584,14 @@ enum TunnelSelfTester {
                 slog(.warning, "SELFTEST", "server IP unknown (hostname \(expectedHost) unresolved) — cannot verify egress")
             }
         } else {
-            slog(.warning, "SELFTEST", "egress unverified — the server could not report its public IP (no curl/wget or filtered network). Traffic may still be fine; banner check above is the routing proof.")
+            slog(.warning, "SELFTEST", "egress unverified — the server could not report its egress IP (no iproute2 on server or no route). Traffic may still be fine; banner check above is the routing proof.")
         }
 
-        // 2. Server web reachability, also reported by the server itself.
+        // 2. Server egress path, also read by the server itself from its own
+        // routing table (no traffic sent anywhere for this). "route" means a
+        // default egress route exists on the server.
         if let web = serverReport.web {
-            slog(web == "204" ? .success : .warning, "SELFTEST", "server web check -> HTTP \(web) (expected 204)")
+            slog(web == "route" ? .success : .warning, "SELFTEST", "server egress route check -> \(web) (expected route: server has a default egress path)")
         }
 
         slog(.system, "SELFTEST", "traffic checks finished")
