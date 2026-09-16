@@ -138,6 +138,41 @@ def parse(input_dir):
     return v4, v6
 
 
+def apply_overrides(v4, v6, csv_path):
+    """Curated CIDR -> country rows win over the RIR table ( hosting reality
+    beats registrant paperwork). Returns the number of inserted networks."""
+    if not os.path.exists(csv_path):
+        return 0
+    n = 0
+    for line in open(csv_path, encoding="utf-8"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cidr, cc = [p.strip() for p in line.split(",", 2)[:2]]
+        try:
+            net = ipaddress.ip_network(cidr, strict=False)
+        except ValueError:
+            print(f"  override SKIPPED (bad cidr): {line}")
+            continue
+        if not (len(cc) == 2 and cc.isalpha()):
+            print(f"  override SKIPPED (bad cc): {line}")
+            continue
+        cc = cc.upper()
+        if net.version == 4:
+            # expand to minimal CIDRs (handles non-aligned input too)
+            for c in ipaddress.summarize_address_range(net.network_address,
+                                                       net.broadcast_address):
+                v4[(int(c.network_address), c.prefixlen)] = cc
+                n += 1
+        else:
+            v6[((int(net.network_address) >> 64) & 0xFFFFFFFFFFFFFFFF,
+                int(net.network_address) & 0xFFFFFFFFFFFFFFFF,
+                net.prefixlen)] = cc
+            n += 1
+        print(f"  override {cidr} -> {cc}")
+    return n
+
+
 def write_dat(v4, v6, out_path):
     countries = sorted({c for c in v4.values()} | {c for c in v6.values()})
     cidx = {c: i for i, c in enumerate(countries)}
@@ -173,6 +208,7 @@ def self_check(v4, v6, countries):
                   "95.216.0.1", "51.75.0.1", "77.88.8.8", "9.9.9.9"]:
         print(f"  selfcheck {probe} -> {lookup_v4(probe)}")
     assert "US" in cset and "DE" in cset and "RU" in cset, "big countries missing!"
+    assert lookup_v4("192.250.228.44") == "SG", "WHG SGP1 override broken!"
 
 
 def main():
@@ -195,6 +231,8 @@ def main():
             return
     fetch_inputs(input_dir)
     v4, v6 = parse(input_dir)
+    csv_path = os.path.join(REPO, "scripts", "geo_overrides.csv")
+    print(f"overrides: {apply_overrides(v4, v6, csv_path)} networks from {csv_path}")
     countries = write_dat(v4, v6, out_path)
     self_check(v4, v6, countries)
 

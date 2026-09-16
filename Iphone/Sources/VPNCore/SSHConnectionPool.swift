@@ -604,6 +604,125 @@ public final class SSHConnectionPool: @unchecked Sendable {
 /// TCP flow lands on the least-loaded pooled SSH connection.
 extension SSHConnectionPool: RelayChannelFactory {}
 
+/// One-shot remote command for diagnostics (egress self-check): runs `command`
+/// on the server over a transient session channel on the least-loaded live
+/// connection and returns whatever stdout arrived. Never throws into the
+/// relay path — failure just yields empty output with `timedOut` set.
+extension SSHConnectionPool {
+    public struct ExecResult: Sendable {
+        public var output: String
+        public var timedOut: Bool
+        public init(output: String, timedOut: Bool) {
+            self.output = output
+            self.timedOut = timedOut
+        }
+    }
+
+    public func exec(command: String, timeoutSeconds: Int = 15,
+                     completion: @escaping @Sendable (ExecResult) -> Void) {
+        lock.lock()
+        let link = entries.first { $0.link.channel.isActive }?.link
+        let isClosed = closed
+        lock.unlock()
+        guard !isClosed, let link else {
+            completion(ExecResult(output: "", timedOut: false))
+            return
+        }
+        let box = ExecOnceBox(completion)
+        let eventLoop = link.channel.eventLoop
+        eventLoop.execute { [handler = link.handler] in
+            let promise = eventLoop.makePromise(of: Channel.self)
+            handler.createChannel(promise, channelType: .session) { child, channelType in
+                guard channelType == .session else {
+                    return child.eventLoop.makeFailedFuture(SSHTransportError.invalidChannelType)
+                }
+                return child.eventLoop.makeCompletedFuture {
+                    try child.pipeline.syncOperations.addHandler(SSHExecCollector(box: box))
+                    let request = SSHChannelRequestEvent.ExecRequest(command: command, wantReply: false)
+                    return child.pipeline.syncOperations.triggerUserOutboundEvent(request, promise: nil)
+                }
+            }
+            promise.futureResult.whenComplete { result in
+                switch result {
+                case .success: break // output arrives via the collector
+                case .failure: box.finish(output: "", timedOut: false)
+                }
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeoutSeconds)) {
+            box.finish(output: nil, timedOut: true)
+        }
+    }
+}
+
+/// Single-resume guard for one exec run: collector completion and the safety
+/// timeout race; exactly one wins. Completion fires off the event loop.
+private final class ExecOnceBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    private var output = ""
+    private let completion: @Sendable (SSHConnectionPool.ExecResult) -> Void
+
+    init(_ completion: @escaping @Sendable (SSHConnectionPool.ExecResult) -> Void) {
+        self.completion = completion
+    }
+
+    /// output == nil keeps whatever was collected so far (timeout path).
+    func finish(output: String?, timedOut: Bool) {
+        lock.lock()
+        if let output { self.output = output }
+        guard !done else { lock.unlock(); return }
+        done = true
+        let result = SSHConnectionPool.ExecResult(output: self.output, timedOut: timedOut)
+        lock.unlock()
+        completion(result)
+    }
+}
+
+/// Collects stdout bytes of one exec session until the server closes the
+/// channel (command done) — then reports the accumulated text. Stderr is
+/// ignored (curl/wget progress goes there; the report is stdout-only).
+private final class SSHExecCollector: ChannelInboundHandler, @unchecked Sendable {
+    typealias InboundIn = SSHChannelData
+
+    private let box: ExecOnceBox
+    private var text = ""
+
+    init(box: ExecOnceBox) {
+        self.box = box
+    }
+    public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let chunk = unwrapInboundIn(data)
+        // Regular channel data is stdout here; stderr arrives as .stdErr
+        // and is ignored (tool chatter, not the report).
+        if chunk.type == .channel, case .byteBuffer(var buf) = chunk.data,
+           let s = buf.readString(length: buf.readableBytes) {
+            text += s
+        }
+        context.fireChannelRead(data)
+    }
+
+    public func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if event is SSHChannelRequestEvent.ExitStatus {
+            let out = text
+            context.close(promise: nil)
+            box.finish(output: out, timedOut: false)
+            return
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+
+    public func channelInactive(context: ChannelHandlerContext) {
+        box.finish(output: text, timedOut: false)
+        context.fireChannelInactive()
+    }
+
+    public func errorCaught(context: ChannelHandlerContext, error: Error) {
+        box.finish(output: text, timedOut: false)
+        context.close(promise: nil)
+    }
+}
+
 /// Returned when the pool is already torn down — send is a no-op, close is
 /// a no-op, matching the old FailedRelayChannel contract.
 private final class FailedClosedChannel: RelayChannel {

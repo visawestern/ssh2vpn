@@ -80,9 +80,9 @@ public struct FloatingCustomizerButton: View {
     }
 }
 
-// MARK: - Sliding Right Hacker Console Sidebar
+// MARK: - Sliding Right Diagnostics Console Sidebar
 
-public struct HackerConsoleSidebarView: View {
+public struct DiagnosticsConsoleSidebarView: View {
     @Binding var isOpen: Bool
     @State private var entries: [ConsoleLogEntry] = ConsoleLogStore.shared.entries
     @State private var autoScroll: Bool = true
@@ -319,7 +319,7 @@ public struct HackerConsoleSidebarView: View {
                 LazyVStack(alignment: .leading, spacing: 5) {
                     if visibleEntries.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("/* SSH2VPN Terminal Logger Initialized */")
+                            Text("/* SSH2VPN diagnostics — waiting for events */")
                                 .foregroundStyle(Color.gray.opacity(0.7))
                             Text(selectedTags.isEmpty
                                  ? "/* Ready to capture transport events... */"
@@ -353,7 +353,7 @@ public struct HackerConsoleSidebarView: View {
         }
     }
 
-    // MARK: - Log Row with Hacker Colors (2 lines per entry: meta, then body)
+    // MARK: - Log Row with status colors (2 lines per entry: meta, then body)
     private func logRow(_ entry: ConsoleLogEntry) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             // Line 1 — date like now + type/tag

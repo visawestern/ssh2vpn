@@ -15,7 +15,8 @@ final class OfflineGeoIPTests: XCTestCase {
         XCTAssertEqual(OfflineGeoIP.countryCode(ipString: "1.1.1.1"), "AU")
         XCTAssertEqual(OfflineGeoIP.countryCode(ipString: "77.88.8.8"), "RU")
         XCTAssertEqual(OfflineGeoIP.countryCode(ipString: "95.216.0.1"), "DE")
-        XCTAssertEqual(OfflineGeoIP.countryCode(ipString: "192.250.228.44"), "GB")
+        // WHG SGP1 Singapore: inetnum says SG (override), registrant is GB.
+        XCTAssertEqual(OfflineGeoIP.countryCode(ipString: "192.250.228.44"), "SG")
     }
 
     func testGarbageAndSpecialUseReturnNil() {

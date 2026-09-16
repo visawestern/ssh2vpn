@@ -100,11 +100,11 @@ struct RootView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
 
-            // Right sliding Hacker Console Sidebar — reachable exactly while
+            // Right sliding Diagnostics Console Sidebar — reachable exactly while
             // the button is (see showConsoleButton); close it when the grace
             // window lapses or logging is flipped off mid-open.
             if model.showConsoleButton {
-                HackerConsoleSidebarView(isOpen: $isConsoleOpen)
+                DiagnosticsConsoleSidebarView(isOpen: $isConsoleOpen)
             } else {
                 Color.clear.onAppear { isConsoleOpen = false }
             }
@@ -734,19 +734,14 @@ struct WorldMapView: View {
     @EnvironmentObject private var model: AppModel
     @State private var isPulsing = false
 
-    /// Geographic coordinates -> on-screen map position. The asset's drawn
-    /// map occupies a content box inside its 1920x954 canvas (transparent
-    /// margins around it), so the lat/lon is projected onto that measured
-    /// content box and then mapped onto the live map frame — recalculated
-    /// from the current map size on every relayout (rotation included).
-    private static func mapPosition(lon: Double, lat: Double, mapWidth: CGFloat, mapHeight: CGFloat) -> CGPoint {
-        let canvasW = 1920.0, canvasH = 954.0
-        let contentX = 6.0, contentY = 18.0, contentW = 1814.0, contentH = 880.0
-        let lonNorm = min(max((lon + 180.0) / 360.0, 0.0), 1.0)
-        let latNorm = min(max((90.0 - lat) / 180.0, 0.0), 1.0)
-        let x = (contentX + lonNorm * contentW) / canvasW * mapWidth
-        let y = (contentY + latNorm * contentH) / canvasH * mapHeight
-        return CGPoint(x: x, y: y)
+    /// Geographic coordinates -> on-screen map position. Delegates to the
+    /// calibrated VPNCore projection (piecewise anchors measured off the
+    /// asset + per-country overrides for distorted areas) and scales the
+    /// 1920x954 canvas point onto the live map frame — recalculated from
+    /// the current map size on every relayout (rotation included).
+    private static func mapPosition(lon: Double, lat: Double, mapWidth: CGFloat, mapHeight: CGFloat, countryCode: String? = nil) -> CGPoint {
+        let p = MapProjection.viewPoint(lon: lon, lat: lat, mapWidth: Double(mapWidth), mapHeight: Double(mapHeight), countryCode: countryCode)
+        return CGPoint(x: p.x, y: p.y)
     }
 
     var body: some View {
@@ -758,7 +753,7 @@ struct WorldMapView: View {
             let hasServer = !model.profile.host.isEmpty
 
             // Selected-server marker: re-projected from the current map size.
-            let pos = Self.mapPosition(lon: model.serverLongitude, lat: model.serverLatitude, mapWidth: mapWidth, mapHeight: mapHeight)
+            let pos = Self.mapPosition(lon: model.serverLongitude, lat: model.serverLatitude, mapWidth: mapWidth, mapHeight: mapHeight, countryCode: model.serverCountryCode)
             let dotX = min(max(pos.x, 24), mapWidth - 24)
             let dotY = min(max(pos.y, 22), mapHeight - 22)
 
@@ -777,7 +772,7 @@ struct WorldMapView: View {
                 ForEach(model.servers) { server in
                     let isSelected = server.id == model.selectedServer?.id
                     if !isSelected, let geo = model.serverGeoCache[server.id] {
-                        let p = Self.mapPosition(lon: geo.lon, lat: geo.lat, mapWidth: mapWidth, mapHeight: mapHeight)
+                        let p = Self.mapPosition(lon: geo.lon, lat: geo.lat, mapWidth: mapWidth, mapHeight: mapHeight, countryCode: geo.countryCode)
                         let x = min(max(p.x, 12), mapWidth - 12)
                         let y = min(max(p.y, 12), mapHeight - 12)
                         let ping = model.serverPingCache[server.id]

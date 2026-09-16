@@ -133,7 +133,7 @@ public final class ConsoleLogStore: @unchecked Sendable {
         let snapshot = entries
         var out = [String]()
         out.append("==================================================================")
-        out.append("                SSH2VPN HACKER TERMINAL LOG DUMP                  ")
+        out.append("                SSH2VPN DIAGNOSTICS LOG                  ")
         out.append("==================================================================")
         out.append("Generated: \(Date().description)")
         out.append("Entries: \(snapshot.count)")

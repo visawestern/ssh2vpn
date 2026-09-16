@@ -1,5 +1,32 @@
 # SSH2VPN — Changelog
 
+## dev (unreleased)
+
+Third-party-free self-check: the phone no longer queries any IP-echo or
+connectivity service.
+
+- **Banner check against your own server.** Post-connect self-test opens
+  plain TCP to the user's own server port through the tunnel and expects
+  an `SSH-2.0-` banner — routing + relay + reachability in one round
+  trip, zero third parties (replaces the 8.8.8.8:443 probe and the Google
+  generate_204 fetch).
+- **Server-reported egress.** New `egressCheck` app→extension command runs
+  one transient SSH exec on the live pool; the server reports its own
+  public IP and web reachability itself. The phone asks nobody else. No
+  curl/wget on the server → "unverified" warning, never a false bypass.
+- **Privacy text ×17.** Both privacy copies now state the self-check
+  contacts only the user's own server; Review Notes updated the same way.
+- **Dead-code purge (review hygiene).** Removed the unused TUN-gateway
+  transport (`SSHPacketTunnelTransport`), the embedded `gateway.py`
+  payload, the `python3 -c …exec(base64…)` command builders and all
+  gateway-deploy/artifact plumbing: none of it ran in relay mode, but its
+  strings (`iptables`, `exec`, `chmod 700`) sat in the binary. Also
+  deleted orphan helpers/tests (`FlowOpen`, `FlowRouter`,
+  `VPNProfileEditor`, `VPSSupplier` affiliate catalog, …) and renamed
+  the "Hacker Console" UI/log strings to neutral "Diagnostics".
+  Verified: `swift test` 548 passed / 0 failed, simulator build +
+  launch clean, extension binary contains no gateway/iptables traces.
+
 ## 1.0.6 (build 7)
 
 Offline server location: no network, nothing to declare.

@@ -67,4 +67,36 @@ final class TunnelSelfTestTests: XCTestCase {
     func testUnresolvableHostnameYieldsNil() {
         XCTAssertNil(TunnelSelfTest.pickExpected(host: "vps.example.com", resolvedIPv4: []))
     }
+
+    // MARK: - server-reported egress (SSHExecCheck, no third party on-phone)
+
+    func testParseFullReport() {
+        let r = SSHExecCheck.parse("IP:192.250.228.44\nWEB:204\n")
+        XCTAssertEqual(r.ip, "192.250.228.44")
+        XCTAssertEqual(r.web, "204")
+    }
+
+    func testParseToleratesCRLFAndWhitespace() {
+        let r = SSHExecCheck.parse("  IP: 1.2.3.4 \r\nWEB: none\r\n")
+        XCTAssertEqual(r.ip, "1.2.3.4")
+        XCTAssertEqual(r.web, "none")
+    }
+
+    func testParseEmptyMeansUnverified() {
+        let r = SSHExecCheck.parse("")
+        XCTAssertNil(r.ip)
+        XCTAssertNil(r.web)
+    }
+
+    func testParseIgnoresExtraLines() {
+        let r = SSHExecCheck.parse("some motd line\nIP:9.9.9.9\nanother\nWEB:204\n")
+        XCTAssertEqual(r.ip, "9.9.9.9")
+        XCTAssertEqual(r.web, "204")
+    }
+
+    func testBannerRecognition() {
+        XCTAssertTrue(SSHExecCheck.looksLikeSSHBanner(Data("SSH-2.0-OpenSSH_9.6\r\n".utf8)))
+        XCTAssertFalse(SSHExecCheck.looksLikeSSHBanner(Data("HTTP/1.1 200 OK\r\n".utf8)))
+        XCTAssertFalse(SSHExecCheck.looksLikeSSHBanner(Data()))
+    }
 }

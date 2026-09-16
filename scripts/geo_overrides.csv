@@ -1,0 +1,8 @@
+# Curated IP -> country overrides, applied ON TOP of the RIR table.
+# Format: cidr,country,comment
+# RIR delegated-stats carry the REGISTRANT's country (often the LIR's home),
+# which is wrong when a hoster announces the range from another country.
+# Each row here was verified against the inetnum object (country field),
+# the operator geofeed (RFC 9092) and/or rDNS+latency. Checked first,
+# longest-prefix-match wins over the base table.
+192.250.228.0/24,SG,WHG SGP1 Singapore: inetnum country SG + geofeed https://geofeed.whgi.net/geofeed.csv (org WHG Hosting Services Ltd GB)

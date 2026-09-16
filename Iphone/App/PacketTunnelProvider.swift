@@ -128,6 +128,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     // The pure dispatch logic lives in TunnelAppMessageRouter (VPNCore) and is
     // unit-tested there. This override just bridges the system callback to it.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        // Async commands bypass the synchronous router: the egress self-check
+        // runs a transient SSH exec on the live pool (seconds) and must not
+        // block the message channel.
+        if let obj = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any],
+           let cmd = obj["cmd"] as? String, cmd == "egressCheck" {
+            runEgressCheck(completionHandler: completionHandler)
+            return
+        }
         var router = TunnelAppMessageRouter(
             serverStore: serverStore,
             statusProvider: { [weak self] in
@@ -171,6 +179,41 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             self?.applyDNSRulesFromApp(rules)
         }
         completionHandler?(router.handle(messageData))
+    }
+
+    /// Egress self-check, extension side: asks the USER'S OWN server to report
+    /// its public IP and web reachability over one transient SSH exec channel.
+    /// The phone contacts no third party for this — only its own server over
+    /// the existing authenticated pool. Replies {"ok":true,"data":{...}} like
+    /// the sync router so the app parses it the same way.
+    private func runEgressCheck(completionHandler: ((Data?) -> Void)?) {
+        // completionHandler is non-Sendable; the exec callback is @Sendable,
+        // so it crosses isolation in a box (called exactly once).
+        final class CompletionBox: @unchecked Sendable {
+            let fn: ((Data?) -> Void)?
+            init(_ fn: ((Data?) -> Void)?) { self.fn = fn }
+        }
+        let box = CompletionBox(completionHandler)
+        guard let relay = transport as? RelayTransport else {
+            completeJSON(ok: false, data: ["error": "tunnel not running"]) {
+                box.fn?($0)
+            }
+            return
+        }
+        relay.execOnServer(command: SSHExecCheck.egressCommand, timeoutSeconds: 15) { result in
+            self.completeJSON(ok: true, data: [
+                "output": result.output,
+                "timedOut": result.timedOut ? "true" : "false",
+            ]) {
+                box.fn?($0)
+            }
+        }
+    }
+
+    private func completeJSON(ok: Bool, data: [String: String],
+                              completion: @escaping @Sendable (Data?) -> Void) {
+        let rsp: [String: Any] = ["ok": ok, "data": data]
+        completion(try? JSONSerialization.data(withJSONObject: rsp))
     }
 
     override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping @Sendable (Error?) -> Void) {
@@ -707,358 +750,9 @@ private struct TunnelConfiguration {
     }
 }
 
-/// One transport drives all SSH child sessions and the single packet tunnel.
-///
-/// Reconnect, heartbeat and backpressure live behind PacketTunnelTransport so
-/// the NetworkExtension packetFlow stays the only Apple-owned piece here.
-private final class SSHPacketTunnelTransport: PacketTunnelTransport, @unchecked Sendable {
-    private let configuration: TunnelConfiguration
-    private let endpoint: SSHResolvedEndpoint
-    private let bundle: Bundle
-    private let stateQueue = DispatchQueue(label: "com.sshtunnel.transport-state")
-    private var factory: SSHTransportFactory?
-
-    private var sessionCredentials: SSHCredentials?
-    private var sessionCommand: String?
-    private var sessions = [SSHTransportSession]()
-    private var sessionTokens = [String: SSHTransportSession]()
-    private var authenticatedTokens = Set<String>()
-    private var heartbeat = HeartbeatTracker()
-    private var heartbeatTimer: DispatchSourceTimer?
-    private let heartbeatInterval: TimeInterval = 10
-    private let heartbeatThreshold = 2
-
-    private var nextSession = 0
-    private let desiredSessionCount = 3
-    /// Set once the first session authenticates; the remaining sessions are
-    /// then opened staggered instead of as a parallel auth burst (which trips
-    /// sshd MaxStartups / fail2ban-style rate limits). Reset on start().
-    private var didScaleUp = false
-    private var reconnectController: GatewayReconnectController
-    private var reconnectWorkItem: DispatchWorkItem?
-    private var pathMonitor: NWPathMonitor?
-    private var stopped = false
-
-    private var receivePacket: (@Sendable (Data) -> Void)?
-    private var failure: (@Sendable (Error) -> Void)?
-    private var ready: (@Sendable (Error?) -> Void)?
-    private var pending = [(packet: Data, completion: @Sendable (Error?) -> Void)]()
-    private let maxPendingPackets = 512
-    private var pendingBytes = 0
-    private let maxPendingBytes = 256 * 1024
-
-    private let brokerID: String
-
-    init(configuration: TunnelConfiguration, endpoint: SSHResolvedEndpoint, brokerID: String, bundle: Bundle) throws {
-        self.configuration = configuration
-        self.endpoint = endpoint
-        self.brokerID = brokerID
-        self.bundle = bundle
-        self.reconnectController = GatewayReconnectController(desiredSessionCount: 3)
-        self.factory = try SSHTransportFactory(pinnedOpenSSHHostKey: configuration.hostKey)
-    }
-
-    func start(receive: @escaping @Sendable (Data) -> Void, failure: @escaping @Sendable (Error) -> Void, ready: @escaping @Sendable (Error?) -> Void) {
-        elog(.info, "TRANSPORT", "start() invoked; desired sessions=\(desiredSessionCount)")
-        stateQueue.async { [weak self] in
-            guard let self else { return }
-            self.reset()
-            self.receivePacket = receive
-            self.failure = failure
-            self.ready = ready
-            _ = self.reconnectController.stateMachine.start()
-
-            let monitor = NWPathMonitor()
-            self.pathMonitor = monitor
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            self.stateQueue.async {
-                if path.status == .satisfied {
-                    if !self.reconnectController.didReportReady && self.sessions.isEmpty { self.scheduleReconnect() }
-                    return
-                }
-                    // Force failed sockets to emit channelInactive; the normal
-                    // reconnect path then recreates child sessions after the
-                    // bounded backoff while packet data stays in the bounded
-                    // pending queue.
-                    self.sessions.forEach { $0.close() }
-                }
-            }
-            monitor.start(queue: DispatchQueue.global(qos: .utility))
-
-            // Server-side gateway script is embedded in this binary (GatewayScript)
-            // so the .appex ships no loose script files (App Store 90035).
-            guard let script = GatewayScript.bytes,
-                  let factory = self.factory else {
-                elog(.error, "TRANSPORT", "gateway.py missing or factory nil -> gatewayMissing")
-                self.reconnectController.stateMachine.fail(.protocolViolation)
-                ready(SSHPacketTunnelError.gatewayMissing)
-                return
-            }
-            elog(.info, "TRANSPORT", "gateway.py loaded (\(script.count) bytes); opening initial SSH session (1 of \(self.desiredSessionCount), rest scale up staggered after first auth)")
-            let target = self.endpoint.primaryTarget() ?? self.configuration.host
-            let credentials = SSHCredentials(
-                host: target,
-                port: self.configuration.port,
-                username: self.configuration.username,
-                password: self.configuration.password,
-                privateKey: self.configuration.privateKey
-            )
-            let command = GatewayCommandBuilder.pythonInline(script: script, brokerID: self.brokerID)
-            self.sessionCredentials = credentials
-            self.sessionCommand = command
-            self.openOne(credentials: credentials, command: command, factory: factory)
-            self.startHeartbeat()
-        }
-    }
-
-    /// Opens the remaining sessions staggered once the first one proves the
-    /// path and credentials work. Never fires a parallel auth burst against
-    /// the server. Runs on stateQueue (all call sites already do).
-    private func scaleUpIfNeeded(credentials: SSHCredentials, command: String, factory: SSHTransportFactory) {
-        guard !didScaleUp, !stopped else { return }
-        didScaleUp = true
-        let remaining = max(0, desiredSessionCount - 1)
-        guard remaining > 0 else { return }
-        elog(.info, "TRANSPORT", "first session authenticated; scaling up \(remaining) more session(s) staggered")
-        for i in 0..<remaining {
-            stateQueue.asyncAfter(deadline: .now() + 0.7 * Double(i + 1)) { [weak self] in
-                guard let self, !self.stopped else { return }
-                self.openOne(credentials: credentials, command: command, factory: factory)
-            }
-        }
-    }
-
-    private func openOne(credentials: SSHCredentials, command: String, factory: SSHTransportFactory) {
-        guard !stopped else { return }
-        let token = UUID().uuidString
-        let nonce = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
-        let sessionHolder = SessionHolder()
-        let handshake = LockedSessionHandshake(nonce: nonce)
-        factory.openSession(credentials, command: command, receive: { [weak self] frame in
-            guard let self else { return }
-            self.stateQueue.async { [weak self] in
-                guard let self else { return }
-                switch frame.type {
-                case .helloAck:
-                    elog(.info, "SESSION", "received helloAck (SSH channel authenticated+handshaked)")
-                    if (try? handshake.accept(frame)) == nil {
-                        sessionHolder.session?.close()
-                        self.handleSessionFailure(SSHPacketTunnelError.probeFailed)
-                        return
-                    }
-                    self.authenticatedTokens.insert(token)
-                    self.scaleUpIfNeeded(credentials: credentials, command: command, factory: factory)
-                    if let ping = try? TransportFrame(type: .ping) {
-                        sessionHolder.session?.send(ping)
-                        self.heartbeat.markSent(token)
-                    }
-                case .pong:
-                    NSLog("[SSH2VPN][SESSION] received pong")
-                    guard handshake.isAuthenticated else { return }
-                    self.heartbeat.markPong(token)
-                    self.reconnectController.setSessions(self.sessions.count)
-                    self.reconnectController.isStopped = self.stopped
-                    if case .reportReady = self.reconnectController.sessionAuthenticated() {
-                        self.ready?(nil)
-                        self.flush()
-                    }
-                default:
-                    break
-                }
-                if let packet = try? RawPacketBridge.inboundPacket(from: frame) { self.receivePacket?(packet) }
-            }
-        }, failure: { [weak self] error in
-            guard let self else { return }
-            self.stateQueue.async { [weak self] in
-                self?.handleSessionFailure(error)
-            }
-        }).whenComplete { [weak self] result in
-            guard let self else { return }
-            self.stateQueue.async { [weak self] in
-                guard let self else { return }
-                switch result {
-                case .success(let childSession):
-                    elog(.info, "SESSION", "openSession success (SSH connected)")
-                    self.sessions.append(childSession)
-                    self.sessionTokens[token] = childSession
-                    sessionHolder.session = childSession
-                    self.reconnectController.incrementSessions()
-                    if let hello = try? TransportFrame(type: .hello, payload: nonce) {
-                        childSession.send(hello)
-                    }
-                case .failure(let error):
-                    self.reconnectController.setSessions(self.sessions.count)
-                    self.reconnectController.isStopped = self.stopped
-                    switch self.reconnectController.initialAttemptFailed(isFatal: self.isFatal(error)) {
-                    case .failAuthentication:
-                        self.failure?(error)
-                    case .failTransport:
-                        self.ready?(error)
-                    case .scheduleReconnect:
-                        self.scheduleReconnect()
-                    case .reportReady, .noOp:
-                        break
-                    }
-                }
-            }
-        }
-    }
-
-    /// Diagnostic: sessions currently tracked by the transport. Read off-queue
-    /// on purpose (same as the loop counters) — informational only.
-    var sessionCount: Int { sessions.count }
-
-    func send(packet: Data, completion: @escaping @Sendable (Error?) -> Void) {
-        stateQueue.async { [weak self] in
-            guard let self else { completion(SSHPacketTunnelError.cancelled); return }
-            guard !self.sessions.isEmpty else {
-                // No authenticated session yet: bound the queue by both count
-                // and bytes so a stalled handshake cannot grow memory forever.
-                guard self.pending.count < self.maxPendingPackets,
-                      self.pendingBytes + packet.count <= self.maxPendingBytes
-                else { completion(SSHPacketTunnelError.backpressure); return }
-                self.pending.append((packet, completion))
-                self.pendingBytes += packet.count
-                return
-            }
-            let session = self.sessions[self.nextSession % self.sessions.count]
-            self.nextSession += 1
-            do { session.send(try RawPacketBridge.outboundFrame(for: packet), completion: completion) }
-            catch { completion(error) }
-        }
-    }
-
-    func stop() {
-        stateQueue.async { [weak self] in
-            guard let self else { return }
-            self.stopped = true
-            _ = self.reconnectController.stateMachine.stop()
-            self.reconnectWorkItem?.cancel()
-            self.reconnectWorkItem = nil
-            self.pathMonitor?.cancel()
-            self.pathMonitor = nil
-            self.stopHeartbeat()
-            self.sessions.forEach { $0.close() }
-            self.sessions.removeAll()
-            self.sessionTokens.removeAll()
-            self.authenticatedTokens.removeAll()
-            self.pending.forEach { $0.completion(SSHPacketTunnelError.cancelled) }
-            self.pending.removeAll()
-            self.pendingBytes = 0
-        }
-    }
-
-    private func flush() {
-        let packets = pending
-        pending.removeAll()
-        pendingBytes = 0
-        for (packet, completion) in packets { send(packet: packet, completion: completion) }
-    }
-
-    private func scheduleReconnect() {
-        reconnectController.isStopped = stopped
-        guard case .scheduleReconnect = reconnectController.scheduleReconnect() else { return }
-        let delay = ReconnectPolicy(baseDelay: 1, maxDelay: 3600, jitter: 0.2)
-            .delay(for: reconnectController.reconnectAttempt, randomUnit: Double.random(in: 0...1))
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.stateQueue.async { [weak self] in
-                guard let self, !self.stopped else { return }
-                self.reconnectWorkItem = nil
-                self.reconnectController.reconnectFired()
-                if let credentials = self.sessionCredentials,
-                   let command = self.sessionCommand,
-                   let factory = self.factory {
-                    self.openOne(credentials: credentials, command: command, factory: factory)
-                }
-            }
-        }
-        reconnectWorkItem = work
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: work)
-    }
-
-    private func reset() {
-        stopped = false
-        didScaleUp = false
-        reconnectWorkItem?.cancel()
-        reconnectWorkItem = nil
-        pathMonitor?.cancel()
-        pathMonitor = nil
-        stopHeartbeat()
-        sessions.forEach { $0.close() }
-        sessions.removeAll()
-        sessionTokens.removeAll()
-        authenticatedTokens.removeAll()
-        heartbeat.reset()
-        pending.forEach { $0.completion(SSHPacketTunnelError.cancelled) }
-        pending.removeAll()
-        pendingBytes = 0
-        nextSession = 0
-        reconnectController = GatewayReconnectController(desiredSessionCount: desiredSessionCount)
-    }
-
-    private func handleSessionFailure(_ error: Error) {
-        elog(.error, "SESSION", "failure: \(error)")
-        sessions.removeAll { !$0.isActive }
-        discardDeadTokens()
-        reconnectController.setSessions(sessions.count)
-        reconnectController.isStopped = stopped
-        // Post-ready every loss is topped back up to the session count; pre
-        // ready, only schedule when nothing is left to avoid stacking new
-        // connects while the remaining sessions are still opening.
-        if case .scheduleReconnect = reconnectController.sessionLost() {
-            scheduleReconnect()
-        }
-        _ = error
-    }
-
-    private func discardDeadTokens() {
-        for (token, session) in sessionTokens where !session.isActive {
-            authenticatedTokens.remove(token)
-            heartbeat.remove(token)
-        }
-        sessionTokens = sessionTokens.filter { $0.value.isActive }
-    }
-
-    private func isFatal(_ error: Error) -> Bool {
-        error is SSHTransportError
-    }
-
-    private func startHeartbeat() {
-        stopHeartbeat()
-        let timer = DispatchSource.makeTimerSource(queue: stateQueue)
-        timer.schedule(deadline: .now() + heartbeatInterval, repeating: heartbeatInterval)
-        timer.setEventHandler { [weak self] in self?.heartbeatTick() }
-        timer.resume()
-        heartbeatTimer = timer
-    }
-
-    private func stopHeartbeat() {
-        heartbeatTimer?.cancel()
-        heartbeatTimer = nil
-    }
-
-    private func heartbeatTick() {
-        guard !stopped else { return }
-        let now = Date()
-        for (token, session) in sessionTokens where authenticatedTokens.contains(token) {
-            if let ping = try? TransportFrame(type: .ping) { session.send(ping) }
-            heartbeat.markSent(token, at: now)
-        }
-        for token in heartbeat.deadTokens(at: now, interval: heartbeatInterval, threshold: heartbeatThreshold) {
-            // Silent sessions are torn down; their channelInactive triggers the
-            // normal reconnect path instead of leaving a blackhole behind.
-            authenticatedTokens.remove(token)
-            heartbeat.remove(token)
-            sessionTokens[token]?.close()
-        }
-    }
-}
 
 private enum SSHPacketTunnelError: Error {
     case invalidConfiguration
-    case gatewayMissing
     case transportLost
     case protocolViolation
     case probeFailed
@@ -1072,8 +766,6 @@ extension SSHPacketTunnelError: LocalizedError {
         switch self {
         case .invalidConfiguration:
             return "The tunnel configuration is invalid. Check host, port and credentials."
-        case .gatewayMissing:
-            return "No network gateway was found on this server."
         case .transportLost:
             return "The SSH transport was lost."
         case .protocolViolation:
@@ -1090,28 +782,6 @@ extension SSHPacketTunnelError: LocalizedError {
     }
 }
 
-private final class LockedSessionHandshake: @unchecked Sendable {
-    private var value: SessionHandshake
-    private let lock = NSLock()
-
-    init(nonce: Data) { value = SessionHandshake(nonce: nonce) }
-
-    func accept(_ frame: TransportFrame) throws {
-        lock.lock()
-        defer { lock.unlock() }
-        _ = try value.accept(frame)
-    }
-
-    var isAuthenticated: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return value.state == .authenticated
-    }
-}
-
-private final class SessionHolder: @unchecked Sendable {
-    var session: SSHTransportSession?
-}
 
 // MARK: - Unprivileged TCP relay transport
 
@@ -1253,6 +923,14 @@ final class RelayTransport: PacketTunnelTransport, @unchecked Sendable {
     func sshConnectionCount() -> Int { pool.connectionCount }
     func activeChannelCount() -> Int { pool.snapshotInFlight().reduce(0, +) }
     func byteTotals() -> (up: Int, down: Int) { (stateMachine.totalUpBytes, stateMachine.totalDownBytes) }
+
+    /// One-shot remote command for the egress self-check: runs on the user's
+    /// own server over a transient SSH session channel. The phone itself
+    /// contacts nothing — the server reports its own public IP.
+    func execOnServer(command: String, timeoutSeconds: Int = 15,
+                      completion: @escaping @Sendable (SSHConnectionPool.ExecResult) -> Void) {
+        pool.exec(command: command, timeoutSeconds: timeoutSeconds, completion: completion)
+    }
 
     /// Local filter snapshot for Diagnostics while the tunnel is live.
     var dnsFilterStatus: (rules: Int, blocked: Int, cacheHits: Int) {

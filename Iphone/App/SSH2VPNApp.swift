@@ -175,6 +175,7 @@ final class AppModel: ObservableObject {
     /// start, first-start flake) from a real mid-session drop.
     private var attemptStartedAt: Date?
     @Published var serverCountry: String = ""
+    @Published var serverCountryCode: String = ""
     @Published var serverFlag: String = "🌐"
     @Published var serverCity: String = ""
     @Published var serverPingMs: Int? = nil
@@ -468,6 +469,7 @@ final class AppModel: ObservableObject {
         serverName = "My VPS"
         serverFlag = "🌐"
         serverCountry = ""
+        serverCountryCode = ""
         serverCity = ""
         serverLatitude = 50.1109
         serverLongitude = 8.6821
@@ -484,7 +486,7 @@ final class AppModel: ObservableObject {
                 self?.handleVPNStatusChange(connection)
             }
         }
-        ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v\(Self.appVersion) Cyber Terminal Logger Initialized")
+        ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v\(Self.appVersion) diagnostics log initialized")
         // Re-apply the idle-lock whenever the app enters the foreground so the
         // screen stays on for the whole time the user is inside the app.
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -652,23 +654,34 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Kicks off the post-connect traffic self-test (egress IP vs server IP +
-    /// HTTPS reachability). Runs detached so blocking DNS never touches the
-    /// main thread; results land in the console log.
+    /// Kicks off the post-connect traffic self-test (SSH banner against the
+    /// user's own server + server-reported egress IP). The phone contacts no
+    /// third party here — only its own server, directly and over SSH.
+    /// Runs detached so blocking DNS never touches the main thread; results
+    /// land in the console log.
     private func runPostConnectSelfTest() {
         guard let selected = selectedServer else {
             ConsoleLogStore.shared.log(level: .warning, tag: "SELFTEST", message: "skipped: no selected server")
             return
         }
         let host = selected.host
+        let port = selected.port
         Task { @MainActor in
             let before = await self.utunReadCount()
             // Blocking DNS resolve stays off the main thread; awaits below
-            // never block (URLSession/NWConnection suspend, not spin).
+            // never block (NWConnection suspends, not spins).
             let resolved = await Task.detached { (try? SSHEndpointResolver.resolve(host))?.ipv4 ?? [] }.value
+            // Egress report comes from the extension: the SERVER reports its
+            // own public IP over SSH exec. Empty when the tunnel is down or
+            // the server cannot tell (no curl/wget) — then the check stays
+            // "unverified" instead of failing.
+            let rsp = await VPNExtensionAPI.call(from: self.vpn.diagnosticManager(), cmd: .egressCheck, timeout: 25)
+            let report = SSHExecCheck.parse(rsp["output"] ?? "")
             let egressOK = await TunnelSelfTester.run(
                 expectedHost: host,
                 resolvedIPv4: resolved,
+                sshPort: port,
+                serverReport: report,
                 utunReadBefore: before
             )
             // Routing verdict: did ANY self-test packet reach utun?
@@ -881,16 +894,17 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .system, tag: "LANG", message: "Interface language updated -> \(language.title)")
     }
 
-    /// Local metadata only (no TCP ping here, no GeoIP anywhere): every
-    /// port-22 SYN counts against the VPS per-source rate limiter (~6/30s),
-    /// so SYNs are spent ONLY on real SSH connects plus the slow ping loop.
+    /// Local metadata only (no TCP ping here): every port-22 SYN counts
+    /// against the VPS per-source rate limiter (~6/30s), so SYNs are spent
+    /// ONLY on real SSH connects plus the slow ping loop.
     /// Ping freshness comes from the load-time sweep, the minutely
     /// selected-only tick and the list view. Country/flag come from the
     /// OFFLINE on-device resolver (bundled prefix table, no network):
-    /// every placed server gets a map dot from its country centroid.
+    /// every placed server gets a map dot via the calibrated projection.
     func refreshServerMetadata() {
         guard !profile.host.isEmpty else {
             serverCountry = ""
+            serverCountryCode = ""
             serverFlag = "🌐"
             serverCity = ""
             serverPingMs = nil
@@ -916,6 +930,7 @@ final class AppModel: ObservableObject {
                 if let geo = geo {
                     self.lastGeoHost = currentHost
                     self.serverCountry = geo.country
+                    self.serverCountryCode = geo.countryCode
                     self.serverFlag = geo.flag
                     self.serverCity = geo.city
                     self.serverLatitude = geo.lat
@@ -931,6 +946,7 @@ final class AppModel: ObservableObject {
                     // Unresolvable host: show the hostname honestly
                     // instead of a guessed country.
                     self.serverCountry = ""
+                    self.serverCountryCode = ""
                     self.serverFlag = "🌐"
                     self.serverCity = ""
                     self.hasServerGeo = false
@@ -2372,6 +2388,9 @@ enum VPNExtensionAPI {
         case serverSelect = "serverSelect"
         case logs = "logs"
         case dnsRulesSet = "dnsRulesSet"
+        /// Server-reported egress check (extension runs SSH exec on the live
+        /// pool; the phone contacts no third party for it).
+        case egressCheck = "egressCheck"
     }
 
     /// Sends a command (plus optional args) to the extension and returns its
@@ -2453,17 +2472,22 @@ enum VPNExtensionAPI {
     }
 }
 
-/// Post-connect traffic self-test: verifies the egress IP really belongs to
-/// the server (via known echo services) plus a plain HTTPS reachability
-/// check. Runs detached (blocking DNS stays off the main thread); results go
+/// Post-connect traffic self-test with ZERO third-party contacts from the
+/// phone. The phone talks only to the user's OWN server here:
+///   0. SSH banner check: plain TCP to the server's own port through the
+///      system stack (i.e. through the tunnel while VPN is up). A banner
+///      proves routing + relay + server reachability in one round trip.
+///   1. Egress check: the server reports its OWN public IP over the existing
+///      SSH session (extension-side exec — the server asks an IP-echo
+///      service itself, as if the user ran curl there by hand). Compared
+///      against the server IP: equal means traffic really exits via the VPS.
+/// Runs detached (blocking DNS stays off the main thread); results go
 /// to the console log. Diagnostic only — never gates the UI state.
 enum TunnelSelfTester {
-    /// Ordered echo services returning the caller IP as plain text.
-    static let echoURLs = ["https://api.ipify.org", "https://ifconfig.me/ip"]
-    static let httpsCheckURL = "https://www.google.com/generate_204"
-
-    static func run(expectedHost: String, resolvedIPv4: [String], utunReadBefore: Int? = nil) async -> Bool {
-        slog(.system, "SELFTEST", "starting post-connect traffic checks")
+    static func run(expectedHost: String, resolvedIPv4: [String], sshPort: Int = 22,
+                    serverReport: SSHExecCheck.Report = SSHExecCheck.Report(),
+                    utunReadBefore: Int? = nil) async -> Bool {
+        slog(.system, "SELFTEST", "starting post-connect traffic checks (phone contacts only its own server)")
         logSystemPath()
         // Interface table AS THE APP SEES IT: if utun is missing here while
         // the extension sees it, the app's sockets can never use the tunnel.
@@ -2472,85 +2496,115 @@ enum TunnelSelfTester {
             slog(.info, "SELFTEST", "utun read before=\(before)")
         }
         let expected = TunnelSelfTest.pickExpected(host: expectedHost, resolvedIPv4: resolvedIPv4)
+        let dialTarget = resolvedIPv4.first ?? expectedHost
 
-        // 0. System TCP sanity WITHOUT DNS: direct-IP connect through the
-        // system stack. Separates "iOS routes nothing" from "DNS broken".
+        // 0. Banner check against the user's own server (no third party).
         // State machine fully traced: hangs in setup/waiting (no route) look
         // different from instant failed(RST) and from ready-then-stall.
-        let sysPing = await ServerMetadataResolver.measurePing(host: "8.8.8.8", port: 443) { st in
-            slog(.info, "SELFTEST", "probe 8.8.8.8:443 state=\(st)")
+        let banner = await readBanner(host: dialTarget, port: sshPort, timeout: 8) { st in
+            slog(.info, "SELFTEST", "banner \(dialTarget):\(sshPort) state=\(st)")
         }
-        if let ms = sysPing {
-            slog(.success, "SELFTEST", "system TCP 8.8.8.8:443 OK (\(ms) ms) — system routes traffic, DNS/HTTP layer suspect")
+        if let banner {
+            slog(.success, "SELFTEST", "server banner OK (\(banner)) — system routes traffic through the tunnel to your server")
         } else {
-            slog(.error, "SELFTEST", "system TCP 8.8.8.8:443 FAILED (nil) — system stack itself can't connect; VPN routes likely inactive")
+            slog(.error, "SELFTEST", "server banner FAILED (nil) — system stack can't reach your server; VPN routes likely inactive")
         }
 
-        // 1. Egress IP via known echo services (first success wins).
-        var observed: String?
-        var lastErr = "none attempted"
-        for raw in echoURLs {
-            guard let url = URL(string: raw) else { continue }
-            do {
-                let ip = try await fetchText(url: url, timeout: 8)
-                observed = TunnelSelfTest.normalizeIP(ip)
-                slog(.info, "SELFTEST", "egress service \(raw) -> \(observed ?? "?")")
-                break
-            } catch {
-                lastErr = "\(error.localizedDescription) \(classify(error))"
-                slog(.warning, "SELFTEST", "egress service \(raw) failed: \(lastErr)")
-            }
-        }
+        // 1. Egress IP as reported by the server itself (via SSH exec —
+        // the phone asked nobody else). Equal to the server IP means the
+        // traffic really flows through the VPS; anything else is a bypass.
         var egressOK = false
-        if let observed {
+        if let observed = serverReport.ip {
             switch TunnelSelfTest.evaluate(expected: expected, observed: observed) {
             case .viaServer:
-                slog(.success, "SELFTEST", "egress \(observed) == server -> PASS (traffic via server)")
+                slog(.success, "SELFTEST", "egress \(observed) == server -> PASS (traffic via your server)")
                 egressOK = true
             case .bypass(let o):
                 slog(.error, "SELFTEST", "egress \(o) != server \(expected ?? "?") -> FAIL (traffic bypasses tunnel)")
             case .unparseable(let r):
-                slog(.error, "SELFTEST", "egress response unusable (\(r)) -> FAIL")
+                slog(.error, "SELFTEST", "server egress report unusable (\(r)) -> FAIL")
             case .unknownExpected:
                 slog(.warning, "SELFTEST", "server IP unknown (hostname \(expectedHost) unresolved) — cannot verify egress")
             }
         } else {
-            slog(.error, "SELFTEST", "all egress echo services failed (last: \(lastErr)) — DNS or egress broken")
+            slog(.warning, "SELFTEST", "egress unverified — the server could not report its public IP (no curl/wget or filtered network). Traffic may still be fine; banner check above is the routing proof.")
         }
 
-        // 2. Plain HTTPS reachability through the tunnel.
-        if let url = URL(string: httpsCheckURL) {
-            do {
-                let code = try await fetchStatus(url: url, timeout: 8)
-                slog(code == 204 ? .success : .warning, "SELFTEST", "https check \(httpsCheckURL) -> HTTP \(code) (expected 204)")
-            } catch {
-                slog(.error, "SELFTEST", "https check failed: \(error.localizedDescription) \(classify(error))")
-            }
+        // 2. Server web reachability, also reported by the server itself.
+        if let web = serverReport.web {
+            slog(web == "204" ? .success : .warning, "SELFTEST", "server web check -> HTTP \(web) (expected 204)")
         }
+
         slog(.system, "SELFTEST", "traffic checks finished")
         return egressOK
     }
 
-    /// Maps a fetch error to an actionable hint. Fetches run on raw
-    /// NWConnection (no URLSession), so errors are URLError(.timedOut /
-    /// .cancelled) or NWError — not the old -1009 family.
-    private static func classify(_ error: Error) -> String {
-        if let urlErr = error as? URLError {
-            switch urlErr.code {
-            case .timedOut:
-                return "[TIMEOUT: no reply within window — SYN never answered (routing stall) or upstream silent]"
-            case .cancelled:
-                return "[CANCELLED]"
-            case .notConnectedToInternet:
-                return "[-1009 NO_PATH: system reports no route]"
-            case .cannotFindHost:
-                return "[-1003 DNS: hostname unresolvable]"
-            default:
-                return "[URLError \(urlErr.code.rawValue)]"
+    /// Reads the SSH banner from the user's OWN server over plain TCP through
+    /// the system stack (i.e. through the tunnel while VPN is up). Returns
+    /// the banner text (e.g. "SSH-2.0-OpenSSH_9.6") or nil on any failure.
+    /// The ONLY network peer here is the user's server — no third party.
+    private static func readBanner(host: String, port: Int, timeout: TimeInterval,
+                                   onState: ((String) -> Void)? = nil) async -> String? {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, port > 0 && port <= 65535,
+              let endpointPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
+        return await withCheckedContinuation { continuation in
+            let box = BannerOnceBox(continuation)
+            // onState is non-Sendable; the NWConnection handler is @Sendable,
+            // so it crosses isolation boxed (fire-and-forget logging only).
+            final class StateSink: @unchecked Sendable {
+                let fn: ((String) -> Void)?
+                init(_ fn: ((String) -> Void)?) { self.fn = fn }
+            }
+            let sink = StateSink(onState)
+            let conn = NWConnection(host: NWEndpoint.Host(trimmed), port: endpointPort, using: .tcp)
+            box.connection = conn
+            conn.stateUpdateHandler = { state in
+                switch state {
+                case .setup: sink.fn?("setup")
+                case .waiting(let e): sink.fn?("waiting(\(e))")
+                case .preparing: sink.fn?("preparing")
+                case .ready:
+                    sink.fn?("ready")
+                    conn.receive(minimumIncompleteLength: 1, maximumLength: 255) { data, _, _, error in
+                        if let data, SSHExecCheck.looksLikeSSHBanner(data) {
+                            box.finish(String(data: data, encoding: .utf8)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines))
+                        } else {
+                            box.finish(nil)
+                        }
+                        _ = error
+                    }
+                case .failed: box.finish(nil)
+                case .cancelled: box.finish(nil)
+                @unknown default: break
+                }
+            }
+            conn.start(queue: .global())
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                box.finish(nil)
             }
         }
-        let ns = error as NSError
-        return "[\(ns.domain) \(ns.code): \(error.localizedDescription)]"
+    }
+
+    /// One-shot guard: NWConnection state/receive/timeout callbacks can all
+    /// fire for one banner read — resuming a continuation twice CRASHES the
+    /// app. Same pattern as PingContext.
+    private final class BannerOnceBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<String?, Never>?
+        var connection: NWConnection?
+
+        init(_ c: CheckedContinuation<String?, Never>) { continuation = c }
+
+        func finish(_ value: String?) {
+            lock.lock()
+            let c = continuation
+            continuation = nil
+            lock.unlock()
+            connection?.cancel()
+            c?.resume(returning: value)
+        }
     }
 
     /// One-shot snapshot of what the SYSTEM thinks about networking: does it
@@ -2569,120 +2623,6 @@ enum TunnelSelfTester {
 
     private static func slog(_ level: ConsoleLogLevel, _ tag: String, _ message: String) {
         ConsoleLogStore.shared.log(level: level, tag: tag, message: message)
-    }
-
-    private static func fetchText(url: URL, timeout: TimeInterval) async throws -> String {
-        let (_, body) = try await fetchTLS(url: url, method: "GET", timeout: timeout)
-        return String(data: body, encoding: .utf8) ?? ""
-    }
-
-    private static func fetchStatus(url: URL, timeout: TimeInterval) async throws -> Int {
-        let (code, _) = try await fetchTLS(url: url, method: "HEAD", timeout: timeout)
-        guard code != 0 else { throw URLError(.badServerResponse) }
-        return code
-    }
-
-    /// One-shot guard: NWConnection state/receive/timeout callbacks can all
-    /// fire for one fetch — resuming a continuation twice CRASHES the app
-    /// (this killed us mid-self-test). Same pattern as PingContext.
-    private final class TLSFetchOnce: @unchecked Sendable {
-        private let lock = NSLock()
-        private var done = false
-        private let continuation: CheckedContinuation<(Int, Data), Error>
-        var connection: NWConnection?
-        init(_ c: CheckedContinuation<(Int, Data), Error>) { continuation = c }
-        func finish(_ result: Result<(Int, Data), Error>) {
-            lock.lock()
-            defer { lock.unlock() }
-            guard !done else { return }
-            done = true
-            connection?.cancel()
-            switch result {
-            case .success(let v): continuation.resume(returning: v)
-            case .failure(let e): continuation.resume(throwing: e)
-            }
-        }
-    }
-
-    /// Mutable fetch state boxed so @Sendable NWConnection closures can
-    /// share it without capturing a local var (Swift 6 concurrency).
-    private final class TLSFetchState: @unchecked Sendable {
-        var received = Data()
-    }
-
-    /// Raw HTTPS fetch over an explicit TLS connection. Bypasses URLSession's
-    /// NWPath reachability gate (reports "offline" for the virtual utun
-    /// interface) and speaks real TLS — plaintext HTTP to :443 never worked.
-    private static func fetchTLS(url: URL, method: String, timeout: TimeInterval) async throws -> (Int, Data) {
-        let host = url.host ?? ""
-        let port = url.port ?? (url.scheme == "https" ? 443 : 80)
-        let path = url.path.isEmpty ? "/" : url.path
-        let query = url.query.map { "?\($0)" } ?? ""
-        return try await withCheckedThrowingContinuation { continuation in
-            let once = TLSFetchOnce(continuation)
-            let box = TLSFetchState()
-            let params: NWParameters
-            if url.scheme == "https" {
-                let tls = NWProtocolTLS.Options()
-                host.withCString { sec_protocol_options_set_tls_server_name(tls.securityProtocolOptions, $0) }
-                params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
-            } else {
-                params = .tcp
-            }
-            let conn = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port)), using: params)
-            once.connection = conn
-            let request = "\(method) \(path)\(query) HTTP/1.1\r\nHost: \(host)\r\nConnection: close\r\n\r\n"
-            conn.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    conn.send(content: request.data(using: .utf8), contentContext: .defaultMessage, isComplete: true, completion: .contentProcessed({ _ in }))
-                case .failed(let error):
-                    if box.received.isEmpty { once.finish(.failure(error)) } else { Self.tlsParseAndFinish(box: box, once: once) }
-                case .cancelled:
-                    once.finish(.failure(URLError(.cancelled)))
-                default:
-                    break
-                }
-            }
-            conn.start(queue: .global())
-            Self.tlsPump(conn: conn, box: box, once: once)
-            // Timeout can only win the race once (see TLSFetchOnce).
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                once.finish(.failure(URLError(.timedOut)))
-            }
-        }
-    }
-
-    /// TLS response parser (type-level: must not capture caller state — it
-    /// runs inside @Sendable NWConnection callbacks).
-    private static func tlsParseAndFinish(box: TLSFetchState, once: TLSFetchOnce) {
-        let received = box.received
-        guard let headerEnd = received.firstRange(of: Data("\r\n\r\n".utf8)) else {
-            once.finish(.failure(URLError(.badServerResponse)))
-            return
-        }
-        let head = String(data: received[..<headerEnd.lowerBound], encoding: .utf8) ?? ""
-        let code = head.split(separator: "\r\n").first
-            .flatMap { $0.split(separator: " ").dropFirst().first }
-            .flatMap { Int($0) } ?? 0
-        once.finish(.success((code, Data(received[headerEnd.upperBound...]))))
-    }
-
-    /// Receive-until-close pump (type-level for the same Sendable reason).
-    private static func tlsPump(conn: NWConnection, box: TLSFetchState, once: TLSFetchOnce) {
-        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
-            if let data { box.received.append(data) }
-            if isComplete || error != nil {
-                // Server closed (or failed) — parse whatever arrived.
-                if box.received.isEmpty, let error {
-                    once.finish(.failure(error))
-                } else {
-                    tlsParseAndFinish(box: box, once: once)
-                }
-                return
-            }
-            tlsPump(conn: conn, box: box, once: once)
-        }
     }
 }
 

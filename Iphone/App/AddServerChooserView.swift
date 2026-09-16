@@ -1,11 +1,8 @@
 import SwiftUI
 import VPNCore
 
-/// The "Add Server" chooser: the user's own VPS first and only.
-/// Former partner-provider cards (DigitalOcean, Vultr, …) are REMOVED for
-/// the App Review pass (Guideline 5.6: no third-party storefront inside a
-/// privacy VPN client). The catalog data stays in VPSSupplierCatalog for a
-/// later return, but nothing renders it — no external links, no badges.
+/// The "Add Server" chooser: the user's own VPS, nothing else. No
+/// third-party storefront, no external links, no badges (Guideline 5.6).
 struct AddServerChooserView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
