@@ -1171,7 +1171,7 @@ struct SettingsViewNew: View {
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 8)
                         } else {
-                            // Buy button — price ($10) shown right in the button;
+                            // Buy button — live StoreKit price shown right in the button;
                             // no separate price line, no rewarded-ad button here.
                             Button(action: { model.showPaywall() }) {
                                 HStack(spacing: 6) {

@@ -59,15 +59,18 @@ extension console logs through the same channel — no App Group needed.
 
 ## Free-time quota
 
-`AdQuota` (VPNCore) — every install gets 3 h of VPN time; one rewarded-ad
-view (currently a stub) adds +3 h; views are rate-limited (1/hour, max 3
-banked). Enforcement is app-side; connect is blocked and the tunnel
-disconnects when exhausted.
+`QuotaLedger` (VPNCore, shared keychain with the extension) — 1 h of
+wall-clock VPN time granted on FIRST USE (first Connect tap or first
+rewarded ad, never on install); one Google AdMob rewarded-ad view adds
++3 h (1/hour cooldown, 12 h total cap); ticks in real time even with the
+tunnel down. Enforcement is extension-side on every startTunnel; connect
+is blocked and the tunnel disconnects when exhausted. One-time Unlimited
+purchase removes the gate and the ads.
 
 ## UI/UX structure
 
 SwiftUI app (`SSH2VPN` target, bundle `com.ssh2vpn.app`; extension bundle
-`com.ssh2vpn.app.packet-tunnel`; deployment target iOS 16.0). `RootView`
+`com.ssh2vpn.app.packet-tunnel`; deployment target iOS 18.0). `RootView`
 holds three tabs — Connect (power button, world map, server card, stats
 strip), Locations (server list + add), Settings (Protocol/DNS/Advanced +
 language). A right-sliding "Hacker Console" sidebar shows the sanitized

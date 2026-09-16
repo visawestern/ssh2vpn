@@ -23,8 +23,12 @@ gateway software.
   live stats strip), Locations, Settings (Protocol/DNS/Advanced), Hacker
   Console sidebar; 17 built-in languages; adaptive iPhone-landscape/iPad
   layout; light/dark mode, Dynamic Type, VoiceOver labels.
-- Free-time quota: 3 h per install, +3 h per rewarded-ad view (ad itself is
-  a stub), 1 view/hour, max 3 banked.
+- Free-time quota (wall-clock, first-use grant): 1 h per install granted on
+  first Connect tap or first rewarded ad (never on install), +3 h per
+  rewarded-ad view (1 view/hour cooldown, 12 h total cap), ticks in real
+  time even with the tunnel down; one-time Unlimited purchase removes the
+  gate and the ads. Enforcement lives in the extension via the shared
+  keychain `QuotaLedger`.
 - `Gateway/gateway.py` — the superseded TUN-mode gateway (still bundled,
   not invoked; see ARCHITECTURE.md "History").
 - `Tests/VPNCoreTests` — 525 tests (2 skipped) for framing, state machines,

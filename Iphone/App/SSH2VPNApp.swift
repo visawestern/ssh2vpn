@@ -80,7 +80,7 @@ final class AppModel: ObservableObject {
     let store = StoreManager()
 
     // MARK: - Paywall (intro-offer flow)
-    // FIRST presentation ever: the one-time $6 intro offer. Every later
+    // FIRST presentation ever: the one-time intro offer. Every later
     // presentation: the regular full price. Dismissing always just closes —
     // the close button never escalates, never locks, never timers. Not shown
     // to users who already own Unlimited.
@@ -1802,17 +1802,18 @@ final class AppModel: ObservableObject {
     }
 
     /// Triggered from the Settings Unlimited card or the paywall. Buys
-    /// `com.ssh2vpn.unlimited` ($10) or `com.ssh2vpn.unlimited.discount`
-    /// ($6 one-time offer) and, on success, sets the shared ledger to
-    /// unlimited (kernel honors it). Returns the StoreKit outcome so callers
-    /// can react to cancellation (e.g. show the discounted follow-up offer).
+    /// `com.ssh2vpn.unlimited` (full price) or
+    /// `com.ssh2vpn.unlimited.discount` (one-time intro offer) and, on
+    /// success, sets the shared ledger to unlimited (kernel honors it).
+    /// Returns the StoreKit outcome so callers can react to cancellation
+    /// (e.g. show the discounted follow-up offer).
     func buyUnlimited(discount: Bool = false) async -> StoreManager.PurchaseOutcome {
         let outcome = await discount ? store.purchaseDiscount() : store.purchaseUnlimited()
         switch outcome {
         case .success:
             reloadQuota()
             ConsoleLogStore.shared.log(level: .success, tag: "IAP",
-                                       message: discount ? "unlimited (discount $6) purchased and applied"
+                                       message: discount ? "unlimited (intro offer) purchased and applied"
                                                           : "unlimited purchased and applied")
         case .failure(let msg):
             ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(msg)")

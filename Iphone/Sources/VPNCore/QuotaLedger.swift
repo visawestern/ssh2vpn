@@ -19,7 +19,7 @@ import Security
 ///     1 real hour granted (expiry = now + 1h);
 ///   - one rewarded ad: +3 real hours, but only one press per hour (cooldown);
 ///   - the bank can never exceed 12 real hours total at any moment (cap);
-///   - $10 one-time purchase: `unlimited = true`, ads removed, gate removed;
+///   - one-time Unlimited purchase: `unlimited = true`, ads removed, gate removed;
 ///   - the budget ticks down in real time whether or not the tunnel is up.
 public struct QuotaLedger: Equatable, Sendable, Codable {
     public static let initialGrantSeconds: TimeInterval = 3600

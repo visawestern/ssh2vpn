@@ -56,9 +56,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Used to connect to VPN servers on your local network (LAN server badge).</string>
+	<string>SSH2VPN connects to the VPN servers you add — including ones on your local network — to verify them and measure ping.</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>Your data is used to show you more relevant ads. No personal data is shared without your consent.</string>
+	<string>Allow SSH2VPN to use your advertising identifier for more relevant Google AdMob ads? Your VPN traffic and server credentials are never used for advertising.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

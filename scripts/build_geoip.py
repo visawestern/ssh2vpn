@@ -26,6 +26,7 @@ import ipaddress
 import os
 import struct
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -42,7 +43,9 @@ CC_FIX = {"UK": "GB"}
 CC_DROP = {"*", "", "EU", "AP"}  # regional/summary placeholders, no centroid
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_INPUT = "/var/folders/cn/mx7g770j6j17g7kvkb6wlfhw0000gp/T/opencode/geoip"
+# Machine-independent cache: RIR stats are re-downloaded when missing or
+# when the output table is older than --max-age-days (default 30).
+DEFAULT_INPUT = os.path.join(tempfile.gettempdir(), "ssh2vpn-geoip")
 DEFAULT_OUT = os.path.join(REPO, "Iphone", "Sources", "VPNCore", "Resources", "geoip.dat")
 
 

@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Full-screen paywall shown when the user taps the Unlimited buy button.
 ///
-/// Intro-offer flow: the FIRST presentation ever shows the one-time $6
-/// intro (copy says dismissing loses it); every later presentation shows
-/// the regular full price. Dismissing always just closes.
+/// Intro-offer flow: the FIRST presentation ever shows the one-time
+/// intro offer (copy says dismissing loses it); every later presentation
+/// shows the regular full price. Dismissing always just closes.
 ///
 /// Review compliance: NO countdown timer, NO locked close button, NO fake
 /// urgency, NO in-paywall stage switching — the close always closes.
@@ -204,9 +204,9 @@ struct PaywallView: View {
         }
     }
 
-    /// The $6 second-chance block: crossed-out $10 anchor, $6, "−40%"
-    /// capsule. No countdown, no expiry theatrics — a plain offer the user
-    /// can take or leave (Guideline 5.6: no pressured flash-sale UX).
+    /// The intro-offer block: crossed-out full-price anchor, intro price,
+    /// computed discount capsule. No countdown, no expiry theatrics — a plain
+    /// offer the user can take or leave (Guideline 5.6: no pressured flash-sale UX).
     private var discountPercentage: String {
         guard let full = model.store.product, let discount = model.store.discountProduct,
               full.price > 0, discount.price < full.price,
@@ -316,9 +316,10 @@ struct PaywallView: View {
     // MARK: - Actions
 
     private func buy() async {
-        // The discount stage must buy the dedicated $6 product; the full stage
-        // buys the regular one. Guard on the specific product so a missing
-        // ASC-side product surfaces as "unavailable" instead of a wrong buy.
+        // The discount stage must buy the dedicated intro-offer product; the
+        // full stage buys the regular one. Guard on the specific product so
+        // a missing ASC-side product surfaces as "unavailable" instead of a
+        // wrong buy.
         guard isDiscount ? model.store.discountProduct != nil : model.store.product != nil else {
             showUnavailable = true
             return
