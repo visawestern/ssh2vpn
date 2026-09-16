@@ -18,7 +18,7 @@ let package = Package(
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
             .product(name: "Crypto", package: "swift-crypto")
-        ]),
+        ], resources: [.process("Resources")]),
         .testTarget(name: "VPNCoreTests", dependencies: ["VPNCore"])
     ]
 )

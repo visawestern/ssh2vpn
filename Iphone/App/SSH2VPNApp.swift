@@ -181,11 +181,11 @@ final class AppModel: ObservableObject {
     @Published var serverLatitude: Double = 50.1109
     @Published var serverLongitude: Double = 8.6821
     @Published var isResolvingMetadata: Bool = false
-    /// True only when the selected server has a real map position. External
-    /// GeoIP was removed (privacy: no IP is ever sent to a geo service), so
-    /// remote servers show host/ping with no map dot; only local-network
-    /// servers keep their LAN badge. The map never implies a location we
-    /// did not measure.
+    /// True only when the selected server has a real map position. Location
+    /// is fully on-device (bundled RIR prefix table + country centroids):
+    /// no IP is ever sent to a geo service, so there is nothing extra to
+    /// declare to App Review. Only unresolvable hosts show host/ping with
+    /// no map dot; the map never implies a location we did not determine.
     @Published var hasServerGeo = false
     /// GeoIP runs once per host (on server-list updates), never on every
     /// connect/reconnect — ping stays live, geo does not spam.
@@ -886,9 +886,8 @@ final class AppModel: ObservableObject {
     /// so SYNs are spent ONLY on real SSH connects plus the slow ping loop.
     /// Ping freshness comes from the load-time sweep, the minutely
     /// selected-only tick and the list view. Country/flag come from the
-    /// LOCAL resolver only (LAN badge for private addresses); for remote
-    /// servers the UI shows host + ping with no map dot — we never query
-    /// an external geo service (privacy) and never guess a location.
+    /// OFFLINE on-device resolver (bundled prefix table, no network):
+    /// every placed server gets a map dot from its country centroid.
     func refreshServerMetadata() {
         guard !profile.host.isEmpty else {
             serverCountry = ""
@@ -906,9 +905,9 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .info, tag: "PROBE", message: "Analyzing remote server \(currentHost):\(currentPort)...")
 
         Task {
-            // Local only: LAN badge for private addresses, nil otherwise
-            // (no external GeoIP — failures are not cached, an offline
-            // lookup simply retries next time).
+            // Offline only: LAN badge for private addresses, country from
+            // the bundled prefix table otherwise (system DNS at most, never
+            // a geo HTTP service — misses simply retry next time).
             let geo: ServerGeoInfo? = (lastGeoHost == currentHost) ? nil : await ServerMetadataResolver.resolveGeo(host: currentHost)
 
             await MainActor.run {
@@ -921,16 +920,16 @@ final class AppModel: ObservableObject {
                     self.serverCity = geo.city
                     self.serverLatitude = geo.lat
                     self.serverLongitude = geo.lon
-                    // Only a LAN entry carries a (badge) position; remote
-                    // servers have no measured coordinates → no map dot.
-                    self.hasServerGeo = ServerMetadataResolver.isLocalOrPrivate(currentHost)
+                    // Any placed server (LAN or offline country) carries a
+                    // real position for the map dot.
+                    self.hasServerGeo = true
                     if self.serverName.isEmpty || self.serverName == "My VPS" || self.serverName == currentHost {
                         self.serverName = "\(geo.flag) \(geo.country)"
                     }
-                    ConsoleLogStore.shared.log(level: .success, tag: "GEOIP", message: "GeoIP located: \(geo.flag) \(geo.country) (\(geo.city)) [\(geo.lat), \(geo.lon)]")
+                    ConsoleLogStore.shared.log(level: .success, tag: "GEOIP", message: "GeoIP located (offline): \(geo.flag) \(geo.country) (\(geo.city)) [\(geo.lat), \(geo.lon)]")
                 } else {
-                    // Remote server, no external lookup: show the hostname
-                    // honestly instead of a guessed country.
+                    // Unresolvable host: show the hostname honestly
+                    // instead of a guessed country.
                     self.serverCountry = ""
                     self.serverFlag = "🌐"
                     self.serverCity = ""
@@ -943,7 +942,8 @@ final class AppModel: ObservableObject {
 
     /// Fetch ping for all servers in the list (runs in background,
     /// populates per-server caches). Called on every server-list load.
-    /// Geo is local-only (LAN badge); remote servers get ping badges.
+    /// Geo is offline on-device (bundled table); remote servers get
+    /// country badges + map dots with no network.
     func refreshAllServerMetadata() {
         let targets = servers
         guard !targets.isEmpty else { return }
@@ -953,9 +953,9 @@ final class AppModel: ObservableObject {
             await withTaskGroup(of: (String, ServerGeoInfo?, Int?).self) { group in
                 for server in targets {
                     group.addTask {
-                        // Ping FIRST (user-visible badge); no GeoIP lag.
+                        // Ping FIRST (user-visible badge); offline GeoIP next.
                         let ping = await ServerMetadataResolver.measurePing(host: server.host, port: server.port)
-                        // Local only — never leaves the device.
+                        // Offline table — never leaves the device.
                         let geo = await ServerMetadataResolver.resolveGeo(host: server.host)
                         return (server.id, geo, ping)
                     }
@@ -971,8 +971,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Minutely ping-only refresh for every server (cheap; GeoIP is cached
-    /// from load and never re-fetched here — public GeoIP APIs rate-limit).
+    /// Minutely ping-only refresh for every server (cheap; offline GeoIP
+    /// is cached from load and never re-fetched here).
     /// Keeps list pings and map dot colors live. No-op when the list is empty.
     func refreshAllServerPings() {
         let targets = servers

@@ -48,13 +48,15 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.5</string>
+	<string>1.0.6</string>
 	<key>CFBundleVersion</key>
-	<string>6</string>
+	<string>7</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-1498434981323978~5326656863</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Used to connect to VPN servers on your local network (LAN server badge).</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Your data is used to show you more relevant ads. No personal data is shared without your consent.</string>
 	<key>SKAdNetworkItems</key>

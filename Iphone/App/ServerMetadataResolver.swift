@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import VPNCore
 
 public struct ServerGeoInfo: Equatable, Sendable {
     public let country: String
@@ -78,10 +79,11 @@ public enum ServerMetadataResolver {
     }
 
     /// Local-only server metadata. Private/loopback addresses get a LAN
-    /// badge; anything else returns nil — the UI shows the hostname + ping
-    /// honestly instead of a guessed country. No external GeoIP service is
-    /// ever contacted (privacy: the server address never leaves the device
-    /// for location purposes).
+    /// badge; anything else is looked up in the BUNDLED offline IP table
+    /// (RIR prefixes, no network — the server address never leaves the
+    /// device for location purposes). Hostnames go through the system DNS
+    /// resolver only. Returns nil when the address cannot be placed —
+    /// the UI then shows the hostname + ping honestly instead of guessing.
     public static func resolveGeo(host: String) async -> ServerGeoInfo? {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -97,7 +99,21 @@ public enum ServerMetadataResolver {
             )
         }
 
-        return nil
+        // DNS may block: hop off the caller's actor (AppModel is @MainActor).
+        let lookedUp: String? = await Task.detached(priority: .utility) {
+            OfflineGeoIP.countryCode(host: trimmed)
+        }.value
+        guard let code = lookedUp,
+              let pos = CountryCentroids.coordinate(for: code) else { return nil }
+        let name = Locale.current.localizedString(forRegionCode: code) ?? code
+        return ServerGeoInfo(
+            country: name,
+            countryCode: code,
+            city: name,
+            flag: flagEmoji(for: code),
+            lat: pos.lat,
+            lon: pos.lon
+        )
     }
 
     public static func measurePing(host: String, port: Int, onState: ((String) -> Void)? = nil) async -> Int? {

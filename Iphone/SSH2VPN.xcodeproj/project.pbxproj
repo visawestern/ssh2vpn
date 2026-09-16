@@ -260,6 +260,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A80000010000000000000001 /* Build configuration list for PBXNativeTarget "SSH2VPN" */;
 			buildPhases = (
+				A60000010000000000000008 /* Refresh offline GeoIP DB */,
 				A60000010000000000000006 /* Sources */,
 				A60000010000000000000002 /* Frameworks */,
 				A60000010000000000000007 /* Resources */,
@@ -384,6 +385,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A60000010000000000000008 /* Refresh offline GeoIP DB */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Refresh offline GeoIP DB";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Offline GeoIP DB refresh (monthly, best-effort).\n# Regenerates Sources/VPNCore/Resources/geoip.dat only when older than 30 days\n# (or missing); a fresh table is a fast no-op. Takes effect on the NEXT build:\n# the SPM resource bundle is compiled before app-target phases run.\n# Never fails the build — the committed geoip.dat is always a valid fallback.\nif command -v python3 >/dev/null 2>&1; then\n  python3 \"$PROJECT_DIR/../scripts/build_geoip.py\" || echo \"warning: GeoIP DB refresh skipped (no network?) — using bundled geoip.dat\";\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A60000010000000000000005 /* Sources */ = {

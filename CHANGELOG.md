@@ -1,5 +1,24 @@
 # SSH2VPN — Changelog
 
+## 1.0.6 (build 7)
+
+Offline server location: no network, nothing to declare.
+
+- **Bundled IP→country table.** `geoip.dat` (3 MB, 262k IPv4 + 70k IPv6
+  RIR prefixes, 238 countries) ships inside the app; `OfflineGeoIP`
+  (VPNCore) resolves the server country on-device with
+  longest-prefix-match. IP literals need no DNS at all; hostnames use
+  only the system resolver. No address ever goes to a geo HTTP service —
+  there is no GeoIP endpoint to declare to App Review.
+- **Map dots are back.** Country centroids place every located server on
+  the world map (LAN badge unchanged); unresolvable hosts still show
+  host + ping with no dot, never a guess.
+- **Monthly refresh at build time.** New "Refresh offline GeoIP DB" build
+  phase regenerates the table when older than 30 days (best-effort, never
+  fails the build); `scripts/build_geoip.py --force` rebuilds on demand.
+- **Honest privacy text ×17.** Both privacy copies (in-app + site) now say
+  location is computed on-device from the bundled table.
+
 ## dev (unreleased)
 
 Site-side anti-fingerprinting, rootless partial:

@@ -25,3 +25,8 @@ AuthKey_*.p8
 # Python
 __pycache__/
 *.pyc
+
+# Work artifacts / review prep (may contain sensitive info — never commit)
+artifacts/
+screenshot-lang-runner.sh
+screenshot-lang-src/

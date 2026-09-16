@@ -794,10 +794,9 @@ struct WorldMapView: View {
                     }
                 }
 
-                // The pulsing dot is shown ONLY for a measured position
-                // (LAN badge). Remote servers have no GeoIP lookup
-                // (privacy), so no dot is ever guessed for them — the
-                // callout below still shows host + live ping.
+                // The pulsing dot is shown for every placed server: LAN badge
+                // or offline country centroid (bundled table, no network),
+                // so the dot is always a real on-device determination.
                 if hasServer && model.hasServerGeo {
                     // Pulsing animated server dot
                     ZStack {
@@ -818,7 +817,7 @@ struct WorldMapView: View {
 
                 if hasServer {
                     // Compact callout badge with country flag, location name and live ping.
-                    // Without a measured position it sits centered instead of
+                    // Without a placed position it sits centered instead of
                     // pointing at a guessed spot on the map.
                     let calloutPos = model.hasServerGeo
                         ? CGPoint(x: dotX, y: max(18, dotY - 24))
