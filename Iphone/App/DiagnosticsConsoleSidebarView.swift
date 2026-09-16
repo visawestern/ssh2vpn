@@ -204,7 +204,7 @@ public struct DiagnosticsConsoleSidebarView: View {
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(">_ SSH2_TERMINAL")
+                Text("SSH2VPN DIAGNOSTICS")
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color(red: 0.0, green: 1.0, blue: 0.4))
 
@@ -407,11 +407,11 @@ public struct DiagnosticsConsoleSidebarView: View {
     // MARK: - Footer Prompt
     private var footerPrompt: some View {
         HStack(spacing: 6) {
-            Text("root@ssh2vpn:~#")
+            Text("ssh2vpn log")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(Color(red: 0.0, green: 1.0, blue: 0.4))
 
-            Text("stream active")
+            Text("live")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(Color.gray)
 
