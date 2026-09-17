@@ -1,0 +1,3372 @@
+import SwiftUI
+import AppKit
+import VPNCore
+
+// MARK: - App Color Theme (matching reference design)
+
+extension Color {
+    static let appBg = Color(red: 0.965, green: 0.970, blue: 0.978)               // Clean subtle off-white #F6F7FA
+    static let octGray0 = Color.white                                             // Pure white cards #FFFFFF
+    static let octGray05 = Color(red: 0.937, green: 0.941, blue: 0.953)          // Soft divider #EFF0F3
+    static let octGray40 = Color(red: 0.745, green: 0.757, blue: 0.773)          // #BEC1C5
+    static let octGray60 = Color(red: 0.514, green: 0.537, blue: 0.569)          // #838991
+    static let octGray80 = Color(red: 0.314, green: 0.337, blue: 0.369)          // #50565E
+    static let octGray100 = Color(red: 0.075, green: 0.161, blue: 0.275)         // #132946
+    static let prim50 = Color(red: 0.294, green: 0.855, blue: 0.596)             // Emerald mint #4BDB98
+    static let prim100 = Color(red: 0.235, green: 0.753, blue: 0.514)            // #3CC083
+    static let sec50 = Color(red: 0.090, green: 0.161, blue: 0.275)              // Deep Navy #172946
+    static let sec20 = Color(red: 0.271, green: 0.459, blue: 0.627)              // #4575A0
+}
+
+extension View {
+    /// iPhone keeps the current edge-to-edge layout; iPad gets a centered,
+    /// readable column (~720pt) instead of a stretched 1024pt soup.
+    @ViewBuilder
+    func adaptiveCenterColumn(maxWidth: CGFloat = 720) -> some View {
+        self.frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+fileprivate func formatTime(_ t: TimeInterval) -> String {
+    let h = Int(t) / 3600
+    let m = (Int(t) % 3600) / 60
+    let s = Int(t) % 60
+    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+    return String(format: "%02d:%02d", m, s)
+}
+
+extension Font {
+    static func openSans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.custom("OpenSans-\(weightName(weight))", size: size)
+    }
+}
+
+private func weightName(_ weight: Font.Weight) -> String {
+    switch weight {
+    case .bold: return "Bold"
+    case .semibold: return "SemiBold"
+    case .medium: return "Medium"
+    case .light: return "Light"
+    default: return "Regular"
+    }
+}
+
+// MARK: - Tab
+
+enum Tab: Int, CaseIterable {
+    case connect, locations, settings
+}
+
+// MARK: - Root View
+
+struct RootView: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage("privacyDisclosureAcknowledged.v2") private var privacyAcknowledged = false
+    @State private var selectedTab: Tab = .connect
+    @State private var isConsoleOpen: Bool = false
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Color.appBg.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Group {
+                    switch selectedTab {
+                    case .connect: ConnectView()
+                    case .locations: LocationsView()
+                    case .settings: SettingsViewNew()
+                    }
+                }
+                .adaptiveCenterColumn()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                OctohideTabBar(selected: $selectedTab, copy: model.copy)
+            }
+
+            // Floating diagnostics button — shown whenever logging is enabled,
+            // in every connection state. If logging is off there is nothing
+            // to read in the console.
+            if model.showConsoleButton {
+                VStack {
+                    Spacer()
+                    FloatingCustomizerButton(
+                        isOpen: $isConsoleOpen,
+                        isConnecting: model.connection == .connecting
+                    )
+                    Spacer()
+                }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+
+            // Right sliding Diagnostics Console Sidebar — reachable whenever
+            // the button is (see showConsoleButton); close it when logging
+            // is flipped off mid-open.
+            if model.showConsoleButton {
+                DiagnosticsConsoleSidebarView(isOpen: $isConsoleOpen)
+            } else {
+                Color.clear.onAppear { isConsoleOpen = false }
+            }
+
+            if !model.needsLanguageSelection && !privacyAcknowledged {
+                VStack(spacing: 16) {
+                    Text(model.copy.text(.privacyPolicyTitle)).font(.title2.bold())
+                    DocsView(page: .privacy, language: model.selectedLanguage?.rawValue)
+                    Button(model.copy.text(.ok)) { privacyAcknowledged = true }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.bottom)
+                }
+                .padding(.top)
+                .background(Color.appBg.ignoresSafeArea())
+            }
+            if model.needsLanguageSelection {
+                LanguageOverlay()
+                    .transition(.opacity)
+            }
+        }
+        .alert(model.copy.text(.restorePurchase), isPresented: Binding(
+            get: { model.purchaseNotice != nil && !model.isPaywallPresented },
+            set: { if !$0 { model.purchaseNotice = nil } }
+        )) { Button(model.copy.text(.ok)) { model.purchaseNotice = nil } }
+        message: { Text(model.purchaseNotice ?? "") }
+        .sheet(isPresented: $model.isPaywallPresented) {
+            PaywallView()
+                .environmentObject(model)
+        }
+        .environment(\.layoutDirection, model.selectedLanguage == .arabic ? .rightToLeft : .leftToRight)
+        .preferredColorScheme(.light)
+    }
+}
+
+// MARK: - Tab Bar (unified Apple Design with labels)
+
+struct OctohideTabBar: View {
+    @Binding var selected: Tab
+    let copy: AppCopy
+
+    var body: some View {
+        HStack(spacing: 0) {
+            tabButton(tab: .connect, icon: "wifi", title: copy.text(.connect))
+            tabButton(tab: .locations, icon: "globe", title: copy.text(.locations))
+            tabButton(tab: .settings, icon: "gearshape.fill", title: copy.text(.settings))
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: 500)
+        .frame(maxWidth: .infinity)   // centered on iPad instead of a stretched bar
+        .background(
+            RoundedRectangle(cornerRadius: 32)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.06), radius: 12, y: -2)
+        )
+    }
+
+    private func tabButton(tab: Tab, icon: String, title: String) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { selected = tab }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                Text(title)
+                    .font(.openSans(11, weight: selected == tab ? .semibold : .regular))
+            }
+            .foregroundStyle(selected == tab ? Color.sec50 : Color.octGray60)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Connect View
+
+struct ConnectView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showAddServer = false
+    /// Destination after the chooser dialog: manual form or paste-import.
+    @State private var showManualEntry = false
+    @State private var showCredentialImport = false
+    @State private var showLocationsSheet = false
+    @State private var showDocsSheet = false
+    /// Post-tap cooldown: the power button stays disabled for a fixed window
+    /// after every press (connect or disconnect), then re-enables itself.
+    @State private var powerCooldown = false
+
+    @Environment(\.verticalSizeClass) private var vSize
+
+    var body: some View {
+        // Scrollable so landscape (compact height) shows everything — the
+        // compact variants compress, and what still doesn't fit scrolls
+        // instead of vanishing behind the edges with no way to reach it.
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                // Top Status Card ("Unprotected" / "Protected")
+                statusCard
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                // World Map: NEVER shrunk — 80% of the screen width (streaming
+                // down a phone's width when rotated, capping on iPad so the
+                // map doesn't dominate the whole screen).
+                ZStack(alignment: .center) {
+                    WorldMapView()
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
+                }
+
+                Spacer(minLength: vSize == .compact ? 4 : 16)
+
+                // Central Power Button
+                powerButton
+                    .padding(.bottom, 12)
+
+                // Active connection time (shown while connected)
+                if case .connected = model.connection {
+                    Text(formatTime(TimeInterval(model.connectionActiveSeconds)))
+                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.bottom, 8)
+
+                    // Live tunnel telemetry: SSH pool size, live data channels,
+                    // transferred bytes, and the minutely ping.
+                    statsStrip
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                } else if case .failed(let msg) = model.connection {
+                    Text(msg == "freeTimeExhausted" || msg == "quotaExhausted"
+                         ? model.copy.text(.failureFreeTimeExhausted)
+                         : "connectionError: \(msg)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(red: 0.85, green: 0.2, blue: 0.3))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+                }
+
+                Spacer(minLength: 8)
+
+                // Free-time quota + rewarded-ad refill (real AdMob rewarded).
+                // The whole card is hidden once Unlimited is owned — the
+                // entitlement is re-checked on every app launch.
+                if !model.isUnlimited {
+                    quotaBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, vSize == .compact ? 6 : 10)
+                }
+
+                // Selected Location Card
+                selectedLocationCard
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, vSize == .compact ? 8 : 20)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color.appBg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { model.startDisplayTimerIfNeeded() }
+        .onDisappear { model.stopDisplayTimer() }
+        .onChange(of: model.connection) { _ in
+            switch model.connection {
+            case .connected:
+                model.startDisplayTimerIfNeeded()
+            case .disconnected, .failed:
+                // Handles both cases: starts the 1s tick during the 2-minute
+                // post-disconnect stats window, and stops it immediately when
+                // there is nothing to tick for.
+                model.startDisplayTimerIfNeeded()
+            case .connecting:
+                break
+            }
+        }
+        .sheet(isPresented: $showAddServer) {
+            AddServerChooserView(
+                onOwnServer: { showManualEntry = true },
+                onImportCredentials: { showCredentialImport = true }
+            )
+            .environmentObject(model)
+        }
+        .sheet(isPresented: $showManualEntry) {
+            NavigationStack {
+                AddServerView()
+            }
+        }
+        .sheet(isPresented: $showCredentialImport) {
+            ImportCredentialsView()
+                .environmentObject(model)
+        }
+        .sheet(isPresented: $showLocationsSheet) {
+            NavigationStack {
+                LocationsView()
+            }
+        }
+        .sheet(isPresented: $showDocsSheet) {
+            NavigationStack {
+                DocsView(language: model.selectedLanguage?.rawValue)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button {
+                                showDocsSheet = false
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Color.octGray100)
+                            }
+                            .accessibilityLabel(model.copy.text(.cancel))
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Top Status Card
+    private var statusCard: some View {
+        HStack(spacing: 12) {
+            Spacer()
+            if model.connection == .connected {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.prim50)
+            } else {
+                Image(systemName: "shield")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(Color(red: 0.35, green: 0.40, blue: 0.50))
+            }
+
+            Text(model.connection == .connected ? model.copy.text(.protected_) : model.copy.text(.unprotected))
+                .font(.openSans(17, weight: .semibold))
+                .foregroundStyle(Color.octGray100)
+            Spacer()
+        }
+        .overlay(alignment: .trailing) {
+            // Documentation book (standalone HTML guide). The buy button lives
+            // in the quota bar next to the ad button (one place for all
+            // monetization, icon-only there).
+            headerIconButton(icon: "book.closed.fill", tint: Color(red: 0.25, green: 0.45, blue: 0.85)) {
+                showDocsSheet = true
+            }
+            .accessibilityLabel(model.copy.text(.documentation))
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.05), radius: 10, y: 4)
+        )
+    }
+
+    /// Small round header action: translucent chip, Apple-style feedback on press.
+    private func headerIconButton(icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(tint.opacity(0.10))
+                )
+        }
+        .buttonStyle(HeaderIconButtonStyle())
+    }
+
+    private struct HeaderIconButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+                .opacity(configuration.isPressed ? 0.7 : 1.0)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
+    }
+
+    // MARK: - Central Power Button (with arc progress ring)
+    private var powerButton: some View {
+        ZStack {
+            // Animated thin arc ring during connecting
+            if case .connecting = model.connection {
+                SpinningArcView()
+                    .frame(width: 190, height: 190)
+                    .transition(.opacity.animation(.easeInOut(duration: 0.25)))
+            }
+
+            Button(action: toggleConnection) {
+                ZStack {
+                    // Soft outer ambient shadow circle
+                    Circle()
+                        .fill(Color.white.opacity(0.85))
+                        .frame(width: 172, height: 172)
+                        .shadow(color: Color(red: 0.85, green: 0.88, blue: 0.95), radius: 24, y: 10)
+
+                    // Middle border / gradient ring
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: model.connection == .connected
+                                    ? [Color(red: 0.90, green: 0.30, blue: 0.30).opacity(0.4), Color(red: 0.85, green: 0.25, blue: 0.25).opacity(0.2)]
+                                    : [Color(red: 0.94, green: 0.95, blue: 0.97), Color(red: 0.89, green: 0.90, blue: 0.93)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 156, height: 156)
+
+                    // Middle spacing ring
+                    Circle()
+                        .fill(Color.appBg)
+                        .frame(width: 146, height: 146)
+
+                    // Inner solid button disc (red when connected = disconnect)
+                    Circle()
+                        .fill(model.connection == .connected ? Color(red: 0.90, green: 0.30, blue: 0.30) : Color.white)
+                        .frame(width: 138, height: 138)
+                        .shadow(color: Color.black.opacity(0.06), radius: 8, y: 4)
+
+                    // Power icon or spinner
+                    if case .connecting = model.connection {
+                        VStack(spacing: 4) {
+                            Image(systemName: "power")
+                                .font(.system(size: 36, weight: .regular))
+                                .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                            Text(model.copy.text(.connecting))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                        }
+                    } else {
+                        Image(systemName: "power")
+                            .font(.system(size: 46, weight: .regular))
+                            .foregroundStyle(model.connection == .connected ? Color.white : Color(red: 0.08, green: 0.16, blue: 0.28))
+                    }
+                }
+            }
+            .buttonStyle(PowerButtonStyle())
+            // Double-tap protection: a fixed 2s cooldown after every press.
+            // Mid-connect the button STAYS tappable (after the cooldown):
+            // a press cancels the in-flight connection cleanly (the model
+            // stops the manager; the extension unwinds its start at the next
+            // checkpoint instead of wedging).
+            .disabled(powerCooldown)
+            .opacity(powerCooldown ? 0.75 : 1.0)
+            .scaleEffect(vSize == .compact ? 0.72 : 1.0)
+        }
+    }
+
+    // MARK: - Selected Location Card
+    private var selectedLocationCard: some View {
+        Button {
+            if model.profile.host.isEmpty {
+                showAddServer = true
+            } else {
+                showLocationsSheet = true
+            }
+        } label: {
+            HStack(spacing: 12) {
+                if model.profile.host.isEmpty {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color.sec50)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.copy.text(.addServerLabel))
+                            .font(.openSans(15, weight: .medium))
+                            .foregroundStyle(Color.octGray100)
+                        Text(model.copy.text(.addServerDesc))
+                            .font(.openSans(12))
+                            .foregroundStyle(Color.octGray60)
+                    }
+                } else {
+                    Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
+                        .font(.system(size: 24))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
+                                .font(.openSans(15, weight: .semibold))
+                                .foregroundStyle(Color.octGray100)
+                            if let ping = model.serverPingMs {
+                                Text("\(ping) ms")
+                                    .font(.openSans(11, weight: .semibold))
+                                    .foregroundStyle(Color.prim50)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.prim50.opacity(0.12), in: Capsule())
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            Text(model.selectedServer?.displayAddress ?? "\(model.profile.host):\(model.profile.port)")
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            if model.selectedServer?.hasCustomLabel != true,
+                               !model.profile.username.isEmpty {
+                                UsernameChip(username: model.profile.username)
+                            }
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.octGray100)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
+            )
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Helpers
+
+    private func toggleConnection() {
+        guard !powerCooldown else { return }
+        powerCooldown = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            powerCooldown = false
+        }
+        if model.connection == .connected {
+            model.disconnect()
+        } else if model.connection == .connecting {
+            // Cancel mid-connect: clean stop, no wedge — the extension
+            // unwinds its in-flight start at the next checkpoint.
+            model.disconnect()
+        } else {
+            if model.profile.host.isEmpty {
+                showAddServer = true
+                return
+            }
+            model.connect()
+        }
+    }
+
+    // MARK: - Live stats strip (connected only)
+
+    private var statsStrip: some View {
+        HStack(spacing: 0) {
+            statCell(value: "\(model.sshConnectionCount)", label: "SSH")
+            dividerDot
+            statCell(value: "\(model.activeChannelCount)", label: "FLOWS")
+            dividerDot
+            statCell(value: "↓\(fmtMB(model.tunnelDownBytes)) ↑\(fmtMB(model.tunnelUpBytes))", label: "MB")
+            dividerDot
+            statCell(value: model.serverPingMs.map { "\($0) ms" } ?? "—", label: "PING")
+        }
+        .padding(.vertical, 8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 2)
+    }
+
+    private var dividerDot: some View {
+        Circle().fill(Color.octGray40).frame(width: 3, height: 3)
+    }
+
+    private func statCell(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.octGray100)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.octGray40)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func fmtMB(_ bytes: Int) -> String {
+        String(format: "%.1f", Double(bytes) / 1_048_576)
+    }
+
+    // MARK: - Free-time quota / rewarded-ad bar
+
+    private var quotaBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(model.remainingQuotaSeconds > 600 ? Color.sec50 : Color(red: 0.9, green: 0.3, blue: 0.25))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(model.copy.text(.freeTimeLeft))
+                    .font(.openSans(10, weight: .semibold))
+                    .foregroundStyle(Color.octGray40)
+                Text(formatTime(model.remainingQuotaSeconds))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.octGray100)
+            }
+
+            Spacer()
+
+            // Buy (unlimited) — icon-only, no label, next to the ad button so
+            // all monetization lives in this one row. Spinner while a purchase
+            // is in flight (StoreKit sandbox can hang).
+            Button {
+                model.showPaywall()
+            } label: {
+                Group {
+                    if model.store.isPurchasing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "bag.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Color.prim50)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(Color.prim50.opacity(0.12))
+                )
+            }
+            .buttonStyle(HeaderIconButtonStyle())
+            .accessibilityLabel(model.copy.text(.buyUnlimited))
+            .disabled(model.store.isPurchasing)
+
+            // Rewarded ad refill. Disabled while the tunnel is up: the ad
+            // network targets by egress country, which through the VPN is
+            // the server's — the hint row explains it.
+            Button { model.watchAd() } label: {
+                HStack(spacing: 5) {
+                    if model.adPlaying {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: model.adsAvailable ? "play.rectangle.fill" : "shield.lefthalf.filled")
+                            .font(.system(size: 12))
+                    }
+                    Text(model.adPlaying ? "…" : adButtonText)
+                        .font(.openSans(12, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    (model.canWatchAd ? Color.sec50 : Color.octGray60),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canWatchAd || model.adPlaying)
+            .accessibilityLabel(model.adsAvailable ? model.copy.text(.watchAdPlus3h) : model.copy.text(.adUnavailableVPNOn))
+            // Explain the VPN-on state via a tap hint instead of cramming
+            // a long sentence into the button label.
+            .help(model.copy.text(.adUnavailableVPNOn))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
+    }
+
+    /// "+3h free" while pressable, "58m" during the hourly cooldown,
+    /// "Bank full" when the 12h bank is full. While the tunnel is up the button shows
+    /// a SHORT locked state (icon + word) — the .help hint carries the full
+    /// explanation, so the pill never renders gray-on-gray mush.
+    private var adButtonText: String {
+        // Active failure notice (no fill / early dismissal) outranks all
+        // states for its ~5s lifetime — the user just tapped and needs to
+        // see WHY nothing came.
+        if Date() < model.adNoticeUntil, let key = model.adNoticeKey {
+            return model.copy.text(key)
+        }
+        if !model.adsAvailable { return model.copy.text(.adUnavailableVPNOnShort) }
+        if model.canWatchAd { return model.copy.text(.watchAdPlus3h) }
+        let s = Int(model.adCooldownRemaining)
+        if s > 0 { return "\(Int((s + 59) / 60))m" }
+        return model.copy.text(.adBankFull)
+    }
+}
+
+// MARK: - Power Button Style (Apple Design - instant feedback)
+
+struct PowerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 1.0), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Thin Spinning Arc (connecting indicator)
+
+struct SpinningArcView: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.0, to: 0.28)
+            .stroke(
+                AngularGradient(
+                    colors: [Color(red: 0.25, green: 0.55, blue: 1.0).opacity(0.0),
+                             Color(red: 0.25, green: 0.55, blue: 1.0),
+                             Color(red: 0.15, green: 0.75, blue: 1.0)],
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+            )
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+    }
+}
+
+// MARK: - World Map (with animated pulsing server dot and compact Apple-design callout)
+
+struct WorldMapView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var isPulsing = false
+
+    /// Geographic coordinates -> on-screen map position. Delegates to the
+    /// calibrated VPNCore projection (piecewise anchors measured off the
+    /// asset + per-country overrides for distorted areas) and scales the
+    /// 1920x954 canvas point onto the live map frame — recalculated from
+    /// the current map size on every relayout (rotation included).
+    private static func mapPosition(lon: Double, lat: Double, mapWidth: CGFloat, mapHeight: CGFloat, countryCode: String? = nil) -> CGPoint {
+        let p = MapProjection.viewPoint(lon: lon, lat: lat, mapWidth: Double(mapWidth), mapHeight: Double(mapHeight), countryCode: countryCode)
+        return CGPoint(x: p.x, y: p.y)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            // 80% of the available width keeps the map dominant but leaves a
+            // breathing margin; aspect ratio comes from the asset itself.
+            let mapWidth = geo.size.width * 0.8
+            let mapHeight = mapWidth * (954.0 / 1920.0)
+            let hasServer = !model.profile.host.isEmpty
+
+            // Selected-server marker: re-projected from the current map size.
+            let pos = Self.mapPosition(lon: model.serverLongitude, lat: model.serverLatitude, mapWidth: mapWidth, mapHeight: mapHeight, countryCode: model.serverCountryCode)
+            let dotX = min(max(pos.x, 24), mapWidth - 24)
+            let dotY = min(max(pos.y, 22), mapHeight - 22)
+
+            HStack {
+                Spacer()
+                ZStack(alignment: .topLeading) {
+                Image("world_map")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: mapWidth, height: mapHeight)
+                    .opacity(0.9)
+
+                // Static dots for inactive servers, colored by ping. Each dot
+                // is re-projected from the LIVE map size on every relayout,
+                // so rotation keeps every server on land.
+                ForEach(model.servers) { server in
+                    let isSelected = server.id == model.selectedServer?.id
+                    if !isSelected, let geo = model.serverGeoCache[server.id] {
+                        let p = Self.mapPosition(lon: geo.lon, lat: geo.lat, mapWidth: mapWidth, mapHeight: mapHeight, countryCode: geo.countryCode)
+                        let x = min(max(p.x, 12), mapWidth - 12)
+                        let y = min(max(p.y, 12), mapHeight - 12)
+                        let ping = model.serverPingCache[server.id]
+                        let dotColor: Color = {
+                            guard let ms = ping else { return Color.octGray40 }
+                            if ms <= 80 { return Color.green }
+                            if ms <= 150 { return Color.orange }
+                            return Color.red
+                        }()
+                        Circle()
+                            .fill(dotColor)
+                            .frame(width: 6, height: 6)
+                            .position(x: x, y: y)
+                    }
+                }
+
+                // The pulsing dot is shown for every placed server: LAN badge
+                // or offline country centroid (bundled table, no network),
+                // so the dot is always a real on-device determination.
+                if hasServer && model.hasServerGeo {
+                    // Pulsing animated server dot
+                    ZStack {
+                        Circle()
+                            .stroke(Color.prim50.opacity(0.6), lineWidth: 1.5)
+                            .frame(width: 22, height: 22)
+                            .scaleEffect(isPulsing ? 1.9 : 0.8)
+                            .opacity(isPulsing ? 0 : 0.9)
+
+                        Circle()
+                            .fill(Color.prim50)
+                            .frame(width: 8, height: 8)
+                            .shadow(color: Color.prim50.opacity(0.9), radius: 5)
+                    }
+                    .position(x: dotX, y: dotY)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: dotX)
+                }
+
+                if hasServer {
+                    // Compact callout badge with country flag, location name and live ping.
+                    // Without a placed position it sits centered instead of
+                    // pointing at a guessed spot on the map.
+                    let calloutPos = model.hasServerGeo
+                        ? CGPoint(x: dotX, y: max(18, dotY - 24))
+                        : CGPoint(x: mapWidth / 2, y: 22)
+                    HStack(spacing: 5) {
+                        Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
+                            .font(.system(size: 11))
+
+                        Circle()
+                            .fill(model.connection == .connected ? Color.prim50 : (model.connection == .connecting ? Color.orange : Color.sec20))
+                            .frame(width: 5, height: 5)
+
+                        Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
+                            .font(.openSans(11, weight: .semibold))
+                            .foregroundStyle(Color.octGray100)
+                            .lineLimit(1)
+
+                        Text("•")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.octGray40)
+
+                        if let ping = model.serverPingMs {
+                            Text("\(ping) ms")
+                                .font(.openSans(10, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                        } else if model.isResolvingMetadata {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Text(model.connection == .connected ? "32 ms" : "SSH2")
+                                .font(.openSans(10, weight: .medium))
+                                .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.octGray60)
+                        }
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.white)
+                            .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
+                    )
+                    .position(x: calloutPos.x, y: calloutPos.y)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.75), value: dotX)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.7).combined(with: .opacity).combined(with: .offset(y: 8)),
+                        removal: .scale(scale: 0.8).combined(with: .opacity)
+                    ))
+                }
+                }
+                .frame(width: mapWidth, height: mapHeight)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                        isPulsing = true
+                    }
+                }
+            Spacer()
+            }
+        }
+        .aspectRatio(1920.0 / 954.0, contentMode: .fit)
+    }
+}
+
+// MARK: - World Map Background with Server Dots
+
+struct WorldMapBackground: View {
+    var body: some View {
+        ZStack {
+            Image("world_map")
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct ServerDot: Identifiable {
+    let id = UUID()
+    let x: CGFloat
+    let y: CGFloat
+}
+
+/// Username chip shown after host:port when the server has no custom label.
+/// Compact capsule so a long login never pushes the address out.
+struct UsernameChip: View {
+    let username: String
+
+    var body: some View {
+        Text(username)
+            .font(.openSans(11, weight: .semibold))
+            .foregroundStyle(Color.sec20)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.sec20.opacity(0.10), in: Capsule())
+            .lineLimit(1)
+    }
+}
+
+/// Badge for the DNS-rules settings row: total of custom rules plus
+/// curated-list domains (both feed the same tunnel filter). Split out of
+/// the settings card so the card stays below the type-checker limit.
+private struct DNSRulesBadge: View {
+    let count: Int
+
+    var body: some View {
+        let tint: Color = count == 0 ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)
+        Text("\(count)")
+            .font(.openSans(11, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.12), in: Capsule())
+    }
+}
+
+// MARK: - Locations View
+
+struct LocationsView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// Non-nil while the edit sheet is up. Using sheet(item:) guarantees the
+    /// server is captured BEFORE the sheet content builds — the old
+    /// isPresented+editingServerID pair could hand the form a stale/nil id.
+    @State private var editingServer: ServerProfile?
+    @State private var showDeleteConfirm = false
+    @State private var deleteTargetID: String?
+    /// Add Server in the server list opens the same chooser as the main
+    /// screen (own VPS + partners) — never the bare manual form.
+    @State private var showChooser = false
+    @State private var showManualEntry = false
+    @State private var showCredentialImport = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(model.servers) { server in
+                        serverCard(server)
+                    }
+
+                    if model.servers.isEmpty {
+                        HStack {
+                            Text(model.copy.text(.noServerConfigured))
+                                .foregroundStyle(Color.octGray60)
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    }
+
+                    // Add Server button
+                    Button {
+                        showChooser = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.sec50)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.copy.text(.addServerLabel))
+                                    .font(.openSans(15, weight: .medium))
+                                    .foregroundStyle(Color.octGray100)
+                                Text(model.copy.text(.addServerDesc))
+                                    .font(.openSans(12))
+                                    .foregroundStyle(Color.octGray60)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.octGray40)
+                        }
+                        .padding(14)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(16)
+            }
+            .background(Color.appBg)
+            .navigationTitle(model.copy.text(.locations))
+            .task {
+                // Fresh pings when the list opens — skipped when the boot
+                // sweep is still fresh (no double SYN spend).
+                model.refreshAllServerPingsIfStale()
+                // Heal any model-vs-system drift before the user taps a card:
+                // a stale "connected" in the model would gray out switching
+                // even though the tunnel is really down.
+                model.resyncConnectionStateWithSystem()
+            }
+            .sheet(item: $editingServer) { server in
+                AddServerView(editing: true, editingServer: server)
+                    .environmentObject(model)
+            }
+            .sheet(isPresented: $showChooser) {
+                AddServerChooserView(
+                    onOwnServer: { showManualEntry = true },
+                    onImportCredentials: { showCredentialImport = true }
+                )
+                .environmentObject(model)
+            }
+            .sheet(isPresented: $showManualEntry) {
+                NavigationStack {
+                    AddServerView()
+                }
+                .environmentObject(model)
+            }
+            .sheet(isPresented: $showCredentialImport) {
+                ImportCredentialsView()
+                    .environmentObject(model)
+            }
+            .confirmationDialog(model.copy.text(.deleteServerConfirm),
+                                isPresented: $showDeleteConfirm,
+                                titleVisibility: .visible) {
+                Button(model.copy.text(.deleteServer), role: .destructive) {
+                    if let id = deleteTargetID { model.deleteServer(id: id) }
+                }
+                Button(model.copy.text(.cancel), role: .cancel) { }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func serverCard(_ server: ServerProfile) -> some View {
+        let isSelected = server.id == model.selectedServer?.id
+        let isConnected = isSelected && model.connection == .connected
+        let geo = isSelected ? nil : model.serverGeoCache[server.id]
+        let ping = isSelected ? model.serverPingMs : model.serverPingCache[server.id]
+        let flag: String = {
+            if isSelected { return model.serverFlag.isEmpty ? "🌐" : model.serverFlag }
+            return geo?.flag ?? "🌐"
+        }()
+        let country: String = {
+            if isSelected && !model.serverCountry.isEmpty { return model.serverCountry }
+            if let geo { return geo.country }
+            return server.displayLabel ?? (server.name.isEmpty ? server.host : server.name)
+        }()
+
+        // Server switching is only possible while fully disconnected: tapping
+        // a card mid-connect would split the session (UI points at the new
+        // server, the live tunnel still runs the old one).
+        let switchLocked = model.connection == .connected || model.connection == .connecting
+        Button {
+            model.selectServer(id: server.id)
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                Text(flag)
+                    .font(.system(size: 26))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(country)
+                            .font(.openSans(16, weight: .semibold))
+                            .foregroundStyle(Color.octGray100)
+                        if let ping {
+                            Text("\(ping) ms")
+                                .font(.openSans(11, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.prim50.opacity(0.12), in: Capsule())
+                        }
+                        if isConnected {
+                            Circle()
+                                .fill(Color.prim50)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        Text(server.displayAddress)
+                            .font(.openSans(12))
+                            .foregroundStyle(Color.octGray60)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if !server.hasCustomLabel, !server.username.isEmpty {
+                            UsernameChip(username: server.username)
+                        }
+                    }
+                }
+                Spacer()
+                if isSelected {
+                    Button {
+                        editingServer = server
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.sec50)
+                            .frame(width: 30, height: 30)
+                            .background(Color.sec50.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.editServerTitle))
+
+                    Button {
+                        deleteTargetID = server.id
+                        showDeleteConfirm = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.red)
+                            .frame(width: 30, height: 30)
+                            .background(Color.red.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.deleteServer))
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(switchLocked)
+        .opacity(switchLocked && !isSelected ? 0.55 : 1.0)
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.prim50, lineWidth: isConnected ? 1.5 : 0)
+        )
+    }
+}
+
+// MARK: - Settings View
+
+struct SettingsViewNew: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showLanguagePicker = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Unlimited (StoreKit) card — FIRST at the top so the
+                    // purchase is the first thing the eye lands on. Shows the
+                    // purchase UI while not owned, and the owned state
+                    // (badge + .purchaseOwned) once the user bought it.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.isUnlimited
+                             ? model.copy.text(.unlimitedBadge)
+                             : model.copy.text(.buyUnlimited))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.octGray100)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        if model.isUnlimited {
+                            Text(model.copy.text(.purchaseOwned))
+                                .font(.openSans(13, weight: .semibold))
+                                .foregroundStyle(Color.sec50)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 8)
+                        } else {
+                            // Buy button — live StoreKit price shown right in the button;
+                            // no separate price line, no rewarded-ad button here.
+                            Button(action: { model.showPaywall() }) {
+                                HStack(spacing: 6) {
+                                    if model.store.isPurchasing {
+                                        ProgressView().scaleEffect(0.7)
+                                    } else {
+                                        Image(systemName: "infinity")
+                                            .font(.system(size: 12))
+                                    }
+                                    Text(model.store.isPurchasing
+                                         ? model.copy.text(.purchasing)
+                                         : model.copy.text(.buyUnlimited, price: model.fullPriceString))
+                                        .font(.openSans(12, weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.sec50, in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(model.store.isPurchasing)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+
+                            Text(model.copy.text(.buyUnlimitedDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                                .lineLimit(2)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+
+                            // Restore for past buyers.
+                            Button {
+                                Task { await model.restorePurchase() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                    Text(model.copy.text(.restorePurchase))
+                                        .font(.openSans(12))
+                                }
+                                .foregroundStyle(Color.sec50)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 6)
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Language selector card
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.languageSection))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        Button {
+                            showLanguagePicker = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text(model.selectedLanguage?.flag ?? "🌐")
+                                    .font(.title2)
+                                Text(model.selectedLanguage?.title ?? "English")
+                                    .font(.openSans(15, weight: .medium))
+                                    .foregroundStyle(Color.octGray100)
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .sheet(isPresented: $showLanguagePicker) {
+                            LanguagePickerSheet(selected: model.selectedLanguage) { lang in
+                                model.choose(lang)
+                                showLanguagePicker = false
+                            }
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Documentation card — right after the language card so
+                    // even a first-time user finds the plain-language guide.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.documentation))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        NavigationLink(destination: DocsView(language: model.selectedLanguage?.rawValue)) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "book.closed.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color(red: 0.25, green: 0.45, blue: 0.85))
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.copy.text(.documentation))
+                                        .font(.openSans(15, weight: .medium))
+                                        .foregroundStyle(Color.octGray100)
+                                    Text(model.copy.text(.documentationDesc))
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // VPN Settings card
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.vpnSettings))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        NavigationLink(destination: ProtocolView()) {
+                            settingsRow(icon: "lock.shield", title: model.copy.text(.protocolTitle), desc: model.copy.text(.protocolDesc))
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        NavigationLink(destination: DNSView()) {
+                            settingsRow(icon: "network", title: model.copy.text(.dnsSettings), desc: model.copy.text(.dnsDesc))
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        NavigationLink(destination: AdvancedView()) {
+                            settingsRow(icon: "gearshape.2", title: model.copy.text(.advanced), desc: model.copy.text(.advancedDesc))
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        // Local DNS rules live at the VPN-settings level (not
+                        // inside the DNS screen): they apply BEFORE any DNS
+                        // server — custom or public — and deserve first-class
+                        // placement.
+                        NavigationLink(destination: LocalDNSRulesView()) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color(red: 0.85, green: 0.45, blue: 0.1))
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.copy.text(.dnsLocalRulesTitle))
+                                        .font(.openSans(15, weight: .medium))
+                                        .foregroundStyle(Color.octGray100)
+                                    Text(model.copy.text(.dnsRulesCount))
+                                        .font(.openSans(12))
+                                        .foregroundStyle(Color.octGray60)
+                                }
+                                 Spacer()
+                                 // Badge counts custom rules + curated-list
+                                 // domains (both feed the same tunnel filter).
+                                 // Extracted subview: keeps the giant settings
+                                 // card below the type-checker limit.
+                                 DNSRulesBadge(count: model.settings.dnsRules.count + model.curatedDomainCount)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Diagnostics card
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.diagnosticsSection))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        NavigationLink(destination: DiagnosticsView()) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "stethoscope")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color.sec50)
+                                    .frame(width: 24)
+                                Text(model.copy.text(.connectionDiagnostics))
+                                    .font(.openSans(15, weight: .medium))
+                                    .foregroundStyle(Color.octGray100)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Color.octGray40)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // About card
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.about))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        // App Store-required legal documents.
+                        if model.advertisingPrivacyAvailable {
+                            Button {
+                                Task {
+                                    do { try await AdvertisingPrivacy.showOptions() }
+                                    catch { model.purchaseNotice = model.copy.text(.unknownError) }
+                                    model.refreshAdvertisingPrivacy()
+                                }
+                            } label: {
+                                settingsRow(icon: "hand.raised", title: model.copy.text(.advertisingPrivacy), desc: model.copy.text(.privacyPolicyDesc))
+                            }.buttonStyle(.plain)
+                        }
+                        NavigationLink(destination: DocsView(page: .privacy, language: model.selectedLanguage?.rawValue)) {
+                            settingsRow(icon: "hand.raised.fill", title: model.copy.text(.privacyPolicyTitle), desc: model.copy.text(.privacyPolicyDesc))
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        NavigationLink(destination: DocsView(page: .terms, language: model.selectedLanguage?.rawValue)) {
+                            settingsRow(icon: "doc.text.fill", title: model.copy.text(.termsOfUseTitle), desc: model.copy.text(.termsOfUseDesc))
+                        }
+                        .buttonStyle(.plain)
+
+                        HStack {
+                            Text(model.copy.text(.version))
+                                .font(.openSans(15))
+                                .foregroundStyle(Color.octGray100)
+                            Spacer()
+                            // Read live from the bundle so the row can never
+                            // go stale after a version bump.
+                            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
+                                .font(.openSans(15))
+                                .foregroundStyle(Color.octGray60)
+                        }
+                        .padding(14)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
+                .padding(16)
+            }
+            .background(Color.appBg)
+            .navigationTitle(model.copy.text(.settings))
+        }
+    }
+
+    private func settingsRow(icon: String, title: String, desc: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(Color.sec50)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.openSans(15, weight: .medium))
+                    .foregroundStyle(Color.octGray100)
+                Text(desc)
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray60)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.octGray40)
+        }
+        .padding(14)
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .contentShape(.rect)
+    }
+}
+
+// MARK: - Settings View
+
+struct LanguagePickerSheet: View {
+    let selected: AppLanguage?
+    let onSelect: (AppLanguage) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    let order = LanguageOrdering.displayOrder(
+                        deviceLanguages: Locale.preferredLanguages,
+                        ipCountry: model.userCountryCode
+                    )
+                    ForEach(order.pinned + order.rest) { language in
+                        Button {
+                            onSelect(language)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(language.flag)
+                                    .font(.title2)
+                                Text(language.title)
+                                    .font(.openSans(16, weight: .medium))
+                                    .foregroundStyle(Color.octGray100)
+                                Spacer()
+                                if selected == language {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(Color.sec50)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                language == selected
+                                    ? Color.sec50.opacity(0.08)
+                                    : Color.clear
+                            )
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Separator after the pinned block (device + IP
+                        // language float to the top); normal dividers
+                        // between the rest.
+                        if language != (order.pinned + order.rest).last {
+                            Divider().background(Color.octGray05).padding(.leading, 52)
+                        }
+                        if language == order.pinned.last, !order.rest.isEmpty {
+                            Divider().background(Color.sec50.opacity(0.35)).padding(.leading, 20)
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .background(Color.octGray0)
+            .navigationTitle(model.copy.text(.chooseLanguage))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(model.copy.text(.ok)) { dismiss() }
+                        .foregroundStyle(Color.sec50)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Language Overlay
+
+struct LanguageOverlay: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            VStack(spacing: 22) {
+                Image(systemName: "globe.americas.fill")
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .foregroundStyle(.tint)
+                Text(model.copy.text(.chooseLanguage))
+                    .font(.title2.bold())
+                Text(model.copy.text(.selectLanguageHint))
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        if model.languageHintsResolving {
+                            // Loader while the IP-country hint resolves
+                            // (10s cap); the device-language entry may show
+                            // up together with it.
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text(model.copy.text(.selectLanguageHint))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(10)
+                        }
+                        let order = LanguageOrdering.displayOrder(
+                            deviceLanguages: Locale.preferredLanguages,
+                            ipCountry: model.userCountryCode
+                        )
+                        ForEach(order.pinned + order.rest) { language in
+                            Button {
+                                model.choose(language)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Text(language.flag).font(.title2)
+                                    Text(language.title).font(.body.weight(.medium))
+                                    Spacer()
+                                    if model.selectedLanguage == language {
+                                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                                    }
+                                }
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                                .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(language.title)
+                            if language == order.pinned.last, !order.rest.isEmpty {
+                                Divider().overlay(Color.sec50.opacity(0.5)).padding(.horizontal, 4)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 400)
+            }
+            .padding(24)
+            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 28))
+            .padding(22)
+            .shadow(color: .black.opacity(0.15), radius: 30, y: 12)
+        }
+    }
+}
+
+// MARK: - Add Server View
+
+struct AddServerView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    var editing: Bool = false
+    /// When editing, the server being modified (nil = adding new).
+    var editingServer: ServerProfile? = nil
+    @State private var label = ""
+    @State private var address = ""
+    @State private var username = ""
+    @State private var port = "22"
+    @State private var password = ""
+    @State private var privateKey = ""
+    @State private var hostKey = ""
+    @State private var errorMessage: String?
+    @State private var showErrorAlert = false
+    /// File-picker for the Ed25519 private key (Files / iCloud Drive).
+    @State private var showKeyImporter = false
+    @State private var showKeyHint = false
+    /// Inline result chip under the key editor after a file import.
+    @State private var keyImportMessage: String?
+    @State private var keyImportOK = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    // Server credentials section
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.server))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 6)
+
+                        VStack(spacing: 6) {
+                            fieldRow(
+                                title: model.copy.text(.serverLabelOptional),
+                                placeholder: model.copy.text(.serverLabelPlaceholder),
+                                text: $label
+                            )
+                            fieldRow(
+                                title: model.copy.text(.address),
+                                placeholder: model.copy.text(.addressPlaceholder),
+                                text: $address
+                            )
+                            fieldRow(
+                                title: model.copy.text(.sshPort),
+                                placeholder: model.copy.text(.portPlaceholder),
+                                text: $port
+                            )
+                            fieldRow(
+                                title: model.copy.text(.username),
+                                placeholder: model.copy.text(.usernamePlaceholder),
+                                text: $username
+                            )
+                            secureFieldRow(
+                                title: model.copy.text(.passwordOptional),
+                                placeholder: model.copy.text(.passwordPlaceholder),
+                                text: $password
+                            )
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Private Key section
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Text(model.copy.text(.ed25519PrivateKeyOptional))
+                                .font(.openSans(13, weight: .semibold))
+                                .foregroundStyle(Color.octGray60)
+                            InfoDotButton(isVisible: $showKeyHint)
+                            Spacer()
+                            // Import from Files / iCloud Drive — one tap
+                            // instead of copy-paste gymnastics.
+                            Button {
+                                showKeyImporter = true
+                            } label: {
+                                Label(model.copy.text(.keyImportFromFile), systemImage: "folder")
+                                    .font(.openSans(12, weight: .semibold))
+                                    .foregroundStyle(Color.sec50)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.sec50.opacity(0.10), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(model.copy.text(.keyImportFromFile))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 2)
+
+                        if showKeyHint {
+                            InfoBubble(title: model.copy.text(.ed25519PrivateKeyOptional),
+                                       message: model.copy.text(.ed25519Hint))
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 6)
+                        }
+
+                        ZStack(alignment: .topLeading) {
+                            if privateKey.isEmpty {
+                                Text(model.copy.text(.privateKeyPlaceholder))
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .foregroundStyle(Color.octGray40)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                            }
+                            TextEditor(text: $privateKey)
+                                .font(.system(.footnote, design: .monospaced))
+                                .autocorrectionDisabled()
+                                .padding(6)
+                        }
+                        .frame(minHeight: 100)
+                        .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.octGray05, lineWidth: 1)
+                        )
+                        .padding(.horizontal, 12)
+
+                        // Live validation + import result chip: the user sees
+                        // IMMEDIATELY whether the pasted/imported key parses —
+                        // no more mystery tunnel failures at connect time.
+                        if let keyImportMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: keyImportOK ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(keyImportOK ? Color.prim50 : Color(red: 1.0, green: 0.25, blue: 0.35))
+                                Text(keyImportMessage)
+                                    .font(.openSans(11))
+                                    .foregroundStyle(Color.octGray60)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        } else if !privateKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                  SSHPrivateKeyImporter.validatePEM(privateKey) == nil {
+                            Label(model.copy.text(.keyImportedOK), systemImage: "checkmark.circle.fill")
+                                .font(.openSans(11, weight: .semibold))
+                                .foregroundStyle(Color.prim50)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        } else {
+                            Color.clear.frame(height: 0).padding(.bottom, 0)
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .fileImporter(isPresented: $showKeyImporter, allowedContentTypes: [.data, .text, .plainText]) { result in
+                        importKeyFile(result)
+                    }
+
+                    // Host Key
+                    VStack(alignment: .leading, spacing: 0) {
+                        fieldRow(
+                            title: model.copy.text(.pinnedHostKey),
+                            placeholder: model.copy.text(.hostKeyPlaceholder),
+                            text: $hostKey
+                        )
+                        .padding(12)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                    // Add button
+                    Button {
+                        do {
+                            let validHost = try ProfileValidator.validateHost(address)
+                            let validPort = try ProfileValidator.validatePort(port)
+                            let validUsername = try ProfileValidator.validateUsername(username)
+                            // Entry-time pinned host key check: a fingerprint
+                            // or multi-line paste must fail HERE with a clear
+                            // localized message, not as a mystery connect
+                            // failure later.
+                            let validHostKey: String
+                            do {
+                                validHostKey = try ProfileValidator.validateHostKey(hostKey)
+                            } catch ProfileValidationError.invalidHostKey(let reason) {
+                                errorMessage = model.hostKeyErrorMessage(reason)
+                                showErrorAlert = true
+                                return
+                            }
+                            // In edit mode we may be leaving the credential
+                            // fields blank to keep what is already saved; only
+                            // validate when the user actually entered something.
+                            if !password.isEmpty || !privateKey.isEmpty {
+                                try ProfileValidator.validateCredentials(password: password, privateKey: privateKey)
+                                // Parse-check the entered key NOW: a structurally
+                                // broken key must fail HERE with a clear message,
+                                // not as an extError=none tunnel flap at connect.
+                                if !privateKey.isEmpty, let issue = SSHPrivateKeyImporter.validatePEM(privateKey) {
+                                    throw ProfileValidationError.invalidPrivateKey(message: model.keyImportErrorMessage(issue))
+                                }
+                            }
+
+                            // Resolve the id: reuse the edited server's id (or the
+                            // currently selected one when editing without an
+                            // explicit id), otherwise mint a fresh one. Never
+                            // mint blindly on edit — that spawns duplicates.
+                            let id = editingServer?.id ?? (editing ? model.selectedServer?.id : nil) ?? UUID().uuidString
+
+                            // When editing, preserve existing secrets if the user
+                            // left the fields blank (same merge semantics as the
+                            // old single-profile editor). Local copies keep the
+                            // values; extension sync sends only non-nil ones.
+                            var existingPassword: String?
+                            var existingPrivateKey: String?
+                            if let existing = model.servers.first(where: { $0.id == id }) {
+                                existingPassword = existing.password
+                                existingPrivateKey = existing.privateKey
+                            }
+                            let resolvedPassword = password.isEmpty ? (existingPassword ?? "") : password
+                            let resolvedPrivateKey = privateKey.isEmpty ? (existingPrivateKey ?? "") : privateKey
+                            let sanitizedLabel = ServerProfile.normalizedLabel(label)
+
+                            let profile = ServerProfile(
+                                id: id,
+                                name: validHost,
+                                host: validHost,
+                                port: validPort,
+                                username: validUsername,
+                                hostKey: validHostKey,
+                                dnsServers: [],
+                                hasPassword: !resolvedPassword.isEmpty,
+                                hasPrivateKey: !resolvedPrivateKey.isEmpty,
+                                password: resolvedPassword.isEmpty ? nil : resolvedPassword,
+                                privateKey: resolvedPrivateKey.isEmpty ? nil : resolvedPrivateKey,
+                                label: sanitizedLabel
+                            )
+
+                            // Persist locally (instant UI) then close. Extension
+                            // sync happens best-effort in the background.
+                            try model.saveServer(profile)
+                            model.serverName = sanitizedLabel ?? validHost
+                            dismiss()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showErrorAlert = true
+                         }
+                    } label: {
+                        Text(model.copy.text(editing ? .saveChanges : .addServer))
+                            .font(.openSans(16, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(Color.sec50, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+
+                    // Hint
+                    Text(model.copy.text(.credentialsHint))
+                        .font(.openSans(12))
+                        .foregroundStyle(Color.octGray60)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+                .padding(16)
+            }
+            .adaptiveCenterColumn()
+            .background(Color.appBg)
+            .navigationTitle(model.copy.text(editing ? .editServerTitle : .addServerTitle))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(model.copy.text(.cancel)) { dismiss() }
+                        .foregroundStyle(Color.sec50)
+                }
+            }
+            .onAppear {
+                guard editing, let server = editingServer else { return }
+                // Instant pre-fill from the captured profile, then refresh
+                // from the EXTENSION's authoritative store (serverGet) —
+                // secrets never come back, everything else stays live-fresh.
+                label = server.displayLabel ?? ""
+                address = server.host
+                username = server.username
+                port = String(server.port)
+                hostKey = server.hostKey
+                // Secret fields start EMPTY on edit: the app never holds the
+                // stored values (serverGet strips them). Leaving them blank
+                // preserves the stored secrets on save (merge in saveServer).
+                password = ""
+                privateKey = ""
+                let fetchedID = server.id
+                Task { @MainActor in
+                    // Fresh copy from the extension's store (works even with
+                    // the tunnel down — the message channel carries it).
+                    if let fresh = await model.fetchServerForEdit(id: fetchedID) {
+                        // Only overwrite non-secret fields the user hasn't
+                        // touched in the meantime (they can't have — this
+                        // runs within milliseconds of the sheet opening).
+                        label = fresh.displayLabel ?? ""
+                        address = fresh.host
+                        username = fresh.username
+                        port = String(fresh.port)
+                        hostKey = fresh.hostKey
+                    }
+                }
+            }
+            // Live length cap while typing / pasting — full sanitizing
+            // (invisible chars, zalgo…) happens on save via normalizedLabel.
+            .onChange(of: label) { new in
+                label = TextInputSanitizer.capped(new)
+            }
+            .alert(model.copy.text(.invalidInput), isPresented: $showErrorAlert) {
+                Button(model.copy.text(.ok), role: .cancel) { }
+            } message: {
+                Text(errorMessage ?? "Please check the entered configuration.")
+            }
+        }
+    }
+
+    private func fieldRow(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.openSans(12, weight: .medium))
+                .foregroundStyle(Color.octGray60)
+            TextField(placeholder, text: text)
+                .autocorrectionDisabled()
+                .font(.openSans(14))
+                .foregroundStyle(Color.octGray100)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.octGray05, lineWidth: 1)
+                )
+        }
+    }
+
+    private func secureFieldRow(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.openSans(12, weight: .medium))
+                .foregroundStyle(Color.octGray60)
+            SecureField(placeholder, text: text)
+                .font(.openSans(14))
+                .foregroundStyle(Color.octGray100)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.octGray05, lineWidth: 1)
+                )
+        }
+    }
+
+    /// Reads the picked file into the key field with full validation feedback.
+    /// Security-restricted files (without .startAccessingSecurityScopedData)
+    /// must never crash — every failure becomes a friendly localized chip.
+    private func importKeyFile(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure:
+            keyImportMessage = model.copy.text(.keyImportReadFailed)
+            keyImportOK = false
+        case .success(let url):
+            let secured = url.startAccessingSecurityScopedResource()
+            defer { if secured { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                // A real Ed25519 key is <1KB PEM / <100B seed; anything huge is
+                // not a key (picked the wrong file — e.g. a disk image).
+                guard data.count <= 16_384 else {
+                    keyImportMessage = model.copy.text(.keyImportTooLarge)
+                    keyImportOK = false
+                    return
+                }
+                guard let text = String(data: data, encoding: .utf8) else {
+                    keyImportMessage = model.copy.text(.keyImportUnsupported)
+                    keyImportOK = false
+                    return
+                }
+                if let issue = SSHPrivateKeyImporter.validatePEM(text) {
+                    keyImportMessage = model.keyImportErrorMessage(issue)
+                    keyImportOK = false
+                    return
+                }
+                privateKey = text
+                keyImportMessage = model.copy.text(.keyImportedOK)
+                keyImportOK = true
+            } catch {
+                keyImportMessage = model.copy.text(.keyImportReadFailed)
+                keyImportOK = false
+            }
+        }
+    }
+}
+
+// MARK: - Diagnostics View
+
+struct DiagnosticsView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showTechnicalDetails = false
+    /// Live status snapshot pulled on appear + on every 2s while visible.
+    @State private var phase = ""
+    @State private var liveTunnelDNS = ""
+    @State private var liveDNSRules = "0"
+    @State private var liveDNSBlocked = "0"
+    /// What DNS will become at the NEXT connection (set in the app,
+    /// unapplied until reconnect). Different from liveTunnelDNS when the
+    /// user switches a preset while connected.
+    private var freshTunnelDNS: String {
+        let resolved = model.settings.resolvedDNSServers
+        return resolved.isEmpty ? model.copy.text(.diagDefaultDNS) : resolved.joined(separator: ", ")
+    }
+    @State private var stopReason = ""
+    @State private var lastError = ""
+    @State private var pollTask: Task<Void, Never>?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Live tunnel state — what the extension is doing RIGHT NOW
+                // (same phase strings the console log shows).
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.setupProgress))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    liveRow(icon: phaseIcon,
+                            title: connectionTitle,
+                            detail: phase.isEmpty ? "—" : phase)
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Live telemetry: pool, flows, bytes — same numbers as the
+                // connected-screen strip, so diagnostics and the main screen
+                // can never disagree.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.diagLive))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    profileRow(label: model.copy.text(.diagSSHConnections), value: model.sshConnectionCount > 0 ? String(model.sshConnectionCount) : "—")
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.diagActiveFlows), value: model.activeChannelCount > 0 ? String(model.activeChannelCount) : "—")
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.diagDownloaded), value: fmtMB(model.tunnelDownBytes))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.diagUploaded), value: fmtMB(model.tunnelUpBytes))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.ping), value: model.serverPingMs.map { "\($0) ms" } ?? "—")
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Profile
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.profile))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    profileRow(label: model.copy.text(.server), value: model.profile.host.isEmpty ? "—" : model.profile.host)
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.sshPort), value: String(model.profile.port))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.username), value: model.profile.username.isEmpty ? "—" : model.profile.username)
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    profileRow(label: model.copy.text(.authentication), value: model.profile.privateKey.isEmpty ? model.copy.text(.passwordKeychain) : model.copy.text(.ed25519Key))
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    // Show the ACTUAL effective DNS of the last-started
+                    // tunnel (extension-confirmed when polled), and the
+                    // pending choice when a change waits for the next connect.
+                    profileRow(label: model.copy.text(.diagDNS), value: dnsDiagnosticValue)
+                    if model.connection == .connected {
+                        let active = Int(liveDNSRules) ?? 0
+                        let blocked = Int(liveDNSBlocked) ?? 0
+                        profileRow(label: model.copy.text(.dnsLocalRulesTitle),
+                                   value: String(format: model.copy.text(.diagLocalRulesLine), active, blocked))
+                    }
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // Stop reason / last error — the WHY of the last disconnect.
+                if !stopReason.isEmpty || !lastError.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.status))
+                            .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                        if !stopReason.isEmpty {
+                            profileRow(label: model.copy.text(.diagStopReason), value: stopReason)
+                        }
+                        if !lastError.isEmpty, lastError != "none" {
+                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            profileRow(label: model.copy.text(.diagLastError), value: lastError)
+                        }
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
+
+                // DNS pending-change note: user picked X while the live
+                // tunnel still runs Y (rules apply on the next connection).
+                if !freshTunnelDNS.isEmpty, freshTunnelDNS != liveTunnelDNS, model.connection == .connected {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.diagDNSPending))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+                        profileRow(label: model.copy.text(.diagLiveNow), value: liveTunnelDNS.isEmpty ? "—" : liveTunnelDNS)
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        profileRow(label: model.copy.text(.diagOnNextConnect), value: freshTunnelDNS)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
+
+                // Error
+                if case .failed(let message) = model.connection {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.copy.text(.error))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        Text(friendlyFailure(message))
+                            .foregroundStyle(.red)
+                            .padding(14)
+
+                        DisclosureGroup(model.copy.text(.technicalDetails), isExpanded: $showTechnicalDetails) {
+                            Text(message)
+                                .font(.system(.footnote, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        .padding(14)
+                    }
+                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+            .padding(16)
+        }
+        .adaptiveCenterColumn()
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.diagnosticsTitle))
+        .task {
+            await refreshExtensionStatus()
+            pollTask?.cancel()
+            pollTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    await refreshExtensionStatus()
+                }
+            }
+        }
+        .onDisappear { pollTask?.cancel() }
+    }
+
+    /// "current, human" DNS row: live-tunnel value when connected (pulled
+    /// from the extension's status), otherwise the newly configured choice.
+    private var dnsDiagnosticValue: String {
+        if model.connection == .connected && !liveTunnelDNS.isEmpty {
+            return liveTunnelDNS
+        }
+        let resolved = model.settings.resolvedDNSServers
+        return resolved.isEmpty ? model.copy.text(.diagDefaultDNS) : resolved.joined(separator: ", ")
+    }
+
+        private func refreshExtensionStatus() async {
+        let status = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .status, timeout: 2)
+        guard !Task.isCancelled else { return }
+        phase = status["phase"] ?? ""
+        stopReason = status["stopReason"] ?? ""
+        liveTunnelDNS = status["dns"] ?? ""
+        liveDNSRules = status["dnsRules"] ?? "0"
+        liveDNSBlocked = status["dnsBlocked"] ?? "0"
+        let errRsp = await VPNExtensionAPI.call(from: model.extensionManager, cmd: .lastError, timeout: 2)
+        if !Task.isCancelled { lastError = errRsp["error"] ?? "none" }
+    }
+
+    /// Raw internal failure strings -> what a human should read. Technical
+    /// detail stays one tap away in the disclosure below.
+    private func friendlyFailure(_ message: String) -> String {
+        switch message {
+        case "freeTimeExhausted", "quotaExhausted":
+            return model.copy.text(.failureFreeTimeExhausted)
+        default:
+            return message
+        }
+    }
+
+    private var connectionTitle: String {
+        switch model.connection {
+        case .connected: return model.copy.text(.connected)
+        case .connecting: return model.copy.text(.connecting)
+        case .disconnected: return model.copy.text(.disconnected)
+        case .failed: return model.copy.text(.error)
+        }
+    }
+
+    private var phaseIcon: String {
+        switch model.connection {
+        case .connected: return "checkmark.circle.fill"
+        case .connecting: return "arrow.triangle.2.circlepath"
+        case .disconnected: return "circle"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func fmtMB(_ bytes: Int) -> String {
+        bytes > 0 ? String(format: "%.1f MB", Double(bytes) / 1_048_576) : "—"
+    }
+
+    private func liveRow(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.prim50)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.openSans(15, weight: .medium))
+                    .foregroundStyle(Color.octGray100)
+                Text(detail)
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray60)
+            }
+            Spacer()
+            if model.connection == .connecting { ProgressView().controlSize(.small) }
+        }
+        .padding(14)
+    }
+
+    private func progressRow(_ title: String, active: Bool) -> some View {
+        HStack {
+            Image(systemName: active ? "arrow.triangle.2.circlepath" : "circle")
+                .foregroundStyle(active ? .orange : Color.octGray40)
+                .frame(width: 24)
+            Text(title)
+                .font(.openSans(15))
+                .foregroundStyle(Color.octGray100)
+            Spacer()
+            if active { ProgressView().controlSize(.small) }
+        }
+        .padding(14)
+    }
+
+    private func profileRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.openSans(15))
+                .foregroundStyle(Color.octGray60)
+            Spacer()
+            Text(value)
+                .font(.openSans(15, weight: .medium))
+                .foregroundStyle(Color.octGray100)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(14)
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    RootView()
+        .environmentObject(AppModel())
+}
+
+// MARK: - Protocol View
+
+struct ProtocolView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.vpnProtocol))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    // The relay runs on NIOSSH (SSH-2) — the transport is the
+                    // protocol, there is no second implementation to switch
+                    // to. The old "SSH legacy" option changed a stored string
+                    // and nothing else, which is worse than not offering it.
+                    protocolOption(name: "SSH2 (SSH-2 over NIOSSH)",
+                                   desc: model.copy.text(.ssh2Desc),
+                                   selected: true) {}
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                Text(model.copy.text(.ssh2Recommended))
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray60)
+                    .padding(.horizontal, 16)
+            }
+            .padding(16)
+        }
+        .adaptiveCenterColumn()
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.protocolTitle))
+    }
+
+    private func protocolOption(name: String, desc: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.openSans(15, weight: .medium))
+                        .foregroundStyle(Color.octGray100)
+                    Text(desc)
+                        .font(.openSans(12))
+                        .foregroundStyle(Color.octGray60)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - DNS View (custom servers OR public preset — mutually exclusive)
+
+struct DNSView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showCustomInfo = false
+    /// Which preset's info bubble is open (one at a time).
+    @State private var openPresetInfoID: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // ---- Custom DNS servers (own values) ----
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.dnsSettings))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    HStack(spacing: 8) {
+                        Text(model.copy.text(.useCustomDNS))
+                            .font(.openSans(15, weight: .medium))
+                            .foregroundStyle(Color.octGray100)
+                        InfoDotButton(isVisible: $showCustomInfo)
+                        Spacer()
+                        Toggle("", isOn: customToggle)
+                            .tint(Color.prim50)
+                            .labelsHidden()
+                    }
+                    .padding(14)
+
+                    if showCustomInfo {
+                        InfoBubble(title: model.copy.text(.dnsUseCustomInfoTitle),
+                                   message: model.copy.text(.dnsUseCustomInfoBody))
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 12)
+                    }
+
+                    if model.settings.useCustomDNS {
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        VStack(spacing: 0) {
+                            dnsField(label: model.copy.text(.primaryDNS), text: $model.settings.primaryDNS)
+                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            dnsField(label: model.copy.text(.secondaryDNS), text: $model.settings.secondaryDNS)
+                        }
+                    }
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                // ---- Public presets (choosing one switches OFF custom) ----
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.dnsPresetsTitle))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(DNSPresets.all.enumerated()), id: \.element.id) { index, preset in
+                                if index > 0 {
+                                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                                }
+                                presetRow(preset)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 354)   // ~3.5 rows visible
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                Text(model.copy.text(.dnsRulesHint))
+                    .font(.openSans(11))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+            }
+            .padding(16)
+        }
+        .adaptiveCenterColumn()
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.dnsSettings))
+    }
+
+    /// Custom mode and preset mode are mutually exclusive: turning custom ON
+    /// clears the preset choice; the fields then carry the user's own values.
+    private var customToggle: Binding<Bool> {
+        Binding(
+            get: { model.settings.useCustomDNS },
+            set: { on in
+                model.settings.useCustomDNS = on
+                if on { model.settings.presetDNS = [] }
+            }
+        )
+    }
+
+    private func presetRow(_ preset: DNSPreset) -> some View {
+        let selected = model.settings.presetDNS == [preset.primary, preset.secondary]
+        let infoOpen = openPresetInfoID == preset.id
+        return VStack(spacing: 0) {
+            // Whole-card tap: select like a server card (green highlight).
+            // Re-tap the selected preset deselects it; tapping another
+            // preset switches. No separate select circle.
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if selected {
+                        model.settings.presetDNS = []
+                        ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                            message: "preset deselected: \(preset.name)")
+                    } else {
+                        model.settings.presetDNS = [preset.primary, preset.secondary]
+                        model.settings.useCustomDNS = false
+                        ConsoleLogStore.shared.log(level: .info, tag: "DNS",
+                            message: "preset selected: \(preset.name) (\(preset.primary), \(preset.secondary))")
+                    }
+                }
+            } label: {
+                VStack(spacing: 6) {
+                    // Row 1: name + "?" on the left, chips pushed right
+                    // (space-between) — everything on one line, compact.
+                    HStack(spacing: 6) {
+                        HStack(spacing: 4) {
+                            Text(preset.name)
+                                .font(.openSans(14, weight: .semibold))
+                                .foregroundStyle(Color.octGray100)
+                                .lineLimit(1)
+                            InfoDotButtonCompact(isVisible: infoOpen) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                    openPresetInfoID = infoOpen ? nil : preset.id
+                                }
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        FlowChips(chips: preset.chips.map { (model.copy.chipText($0), Self.chipColor($0)) })
+                    }
+                    // Row 2: the resolver IPs. Small but DARK — readable,
+                    // not the washed-out gray the review called invisible.
+                    HStack(spacing: 6) {
+                        Text("\(preset.primary)  •  \(preset.secondary)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.octGray80)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        if selected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Color.prim50)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(selected ? Color.prim50.opacity(0.10) : Color.octGray0)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(selected ? Color.prim50 : Color.octGray05, lineWidth: selected ? 1.5 : 1)
+                )
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            if infoOpen {
+                InfoBubble(title: preset.name,
+                           message: model.copy.presetDescription(preset))
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 10)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+
+    private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
+        switch chip {
+        case .noFilter: return Color.octGray40
+        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
+        case .phishing: return Color(red: 0.45, green: 0.25, blue: 0.85)
+        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+        case .trackers: return Color(red: 0.75, green: 0.55, blue: 0.1)
+        case .adult: return Color(red: 0.16, green: 0.62, blue: 0.35)
+        case .safeSearch: return Color(red: 0.1, green: 0.55, blue: 0.55)
+        }
+    }
+
+    private func dnsField(label: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+                .font(.openSans(15))
+                .foregroundStyle(Color.octGray60)
+            Spacer()
+            TextField("0.0.0.0", text: text)
+                .autocorrectionDisabled()
+                .multilineTextAlignment(.trailing)
+                .font(.openSans(15))
+        }
+        .padding(14)
+    }
+}
+
+// MARK: - Local DNS rules (VPN-settings level screen)
+
+/// Two-tab screen: "Custom" holds the user's own hand-written rules (with
+/// file import/export); "Lists" holds AdAway-style curated subscriptions
+/// downloaded from open sources. Both feed the same tunnel filter.
+struct LocalDNSRulesView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var showRulesInfo = false
+    @State private var showAddRule = false
+    @State private var editingRule: DNSBlocklistEntry?
+    @State private var selectedTab: Int = 0
+    // Custom-tab file import/export
+    @State private var showRulesImporter = false
+    @State private var pendingImport: [DNSBlocklistEntry]?
+    @State private var importMessage: String?
+    @State private var showExportSuccess = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Segmented Custom / Lists picker, Apple-style.
+                Picker("", selection: $selectedTab) {
+                    Text(model.copy.text(.dnsTabCustom)).tag(0)
+                    Text(model.copy.text(.dnsTabLists)).tag(1)
+                }
+                .pickerStyle(.segmented)
+
+                if selectedTab == 0 { customTab } else { listsTab }
+
+                Text(model.copy.text(selectedTab == 0 ? .dnsRulesHint : .dnsListInfoBody))
+                    .font(.openSans(11))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+            }
+            .padding(16)
+        }
+        .adaptiveCenterColumn()
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.dnsLocalRulesTitle))
+        .sheet(isPresented: $showAddRule) {
+            AddDNSRuleView()
+        }
+        .sheet(item: $editingRule) { rule in
+            AddDNSRuleView(editing: rule)
+        }
+        .sheet(isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })) {
+            if let entries = pendingImport {
+                DNSImportPreviewView(entries: entries) { replace in
+                    model.applyImportedRules(entries, replace: replace)
+                    pendingImport = nil
+                }
+            }
+        }
+        .fileImporter(isPresented: $showRulesImporter, allowedContentTypes: [.text, .plainText, .data]) { result in
+            importRulesFile(result)
+        }
+        .alert(model.copy.text(.dnsExportSaved), isPresented: $showExportSuccess) {
+            Button(model.copy.text(.ok), role: .cancel) { }
+        }
+    }
+
+    // MARK: Custom tab (own rules + file import/export)
+
+    private var customTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(model.copy.text(.dnsLocalRulesTitle))
+                    .font(.openSans(13, weight: .semibold))
+                    .foregroundStyle(Color.octGray60)
+                InfoDotButton(isVisible: $showRulesInfo)
+                Spacer()
+                Text("\(model.settings.dnsRules.count) \(model.copy.text(.dnsRulesCount))")
+                    .font(.openSans(11, weight: .semibold))
+                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                // Import from file (hosts format).
+                Button {
+                    showRulesImporter = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.sec50)
+                        .frame(width: 26, height: 26)
+                        .background(Color.sec50.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.dnsImportFromFile))
+                // Export to hosts file via share sheet.
+                Button {
+                    exportRules()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color.sec50)
+                        .frame(width: 26, height: 26)
+                        .background(model.settings.dnsRules.isEmpty ? Color.octGray05 : Color.sec50.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.settings.dnsRules.isEmpty)
+                .accessibilityLabel(model.copy.text(.dnsExportFile))
+                Button {
+                    showAddRule = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(Color.sec50, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.copy.text(.dnsAddRule))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            if showRulesInfo {
+                InfoBubble(title: model.copy.text(.dnsLocalRulesInfoTitle),
+                           message: model.copy.text(.dnsLocalRulesInfoBody))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
+            }
+
+            if let importMessage {
+                Text(importMessage)
+                    .font(.openSans(11))
+                    .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+
+            if model.settings.dnsRules.isEmpty {
+                Text(model.copy.text(.dnsRulesEmpty))
+                    .font(.openSans(12))
+                    .foregroundStyle(Color.octGray40)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(model.settings.dnsRules.enumerated()), id: \.element.id) { index, rule in
+                        if index > 0 {
+                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        }
+                        dnsRuleRow(rule)
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+        }
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: Lists tab (curated open-source blocklists, AdAway-style)
+
+    private var listsTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(model.copy.text(.dnsListsTitle))
+                    .font(.openSans(13, weight: .semibold))
+                    .foregroundStyle(Color.octGray60)
+                Spacer()
+                if !model.subscribedLists.isEmpty {
+                    Text(String(format: model.copy.text(.dnsListsActiveCount), model.subscribedLists.count, model.curatedDomainCount))
+                        .font(.openSans(11, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.85, green: 0.45, blue: 0.1))
+                    Button {
+                        model.refreshAllSubscribedLists()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.sec50)
+                            .frame(width: 26, height: 26)
+                            .background(Color.sec50.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.copy.text(.dnsListsRefreshAll))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Text(model.copy.text(.dnsListsSubtitle))
+                .font(.openSans(11))
+                .foregroundStyle(Color.octGray40)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(DNSListCatalog.all.enumerated()), id: \.element.id) { index, source in
+                    if index > 0 {
+                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    }
+                    curatedListRow(source)
+                }
+            }
+            .padding(.bottom, 6)
+        }
+        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// One curated source row: subscribe state, domain count, category chip.
+    private func curatedListRow(_ source: DNSListSource) -> some View {
+        let subscribed = model.isSubscribed(source)
+        let state = model.listRefreshState[source.id]
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(source.name)
+                        .font(.openSans(14, weight: .medium))
+                        .foregroundStyle(Color.octGray100)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(categoryLabel(source.category))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(categoryColor(source.category))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(categoryColor(source.category).opacity(0.12), in: Capsule())
+                }
+                if subscribed, let sub = model.subscribedLists.first(where: { $0.sourceID == source.id }) {
+                    Text(String(format: model.copy.text(.dnsListsDomainsBlocked), sub.domains.count))
+                        .font(.openSans(11))
+                        .foregroundStyle(Color.octGray40)
+                } else {
+                    Text("~\(source.entryCount)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.octGray40)
+                }
+                // Status line while loading / after failure.
+                if state == "loading" {
+                    Text(model.copy.text(.dnsListDownloading))
+                        .font(.openSans(10, weight: .semibold))
+                        .foregroundStyle(Color.prim50)
+                } else if state == "failed" {
+                    Text(model.copy.text(.dnsListFailed))
+                        .font(.openSans(10, weight: .semibold))
+                        .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                } else if state == "empty" {
+                    Text(model.copy.text(.dnsListEmpty))
+                        .font(.openSans(10))
+                        .foregroundStyle(Color.octGray40)
+                }
+            }
+            Spacer()
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if state == "failed" || state == "empty" {
+                        model.refreshList(source)
+                    } else {
+                        model.toggleListSubscription(source)
+                    }
+                }
+            } label: {
+                Text(state == "loading"
+                     ? "…"
+                     : (subscribed ? model.copy.text(.dnsListSubscribed) : "+"))
+                    .font(.openSans(12, weight: .bold))
+                    .foregroundStyle(subscribed ? Color.prim50 : Color.sec50)
+                    .frame(minWidth: 46)
+                    .padding(.vertical, 6)
+                    .background((subscribed ? Color.prim50 : Color.sec50).opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(state == "loading")
+            .accessibilityLabel(source.name)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: File import/export (Custom tab)
+
+    /// Reads a picked hosts file, parses rules, opens the merge/replace sheet.
+    private func importRulesFile(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure:
+            importMessage = model.copy.text(.dnsImportReadFailed)
+        case .success(let url):
+            let secured = url.startAccessingSecurityScopedResource()
+            defer { if secured { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                // A hosts file beyond 8MB is not a filter list someone would
+                // hand-import; refuse instead of churning the parser.
+                guard data.count <= 8_388_608 else {
+                    importMessage = model.copy.text(.dnsImportReadFailed)
+                    return
+                }
+                let text = String(decoding: data, as: UTF8.self)
+                let entries = DNSListStore.parseHostsEntries(text)
+                guard !entries.isEmpty else {
+                    importMessage = model.copy.text(.dnsImportEmptyFile)
+                    return
+                }
+                importMessage = nil
+                pendingImport = entries
+            } catch {
+                importMessage = model.copy.text(.dnsImportReadFailed)
+            }
+        }
+    }
+
+    /// Writes the current custom rules to a temp hosts file and share-sheets it.
+    /// MAC-fork: UIActivityViewController -> NSSharingServicePicker.
+    private func exportRules() {
+        let text = DNSListStore.hostsText(for: model.settings.dnsRules)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ssh2vpn-dns-filter-\(Int(Date().timeIntervalSince1970)).hosts")
+        do {
+            try text.data(using: .utf8)?.write(to: url)
+            showExportSuccess = true
+            guard let window = NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first,
+                  let contentView = window.contentView else { return }
+            let picker = NSSharingServicePicker(items: [url])
+            picker.show(relativeTo: contentView.bounds, of: contentView, preferredEdge: .minY)
+        } catch {
+            importMessage = model.copy.text(.dnsExportFailed)
+        }
+    }
+
+    // MARK: Rule row (Custom tab, unchanged visuals)
+
+    private func dnsRuleRow(_ rule: DNSBlocklistEntry) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(rule.domain)
+                        .font(.openSans(14, weight: .medium))
+                        .foregroundStyle(Color.octGray100)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(rule.kind == .block ? model.copy.text(.dnsRuleBlocked) : model.copy.text(.dnsRuleOverride))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(rule.kind == .block
+                                         ? Color(red: 1.0, green: 0.25, blue: 0.35)
+                                         : Color(red: 0.13, green: 0.44, blue: 0.85))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background((rule.kind == .block
+                                      ? Color(red: 1.0, green: 0.25, blue: 0.35)
+                                      : Color(red: 0.13, green: 0.44, blue: 0.85)).opacity(0.12), in: Capsule())
+                }
+                Text(rule.kind == .block ? "0.0.0.0" : rule.ip)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.octGray40)
+                // Scope under the address: exact domain or subdomains too.
+                Text(rule.includeSubdomains
+                     ? model.copy.text(.dnsRuleScopeSubtree)
+                     : model.copy.text(.dnsRuleScopeExact))
+                    .font(.openSans(10))
+                    .foregroundStyle(Color.octGray40.opacity(0.8))
+            }
+            Spacer()
+            Button {
+                editingRule = rule
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.sec50)
+                    .frame(width: 30, height: 30)
+                    .background(Color.sec50.opacity(0.10), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.copy.text(.dnsEditRule))
+            Button {
+                model.removeDNSRule(id: rule.id)
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.red.opacity(0.7))
+                    .frame(width: 30, height: 30)
+                    .background(Color.red.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.copy.text(.dnsRuleDelete))
+        }
+        .padding(14)
+    }
+
+    // MARK: Category chips
+
+    private func categoryLabel(_ category: DNSListSource.Category) -> String {
+        switch category {
+        case .general: return model.copy.text(.dnsListCategoryGeneral)
+        case .ads: return model.copy.text(.dnsListCategoryAds)
+        case .privacy: return model.copy.text(.dnsListCategoryPrivacy)
+        case .malware: return model.copy.text(.dnsListCategoryMalware)
+        case .regional: return model.copy.text(.dnsListCategoryRegional)
+        }
+    }
+
+    private func categoryColor(_ category: DNSListSource.Category) -> Color {
+        switch category {
+        case .general: return Color.octGray40
+        case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
+        case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .malware: return Color(red: 1.0, green: 0.25, blue: 0.35)
+        case .regional: return Color(red: 0.1, green: 0.55, blue: 0.55)
+        }
+    }
+}
+
+/// Merge/Replace choice sheet shown after a hosts-file import.
+struct DNSImportPreviewView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let entries: [DNSBlocklistEntry]
+    /// True = replace all existing rules, false = merge. Cancel applies nothing.
+    let apply: (_ replace: Bool) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsImportParsedTitle))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(Color.octGray100)
+                    Text(String(format: model.copy.text(.dnsImportSaved), entries.count))
+                        .font(.openSans(13))
+                        .foregroundStyle(Color.octGray60)
+                    // First few domains as a preview, monospaced.
+                    Text(entries.prefix(5).map { entryLine($0) }.joined(separator: "\n")
+                         + (entries.count > 5 ? "\n…" : ""))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.octGray40)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Spacer()
+
+                Button {
+                    apply(false)
+                    dismiss()
+                } label: {
+                    Text(model.copy.text(.dnsImportMerge))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.sec50, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    apply(true)
+                    dismiss()
+                } label: {
+                    Text(model.copy.text(.dnsImportReplace))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(Color(red: 1.0, green: 0.25, blue: 0.35))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color(red: 1.0, green: 0.25, blue: 0.35).opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+            .adaptiveCenterColumn()
+            .background(Color.appBg)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(model.copy.text(.cancel)) { dismiss() }
+                        .foregroundStyle(Color.sec50)
+                }
+            }
+        }
+    }
+
+    private func entryLine(_ e: DNSBlocklistEntry) -> String {
+        switch e.kind {
+        case .block: return "0.0.0.0 \(e.domain)"
+        case .override: return "\(e.ip) \(e.domain)"
+        }
+    }
+}
+
+// MARK: - Info tooltip components (reused across settings screens)
+
+/// Compact round "?" (per-row): same persistent tooltip mechanics, smaller
+/// footprint so it fits inside a preset row without fighting the tap target.
+struct InfoDotButtonCompact: View {
+    let isVisible: Bool
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "questionmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .frame(width: 18, height: 18)
+                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("info")
+    }
+}
+
+/// Wrapping row of small colored chips (capability labels). Keeps preset
+/// rows compact for any chip count and any language width.
+/// Uses the native Layout protocol (iOS 16+) — no captured-var mutation in
+/// alignmentGuide closures (Swift 6 concurrency-clean).
+struct FlowChips: View {
+    let chips: [(String, Color)]
+
+    var body: some View {
+        FlowLayout(spacing: 4) {
+            ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                chipView(chip.0, chip.1)
+            }
+        }
+    }
+
+    private func chipView(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+    }
+}
+
+/// Simple left-to-right wrap layout (chat-bubble style).
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.reduce(0) { $0 + $1.height + spacing } - spacing
+        return CGSize(width: max(width, 0), height: max(height, 0))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for (offset, index) in row.indices.enumerated() {
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(row.sizes[offset])
+                )
+                x += row.sizes[offset].width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    /// Groups subviews into rows that fit the proposed width.
+    private func computeRows(proposal: ProposedViewSize, subviews: Subviews) -> [Row] {
+        let maxWidth = proposal.width ?? subviews.reduce(CGFloat(0)) { $0 + $1.sizeThatFits(.unspecified).width + spacing }
+        var rows: [Row] = []
+        var current = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let next: CGFloat = current.width + (current.indices.isEmpty ? 0 : spacing) + size.width
+            if next > maxWidth, !current.indices.isEmpty {
+                rows.append(current)
+                current = Row()
+            }
+            current.indices.append(index)
+            current.sizes.append(size)
+            current.width += (current.indices.count > 1 ? spacing : 0) + size.width
+            current.height = max(current.height, size.height)
+        }
+        if !current.indices.isEmpty { rows.append(current) }
+        return rows
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var sizes: [CGSize] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+}
+
+/// Round "?" button toggling a tooltip bubble. The bubble below is part of the
+/// layout (persistent — it doesn't vanish when you scroll or tap elsewhere on
+/// the same control group).
+struct InfoDotButton: View {
+    @Binding var isVisible: Bool
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                isVisible.toggle()
+            }
+        } label: {
+            Image(systemName: "questionmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .frame(width: 20, height: 20)
+                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("info")
+    }
+}
+
+/// Rounded tooltip card with a title + body.
+struct InfoBubble: View {
+    let title: String
+    let message: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.openSans(12, weight: .semibold))
+                .foregroundStyle(Color.prim50)
+            Text(message)
+                .font(.openSans(12))
+                .foregroundStyle(Color.octGray60)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.prim50.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.prim50.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Add DNS rule sheet (block / override)
+
+struct AddDNSRuleView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// Nil = creating a new rule; non-nil = editing that rule in place.
+    let editing: DNSBlocklistEntry?
+    @State private var domain = ""
+    @State private var ip = ""
+    @State private var mode: DNSBlocklistEntry.Kind = .block
+    /// Subtree (domain + all subdomains) or exact domain only — explicit, so
+    /// the user never has to guess how wide the rule bites.
+    @State private var includeSubdomains = true
+    @State private var errorText: String?
+
+    init(editing: DNSBlocklistEntry? = nil) {
+        self.editing = editing
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsAddRuleDomain))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    TextField(model.copy.text(.dnsAddRuleDomainPlaceholder), text: $domain)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                        .padding(12)
+                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsAddRuleMode))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    Picker("", selection: $mode) {
+                        Text(model.copy.text(.dnsAddRuleModeBlock)).tag(DNSBlocklistEntry.Kind.block)
+                        Text(model.copy.text(.dnsAddRuleModeOverride)).tag(DNSBlocklistEntry.Kind.override)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                // Scope: exact domain vs domain + every subdomain. No
+                // guessing — the toggle states precisely what matches.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.copy.text(.dnsRuleScope))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                    Picker("", selection: $includeSubdomains) {
+                        Text(model.copy.text(.dnsRuleScopeExact)).tag(false)
+                        Text(model.copy.text(.dnsRuleScopeSubtree)).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if mode == .override {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.copy.text(.dnsAddRuleIP))
+                            .font(.openSans(13, weight: .semibold))
+                            .foregroundStyle(Color.octGray60)
+                        TextField(model.copy.text(.dnsAddRuleIPPlaceholder), text: $ip)
+                            .autocorrectionDisabled()
+                            .font(.system(.body, design: .monospaced))
+                            .padding(12)
+                            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+
+                if let errorText {
+                    Text(errorText)
+                        .font(.openSans(12))
+                        .foregroundStyle(Color.red)
+                }
+
+                Spacer()
+
+                Button {
+                    if let failure = model.addDNSRule(domain: domain, kind: mode, ip: ip,
+                                                      includeSubdomains: includeSubdomains,
+                                                      replacing: editing) {
+                        errorText = failure
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Text(editing == nil ? model.copy.text(.dnsAddRuleAdd) : model.copy.text(.dnsSaveRule))
+                        .font(.openSans(15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.sec50, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(domain.isEmpty || (mode == .override && ip.isEmpty))
+            }
+            .padding(16)
+            .adaptiveCenterColumn()
+            .background(Color.appBg)
+            .navigationTitle(editing == nil ? model.copy.text(.dnsAddRule) : model.copy.text(.dnsEditRuleTitle))
+            .onAppear {
+                if let editing {
+                    domain = editing.domain
+                    mode = editing.kind
+                    ip = editing.kind == .override ? editing.ip : ""
+                    includeSubdomains = editing.includeSubdomains
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(model.copy.text(.dnsAddRuleCancel)) { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Advanced View
+
+struct AdvancedView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.connectionSection))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.copy.text(.killSwitch))
+                                .font(.openSans(15, weight: .medium))
+                                .foregroundStyle(Color.octGray100)
+                            Text(model.copy.text(.killSwitchDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $model.settings.killSwitch)
+                            .tint(Color.prim50)
+                    }
+                    .padding(14)
+
+                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.copy.text(.connectOnDemand))
+                                .font(.openSans(15, weight: .medium))
+                                .foregroundStyle(Color.octGray100)
+                            Text(model.copy.text(.connectOnDemandDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $model.settings.connectOnDemand)
+                            .tint(Color.prim50)
+                    }
+                    .padding(14)
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.copy.text(.debugSection))
+                        .font(.openSans(13, weight: .semibold))
+                        .foregroundStyle(Color.octGray60)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.copy.text(.enableLogging))
+                                .font(.openSans(15, weight: .medium))
+                                .foregroundStyle(Color.octGray100)
+                            Text(model.copy.text(.enableLoggingDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.octGray60)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $model.settings.enableLogging)
+                            .tint(Color.prim50)
+                    }
+                    .padding(14)
+                }
+                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(16)
+        }
+        .adaptiveCenterColumn()
+        .background(Color.appBg)
+        .navigationTitle(model.copy.text(.advanced))
+    }
+}

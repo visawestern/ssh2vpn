@@ -1,0 +1,647 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 71;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000010000000000000001 /* SSH2VPNMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001 /* SSH2VPNMacApp.swift */; };
+		A10000010000000000000002 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000002 /* Localization.swift */; };
+		A10000010000000000000003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000003 /* RootView.swift */; };
+		A10000010000000000000004 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000004 /* PacketTunnelProvider.swift */; };
+		A10000010000000000000006 /* Copy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000011 /* Copy.swift */; };
+		A10000010000000000000017 /* PacketTunnelPacketLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000018 /* PacketTunnelPacketLoop.swift */; };
+		A10000010000000000000018 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
+		A10000010000000000000019 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000019 /* KeychainStore.swift */; };
+		A10000010000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021 /* Assets.xcassets */; };
+		A10000010000000000000030 /* opensans_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000030 /* opensans_regular.ttf */; };
+		A10000010000000000000031 /* opensans_bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000031 /* opensans_bold.ttf */; };
+		A10000010000000000000032 /* opensans_semibold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000032 /* opensans_semibold.ttf */; };
+		A10000010000000000000033 /* opensans_medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000033 /* opensans_medium.ttf */; };
+		A10000010000000000000034 /* opensans_light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000034 /* opensans_light.ttf */; };
+		A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000040 /* ServerMetadataResolver.swift */; };
+		A10000010000000000000041 /* DiagnosticsConsoleSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000041 /* DiagnosticsConsoleSidebarView.swift */; };
+		A10000010000000000000042 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000042 /* StoreManager.swift */; };
+		A10000010000000000000043 /* DocsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000043 /* DocsView.swift */; };
+		A10000010000000000000044 /* Docs/index.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000044 /* Docs/index.html */; };
+		A10000010000000000000045 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000045 /* PaywallView.swift */; };
+		A10000010000000000000046 /* AddServerChooserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000046 /* AddServerChooserView.swift */; };
+		A10000010000000000000047 /* ImportCredentialsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000047 /* ImportCredentialsView.swift */; };
+		A10000010000000000000048 /* Docs/terms.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000048 /* Docs/terms.html */; };
+		A10000010000000000000049 /* Docs/privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000049 /* Docs/privacy.html */; };
+		A10000010000000000000052 /* Docs/logo.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000052 /* Docs/logo.png */; };
+		A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
+		A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
+		A10000010000000000000055 /* Docs/shot-connected.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000055 /* Docs/shot-connected.png */; };
+		A10000010000000000000060 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000060 /* InfoPlist.strings */; };
+		A1000001000000000000009A /* CopyDNS.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000009B /* CopyDNS.swift */; };
+		C30000010000000000000001 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
+		C30000010000000000000003 /* VPNCore in Frameworks */ = {isa = PBXBuildFile; productRef = C10000010000000000000004 /* VPNCore */; };
+		A100000100000000000000A0 /* AdsStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000100000000000000A0 /* AdsStub.swift */; };
+		A100000100000000000000A1 /* SystemExtensionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000100000000000000A1 /* SystemExtensionGate.swift */; };
+		B10000010000000000000001 /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B30000010000000000000001 /* SystemExtensions.framework */; };
+		A100000100000000000000B0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A200000100000000000000B0 /* Assets.xcassets */; };
+		A100000100000000000000A2 /* SystemExtensionMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000100000000000000A2 /* SystemExtensionMain.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A30000010000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A40000010000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000010000000000000002;
+			remoteInfo = PacketTunnelMac;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B60000010000000000000001 /* Embed System Extensions */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed System Extensions";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC=\"${TARGET_BUILD_DIR}/PacketTunnelMac.systemextension\"\nDST=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/Library/SystemExtensions\"\nmkdir -p \"$DST\"\nrm -rf \"$DST/PacketTunnelMac.systemextension\"\ncp -R \"$SRC\" \"$DST/\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A20000010000000000000001 /* SSH2VPNMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSH2VPNMacApp.swift; sourceTree = "<group>"; };
+		A20000010000000000000002 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		A20000010000000000000003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		A20000010000000000000004 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		A20000010000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000010000000000000006 /* PacketTunnel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "PacketTunnel-Info.plist"; sourceTree = "<group>"; };
+		A20000010000000000000007 /* SSH2VPNMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SSH2VPNMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000010000000000000008 /* PacketTunnelMac.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = PacketTunnelMac.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000010000000000000009 /* SSH2VPNMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SSH2VPNMac.entitlements; sourceTree = "<group>"; };
+		A20000010000000000000010 /* PacketTunnelMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PacketTunnelMac.entitlements; sourceTree = "<group>"; };
+		A20000010000000000000011 /* Copy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Copy.swift; sourceTree = "<group>"; };
+		A20000010000000000000012 /* ../Sources/VPNCore/TransportFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/TransportFrame.swift; sourceTree = "<group>"; };
+		A20000010000000000000013 /* ../Sources/VPNCore/ConnectionStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/ConnectionStateMachine.swift; sourceTree = "<group>"; };
+		A20000010000000000000015 /* ../Sources/VPNCore/IPPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/IPPacket.swift; sourceTree = "<group>"; };
+		A20000010000000000000016 /* ../Sources/VPNCore/SSHTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHTransport.swift; sourceTree = "<group>"; };
+		A20000010000000000000017 /* ../Sources/VPNCore/SSHFrameCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../Sources/VPNCore/SSHFrameCodec.swift; sourceTree = "<group>"; };
+		A20000010000000000000018 /* PacketTunnelPacketLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelPacketLoop.swift; sourceTree = "<group>"; };
+		A20000010000000000000019 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		A20000010000000000000021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000010000000000000030 /* opensans_regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_regular.ttf; sourceTree = "<group>"; };
+		A20000010000000000000031 /* opensans_bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_bold.ttf; sourceTree = "<group>"; };
+		A20000010000000000000032 /* opensans_semibold.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_semibold.ttf; sourceTree = "<group>"; };
+		A20000010000000000000033 /* opensans_medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_medium.ttf; sourceTree = "<group>"; };
+		A20000010000000000000034 /* opensans_light.ttf */ = {isa = PBXFileReference; lastKnownFileType = font; path = opensans_light.ttf; sourceTree = "<group>"; };
+		A20000010000000000000040 /* ServerMetadataResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerMetadataResolver.swift; sourceTree = "<group>"; };
+		A20000010000000000000041 /* DiagnosticsConsoleSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsConsoleSidebarView.swift; sourceTree = "<group>"; };
+		A20000010000000000000042 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
+		A20000010000000000000043 /* DocsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000044 /* Docs/index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Docs/index.html; sourceTree = "<group>"; };
+		A20000010000000000000045 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		A20000010000000000000046 /* AddServerChooserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddServerChooserView.swift; sourceTree = "<group>"; };
+		A20000010000000000000047 /* ImportCredentialsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportCredentialsView.swift; sourceTree = "<group>"; };
+		A20000010000000000000048 /* Docs/terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Docs/terms.html; sourceTree = "<group>"; };
+		A20000010000000000000049 /* Docs/privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Docs/privacy.html; sourceTree = "<group>"; };
+		A20000010000000000000050 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
+		A20000010000000000000052 /* Docs/logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Docs/logo.png; sourceTree = "<group>"; };
+		A20000010000000000000053 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A20000010000000000000055 /* Docs/shot-connected.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Docs/shot-connected.png"; sourceTree = "<group>"; };
+		A20000010000000000000061 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000062 /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000063 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000064 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000065 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000066 /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000067 /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "pt-BR.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		A20000010000000000000068 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000069 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		A2000001000000000000006A /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000006B /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000006C /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000006D /* th */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = th; path = th.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000006E /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = tr; path = tr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000006F /* pl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pl; path = pl.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000070 /* nl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nl; path = nl.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A20000010000000000000071 /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = vi; path = vi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A2000001000000000000009B /* CopyDNS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyDNS.swift; sourceTree = "<group>"; };
+		C40000010000000000000001 /* ../Gateway/gateway.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ../Gateway/gateway.py; sourceTree = "<group>"; };
+		A200000100000000000000A0 /* AdsStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdsStub.swift; sourceTree = "<group>"; };
+		A200000100000000000000A1 /* SystemExtensionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemExtensionGate.swift; sourceTree = "<group>"; };
+		B30000010000000000000001 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
+		A200000100000000000000B0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A200000100000000000000A2 /* SystemExtensionMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemExtensionMain.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A60000010000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C30000010000000000000003 /* VPNCore in Frameworks */,
+				B10000010000000000000001 /* SystemExtensions.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A60000010000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C30000010000000000000001 /* VPNCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A70000010000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A70000010000000000000002 /* Shared */,
+				A70000010000000000000008 /* Mac */,
+				A70000010000000000000003 /* App */,
+				A70000010000000000000004 /* Products */,
+				A70000010000000000000005 /* Sources */,
+				A70000010000000000000006 /* Tests */,
+				A70000010000000000000007 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		A70000010000000000000002 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000002 /* Localization.swift */,
+				A20000010000000000000040 /* ServerMetadataResolver.swift */,
+				A20000010000000000000042 /* StoreManager.swift */,
+				A20000010000000000000045 /* PaywallView.swift */,
+				A20000010000000000000044 /* Docs/index.html */,
+				A20000010000000000000053 /* PrivacyInfo.xcprivacy */,
+				A20000010000000000000052 /* Docs/logo.png */,
+				A20000010000000000000055 /* Docs/shot-connected.png */,
+				A20000010000000000000060 /* InfoPlist.strings */,
+				A20000010000000000000049 /* Docs/privacy.html */,
+				A20000010000000000000048 /* Docs/terms.html */,
+				A20000010000000000000050 /* StoreKitConfig.storekit */,
+				A20000010000000000000011 /* Copy.swift */,
+				A2000001000000000000009B /* CopyDNS.swift */,
+				A20000010000000000000019 /* KeychainStore.swift */,
+				A20000010000000000000021 /* Assets.xcassets */,
+				A20000010000000000000030 /* opensans_regular.ttf */,
+				A20000010000000000000034 /* opensans_light.ttf */,
+				A20000010000000000000031 /* opensans_bold.ttf */,
+				A20000010000000000000032 /* opensans_semibold.ttf */,
+				A20000010000000000000033 /* opensans_medium.ttf */,
+			);
+			path = ../Iphone/App;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000003 /* SharedTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000004 /* PacketTunnelProvider.swift */,
+				A20000010000000000000018 /* PacketTunnelPacketLoop.swift */,
+				A20000010000000000000012 /* ../Sources/VPNCore/TransportFrame.swift */,
+				A20000010000000000000013 /* ../Sources/VPNCore/ConnectionStateMachine.swift */,
+				A20000010000000000000015 /* ../Sources/VPNCore/IPPacket.swift */,
+				A20000010000000000000016 /* ../Sources/VPNCore/SSHTransport.swift */,
+				A20000010000000000000017 /* ../Sources/VPNCore/SSHFrameCodec.swift */,
+				C40000010000000000000001 /* ../Gateway/gateway.py */,
+			);
+			path = ../Iphone/App;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000007 /* SSH2VPNMac.app */,
+				A20000010000000000000008 /* PacketTunnelMac.systemextension */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000005 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000006 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000007 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A70000010000000000000008 /* Mac */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000001 /* SSH2VPNMacApp.swift */,
+				A200000100000000000000A0 /* AdsStub.swift */,
+				A200000100000000000000A1 /* SystemExtensionGate.swift */,
+				A200000100000000000000A2 /* SystemExtensionMain.swift */,
+				A20000010000000000000003 /* RootView.swift */,
+				A20000010000000000000041 /* DiagnosticsConsoleSidebarView.swift */,
+				A20000010000000000000043 /* DocsView.swift */,
+				A20000010000000000000046 /* AddServerChooserView.swift */,
+				A20000010000000000000047 /* ImportCredentialsView.swift */,
+				A20000010000000000000005 /* Info.plist */,
+				A20000010000000000000006 /* PacketTunnel-Info.plist */,
+				A20000010000000000000009 /* SSH2VPNMac.entitlements */,
+				A20000010000000000000010 /* PacketTunnelMac.entitlements */,
+				A200000100000000000000B0 /* Assets.xcassets */,
+			);
+			path = Mac;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000010000000000000001 /* SSH2VPNMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000010000000000000001 /* Build configuration list for PBXNativeTarget "SSH2VPNMac" */;
+			buildPhases = (
+				A60000010000000000000008 /* Refresh offline GeoIP DB */,
+				A60000010000000000000006 /* Sources */,
+				A60000010000000000000002 /* Frameworks */,
+				A60000010000000000000007 /* Resources */,
+				B60000010000000000000001 /* Embed System Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A90000010000000000000001 /* PBXTargetDependency */,
+			);
+			name = SSH2VPNMac;
+			packageProductDependencies = (
+				C10000010000000000000004 /* VPNCore */,
+			);
+			productName = SSH2VPNMac;
+			productReference = A20000010000000000000007 /* SSH2VPNMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A50000010000000000000002 /* PacketTunnelMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000010000000000000002 /* Build configuration list for PBXNativeTarget "PacketTunnelMac" */;
+			buildPhases = (
+				A60000010000000000000005 /* Sources */,
+				A60000010000000000000003 /* Frameworks */,
+				A60000010000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PacketTunnelMac;
+			packageProductDependencies = (
+				C10000010000000000000004 /* VPNCore */,
+			);
+			productName = PacketTunnelMac;
+			productReference = A20000010000000000000008 /* PacketTunnelMac.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A40000010000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					A50000010000000000000001 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					A50000010000000000000002 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+				};
+			};
+			buildConfigurationList = A80000010000000000000003 /* Build configuration list for PBXProject "SSH2VPNMac" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				ru,
+				es,
+				de,
+				fr,
+				it,
+				"pt-BR",
+				ja,
+				"zh-Hans",
+				ko,
+				ar,
+				hi,
+				th,
+				tr,
+				pl,
+				nl,
+				vi,
+			);
+			mainGroup = A70000010000000000000001;
+			packageReferences = (
+				C20000010000000000000003 /* XCLocalSwiftPackageReference "../Iphone" */,
+					);
+			productRefGroup = A70000010000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000010000000000000001 /* SSH2VPNMac */,
+				A50000010000000000000002 /* PacketTunnelMac */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A60000010000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A60000010000000000000007 /* Resources */ = {
+				A100000100000000000000B0 /* Assets.xcassets in Resources */,
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000020 /* Assets.xcassets in Resources */,
+				A10000010000000000000030 /* opensans_regular.ttf in Resources */,
+				A10000010000000000000031 /* opensans_bold.ttf in Resources */,
+				A10000010000000000000032 /* opensans_semibold.ttf in Resources */,
+				A10000010000000000000033 /* opensans_medium.ttf in Resources */,
+				A10000010000000000000034 /* opensans_light.ttf in Resources */,
+				A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */,
+				A10000010000000000000044 /* Docs/index.html in Resources */,
+				A10000010000000000000052 /* Docs/logo.png in Resources */,
+				A10000010000000000000055 /* Docs/shot-connected.png in Resources */,
+				A10000010000000000000060 /* InfoPlist.strings in Resources */,
+				A10000010000000000000049 /* Docs/privacy.html in Resources */,
+				A10000010000000000000048 /* Docs/terms.html in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A60000010000000000000008 /* Refresh offline GeoIP DB */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Refresh offline GeoIP DB";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Offline GeoIP DB refresh (monthly, best-effort).\n# Regenerates Sources/VPNCore/Resources/geoip.dat only when older than 30 days\n# (or missing); a fresh table is a fast no-op. Takes effect on the NEXT build:\n# the SPM resource bundle is compiled before app-target phases run.\n# Never fails the build — the committed geoip.dat is always a valid fallback.\nif command -v python3 >/dev/null 2>&1; then\n  python3 \"$PROJECT_DIR/../scripts/build_geoip.py\" || echo \"warning: GeoIP DB refresh skipped (no network?) — using bundled geoip.dat\";\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A60000010000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000004 /* PacketTunnelProvider.swift in Sources */,
+				A10000010000000000000017 /* PacketTunnelPacketLoop.swift in Sources */,
+				A100000100000000000000A2 /* SystemExtensionMain.swift in Sources */,
+				A10000010000000000000019 /* KeychainStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A60000010000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000001 /* SSH2VPNMacApp.swift in Sources */,
+				A10000010000000000000002 /* Localization.swift in Sources */,
+				A10000010000000000000003 /* RootView.swift in Sources */,
+				A10000010000000000000006 /* Copy.swift in Sources */,
+				A1000001000000000000009A /* CopyDNS.swift in Sources */,
+				A10000010000000000000018 /* KeychainStore.swift in Sources */,
+				A10000010000000000000040 /* ServerMetadataResolver.swift in Sources */,
+				A10000010000000000000041 /* DiagnosticsConsoleSidebarView.swift in Sources */,
+				A10000010000000000000042 /* StoreManager.swift in Sources */,
+				A10000010000000000000043 /* DocsView.swift in Sources */,
+				A10000010000000000000045 /* PaywallView.swift in Sources */,
+				A10000010000000000000046 /* AddServerChooserView.swift in Sources */,
+				A10000010000000000000047 /* ImportCredentialsView.swift in Sources */,
+				A100000100000000000000A0 /* AdsStub.swift in Sources */,
+				A100000100000000000000A1 /* SystemExtensionGate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A90000010000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000010000000000000002 /* PacketTunnelMac */;
+			targetProxy = A30000010000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		A20000010000000000000060 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A20000010000000000000061 /* en */,
+				A20000010000000000000062 /* ru */,
+				A20000010000000000000063 /* es */,
+				A20000010000000000000064 /* de */,
+				A20000010000000000000065 /* fr */,
+				A20000010000000000000066 /* it */,
+				A20000010000000000000067 /* pt-BR */,
+				A20000010000000000000068 /* ja */,
+				A20000010000000000000069 /* zh-Hans */,
+				A2000001000000000000006A /* ko */,
+				A2000001000000000000006B /* ar */,
+				A2000001000000000000006C /* hi */,
+				A2000001000000000000006D /* th */,
+				A2000001000000000000006E /* tr */,
+				A2000001000000000000006F /* pl */,
+				A20000010000000000000070 /* nl */,
+				A20000010000000000000071 /* vi */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		B00000010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mac/SSH2VPNMac.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 326TF9BQ3C;
+				INFOPLIST_FILE = Mac/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000010000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mac/SSH2VPNMac.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 326TF9BQ3C;
+				INFOPLIST_FILE = Mac/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ssh2vpn.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B00000010000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mac/PacketTunnelMac.entitlements;
+				ENABLE_APP_SANDBOX = YES;
+				MACH_O_TYPE = mh_execute;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 326TF9BQ3C;
+				INFOPLIST_FILE = "Mac/PacketTunnel-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ssh2vpn.mac.packet-tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000010000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mac/PacketTunnelMac.entitlements;
+				ENABLE_APP_SANDBOX = YES;
+				MACH_O_TYPE = mh_execute;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 326TF9BQ3C;
+				INFOPLIST_FILE = "Mac/PacketTunnel-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.ssh2vpn.mac.packet-tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B00000010000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000010000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000010000000000000001 /* Build configuration list for PBXNativeTarget "SSH2VPNMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000010000000000000001 /* Debug */,
+				B00000010000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000010000000000000002 /* Build configuration list for PBXNativeTarget "PacketTunnelMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000010000000000000003 /* Debug */,
+				B00000010000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000010000000000000003 /* Build configuration list for PBXProject "SSH2VPNMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000010000000000000005 /* Debug */,
+				B00000010000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C20000010000000000000003 /* XCLocalSwiftPackageReference "../Iphone" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Iphone;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C10000010000000000000004 /* VPNCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C20000010000000000000003 /* XCLocalSwiftPackageReference "../Iphone" */;
+			productName = VPNCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A40000010000000000000001 /* Project object */;
+}
