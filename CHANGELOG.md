@@ -2,6 +2,12 @@
 
 ## dev (unreleased)
 
+- **Logging on by default (Guideline 5.6).** Diagnostics logging ships
+  enabled, so the log panel is discoverable from the first launch in
+  every state — no feature that only appears after flipping a switch.
+  Users can turn it off in Settings → Diagnostics anytime (bounded
+  in-memory ring, nothing leaves the device).
+
 - **Stateless paywall (Guideline 5.6).** Removed the one-time intro
   stages: every paywall opening now shows the SAME content — the
   discounted offer AND the regular price side by side. No stage flags,

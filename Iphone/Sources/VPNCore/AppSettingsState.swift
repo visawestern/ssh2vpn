@@ -24,7 +24,12 @@ public struct AppSettingsState: Equatable {
         secondaryDNS: String = "8.8.8.8",
         killSwitch: Bool = true,
         connectOnDemand: Bool = false,
-        enableLogging: Bool = false,
+        // Diagnostics logging is ON by default: the log panel is an ordinary
+        // user-facing support feature (bounded in-memory ring, no network),
+        // and it must be discoverable from the first launch — never a mode
+        // that only appears after flipping a hidden switch (Guideline 5.6).
+        // Users can turn it off in Settings → Diagnostics at any time.
+        enableLogging: Bool = true,
         dnsRules: [DNSBlocklistEntry] = [],
         presetDNS: [String] = []
     ) {
@@ -109,7 +114,7 @@ public struct AppSettingsCodec {
             secondaryDNS: dict["secondaryDNS"] as? String ?? "8.8.8.8",
             killSwitch: dict["killSwitch"] as? Bool ?? true,
             connectOnDemand: dict["connectOnDemand"] as? Bool ?? false,
-            enableLogging: dict["enableLogging"] as? Bool ?? false,
+            enableLogging: dict["enableLogging"] as? Bool ?? true,
             dnsRules: (dict["dnsRules"] as? [[String: Any]] ?? []).compactMap { row in
                 guard let domain = row["domain"] as? String,
                       let kindRaw = row["kind"] as? String,

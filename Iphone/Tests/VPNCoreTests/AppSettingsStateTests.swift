@@ -13,7 +13,9 @@ final class AppSettingsStateTests: XCTestCase {
         XCTAssertEqual(s.secondaryDNS, "8.8.8.8")
         XCTAssertEqual(s.killSwitch, true)
         XCTAssertEqual(s.connectOnDemand, false)
-        XCTAssertEqual(s.enableLogging, false)
+        // Logging ships ON so the Diagnostics panel is discoverable from
+        // the first launch (Guideline 5.6: no modes hidden behind switches).
+        XCTAssertEqual(s.enableLogging, true)
     }
 
     // MARK: - resolvedDNSServers
