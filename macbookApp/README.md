@@ -14,7 +14,7 @@ curated-подписки, kill-switch (on-demand), диагностика, бе�
 ```
 macbookApp/
   SSH2VPNMac.xcodeproj/      app SSH2VPNMac + system extension PacketTunnelMac
-                             (генерируется: ./scripts/gen-project.py)
+                             (ведётся вручную — никакого генератора)
   Mac/
     SSH2VPNMacApp.swift      AppModel + VPNController + VPNExtensionAPI +
                              TunnelSelfTester — порт Iphone/App/SSH2VPNApp.swift
@@ -28,7 +28,6 @@ macbookApp/
     SystemExtensionMain.swift entry point (.systemextension — executable)
     Info.plist / PacketTunnel-Info.plist / *.entitlements
   scripts/
-    gen-project.py           генератор .pbxproj из iOS-проекта (1-в-1 фазы)
     build-unsigned.sh        проверка компиляции без подписи
     build-universal.sh       universal Release (x86_64 + arm64)
 ```
@@ -82,14 +81,10 @@ fat `x86_64 arm64`, `.systemextension` лежит в
 Keychain: `com.sshtunnel.shared`-группа та же, что на iOS (тот же Team ID),
 поэтому квота/креды лежат в привычном месте связки ключей.
 
-## Регенерация проекта
+## Правки проекта
 
-`.pbxproj` собирается из iOS-проекта, чтобы фазы/зависимости не разъезжались:
-
-```sh
-./scripts/gen-project.py
-```
-
-После подтягивания изменений из `Iphone/` (новые общие файлы) — прогнать
-генератор и проверить `build-unsigned.sh`. Новые **iOS-only API** во вью
+`.pbxproj` ведётся вручную в Xcode или текстовым редактором — генератора
+больше нет (удалён: дважды портил проект). После подтягивания изменений
+из `Iphone/` (новые общие файлы) — добавить их в таргеты вручную
+и проверить `build-unsigned.sh`. Новые **iOS-only API** во вью
 потребуют правок в `Mac/`-форках (компилятор покажет).

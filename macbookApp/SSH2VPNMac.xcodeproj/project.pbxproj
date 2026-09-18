@@ -419,7 +419,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "SRC=\"${TARGET_BUILD_DIR}/PacketTunnelMac.systemextension\"\nDST=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/Library/SystemExtensions\"\nmkdir -p \"$DST\"\nrm -rf \"$DST/PacketTunnelMac.systemextension\"\ncp -R \"$SRC\" \"$DST/\"\n";
+			shellScript = "SRC=\"${TARGET_BUILD_DIR}/PacketTunnelMac.systemextension\"\nDST=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/Library/SystemExtensions\"\nEXT=\"com.ssh2vpn.macos.packet-tunnel.systemextension\"\nrm -rf \"$DST\"\nmkdir -p \"$DST\"\ncp -R \"$SRC\" \"$DST/$EXT\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */

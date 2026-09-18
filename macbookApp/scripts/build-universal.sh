@@ -6,10 +6,11 @@ set -eu
 cd "$(dirname "$0")/.."
 xcodebuild -project SSH2VPNMac.xcodeproj -scheme SSH2VPNMac \
   -configuration Release -destination 'platform=macOS' \
-  ONLY_ACTIVE_ARCH=NO ARCHS="arm64 x86_64" build
+  ONLY_ACTIVE_ARCH=NO ARCHS="arm64 x86_64" \
+  -allowProvisioningUpdates build
 PROD=$(ls -d ~/Library/Developer/Xcode/DerivedData/SSH2VPNMac-*/Build/Products/Release/ | head -n 1)
 lipo -info "$PROD/SSH2VPNMac.app/Contents/MacOS/SSH2VPNMac"
-lipo -info "$PROD/SSH2VPNMac.app/Contents/Library/SystemExtensions/PacketTunnelMac.systemextension/Contents/MacOS/PacketTunnelMac"
+lipo -info "$PROD/SSH2VPNMac.app/Contents/Library/SystemExtensions/com.ssh2vpn.macos.packet-tunnel.systemextension/Contents/MacOS/PacketTunnelMac"
 echo "APP: $PROD/SSH2VPNMac.app"
 # System extension активируется ТОЛЬКО из /Applications — ставим туда
 # (иначе "Extension not found in App bundle"). В корень репо кладём ZIP,

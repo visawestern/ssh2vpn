@@ -114,7 +114,14 @@ final class MacSystemExtensionGate {
         }
 
         func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
-            finish(.failed(error.localizedDescription))
+            let ns = error as NSError
+            // Код OSSystemExtensionErrorCode решает спор «где именно отказ»:
+            // 3 = UnsupportedParentBundleLocation, 4 = ExtensionNotFound,
+            // 10 = ForbiddenBySystemPolicy (см. SystemExtensions.h).
+            // Пишем в диагностику и в текст ошибки, чтобы было видно в UI.
+            ConsoleLogStore.shared.log(level: .error, tag: "SYSEXT",
+                message: "activation failed: domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
+            finish(.failed("\(ns.localizedDescription) [oscode=\(ns.code)]"))
         }
     }
 }
