@@ -46,7 +46,7 @@ macbookApp/
   в собранном бандле). Первый коннект просит активацию;ткущее окно
   System Settings → General → Login Items & Extensions открывается
   один раз — дальше всё как на iOS. Bundle id расширения:
-  `com.ssh2vpn.mac.packet-tunnel`.
+  `com.ssh2vpn.macos.packet-tunnel`.
 - **Нет AdMob/UMP/ATT** (SDK не существует на macOS): кнопка rewarded
   скрыта (`canWatchAd=false`), дозаправка квоты — только Unlimited.
   Бесплатный час, StoreKit-покупка/рестор, гейт в расширении — как на iOS.
@@ -69,7 +69,7 @@ fat `x86_64 arm64`, `.systemextension` лежит в
 
 Без подписи туннель не стартует: системе нужны entitlements
 (NetworkExtension, keychain-group, app-group) и provisioned bundle ids
-`com.ssh2vpn.mac` + `com.ssh2vpn.mac.packet-tunnel`.
+`com.ssh2vpn.macos` + `com.ssh2vpn.macos.packet-tunnel`.
 
 1. Открыть `SSH2VPNMac.xcodeproj` в Xcode (команда уже залогинена).
 2. Target SSH2VPNMac и PacketTunnelMac → Signing & Capabilities:

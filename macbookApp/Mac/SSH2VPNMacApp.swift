@@ -11,10 +11,11 @@ import AppKit
 ///
 /// Отличия от Iphone/App/SSH2VPNApp.swift (помечены комментариями `MAC:`):
 /// - нет AdMob/UMP/AppTrackingTransparency (на macOS их нет):
-///   rewarded-ads BUTTON скрыт (canWatchAd=false), бесплатный час +
-///   Unlimited-покупка через StoreKit работают как на iOS;
+///   rewarded-кнопка — STUB: выдаёт +3ч сразу без просмотра (те же
+///   гейты: кулдаун 1ч, крышка 12ч), бесплатный час + Unlimited-покупка
+///   через StoreKit работают как на iOS;
 /// - UIApplication-замены на NSApplication, idle-timer — no-op;
-/// - providerBundleIdentifier расширения: com.ssh2vpn.mac.packet-tunnel.
+/// - providerBundleIdentifier расширения: com.ssh2vpn.macos.packet-tunnel.
 @main
 struct SSH2VPNMacApp: App {
     @StateObject private var model = AppModel()
@@ -92,11 +93,12 @@ final class AppModel: ObservableObject {
     /// connect at 00:00 — leaves no tunnel, so the user's egress country is
     /// still honest). Blocked only while `.connecting`/`.connected`, where
     /// the egress country would be the server's and skew ad targeting.
-    /// MAC: AdMob нет на macOS — рекламный инвентарь всегда недоступен,
-    /// кнопка rewarded скрыта во всех вью (гейтятся на adsAvailable/canWatchAd).
+    /// MAC: AdMob нет на macOS — вместо реальной рекламы STUB: кнопка
+    /// выдаёт +3ч сразу, без просмотра. Доступна только пока туннель
+    /// внизу (как на iOS), чтобы не раздавать время во время сессии.
     /// Бесплатный час и Unlimited-покупка (StoreKit) работают как на iOS.
     var adsAvailable: Bool {
-        false
+        connection == .disconnected || connection == .failed("freeTimeExhausted") || connection == .failed("quotaExhausted")
     }
 
     /// StoreKit purchase + entitlement restore for Unlimited.
@@ -1779,10 +1781,10 @@ final class AppModel: ObservableObject {
 
     /// True when an ad may be creditable (not unlimited, cooldown over,
     /// bank under the 12h cap, tunnel DOWN so geo targeting is honest).
-    /// MAC: всегда false — см. adsAvailable. Quota-дозаправка на macOS
-    /// только через Unlimited-покупку.
+    /// MAC: STUB — та же логика, что на iOS; показ заменён мгновенной
+    /// наградой в watchAd().
     var canWatchAd: Bool {
-        false
+        adsAvailable && !quota.isUnlimited && quota.creditingAdView(now: Date()) != nil && !adPlaying
     }
 
     /// Reward-credit path for a COMPLETED real rewarded ad only: writes
@@ -1808,11 +1810,25 @@ final class AppModel: ObservableObject {
     /// (adsAvailable gate) — through the tunnel the egress country would
     /// be the server's, skewing the ad network's country targeting. No
     /// own geo lookup is performed: the ad SDK does its own targeting.
-    /// MAC: no-op — rewarded ads не существует на macOS (AdMob iOS-only).
-    /// Метод оставлен, чтобы общие вью компилировались без изменений;
-    /// UI его не вызывает, т.к. canWatchAd всегда false.
+    /// MAC STUB: вместо показа rewarded ad — мгновенная награда +3ч
+    /// без просмотра (AdMob iOS-only, настоящего инвентаря на macOS нет).
+    /// Гейты те же, что на iOS: кулдаун 1ч, крышка банка 12ч, не для
+    /// Unlimited. Метод оставлен с тем же именем/сигнатурой, чтобы общие
+    /// вью компилировались без изменений.
     func watchAd() {
-        ConsoleLogStore.shared.log(level: .warning, tag: "ADS", message: "rewarded ads are not available on macOS — go Unlimited for unlimited time")
+        guard canWatchAd else { return }
+        adPlaying = true
+        ConsoleLogStore.shared.log(level: .info, tag: "ADS", message: "rewarded STUB pressed — granting +3h without ad view")
+        Task { @MainActor [weak self] in
+            // Короткая пауза, чтобы спиннер кнопки успел мигнуть.
+            try? await Task.sleep(for: .seconds(0.6))
+            let outcome = await RewardedAdRouter.presentRewarded()
+            guard let self else { return }
+            self.adPlaying = false
+            self.refreshAdvertisingPrivacy()
+            guard outcome == .earned else { return }
+            self.creditAdView()
+        }
     }
 
     /// Shows a short in-button notice (5s) explaining why no reward came.
@@ -1949,7 +1965,7 @@ private enum SettingsStore {
 @MainActor
 private final class VPNController {
     // MAC: отдельный bundle id расширения под macOS.
-    private let providerBundleIdentifier = "com.ssh2vpn.mac.packet-tunnel"
+    private let providerBundleIdentifier = "com.ssh2vpn.macos.packet-tunnel"
     /// Single reused manager for the whole app. Found via loadAllFromPreferences
     /// (or created once) so we never accumulate duplicate VPN profiles —
     /// there is exactly one profile for this app, re-pointed at whatever server

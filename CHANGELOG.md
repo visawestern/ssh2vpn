@@ -2,6 +2,12 @@
 
 ## dev (unreleased)
 
+- **Stateless paywall (Guideline 5.6).** Removed the one-time intro
+  stages: every paywall opening now shows the SAME content — the
+  discounted offer AND the regular price side by side. No stage flags,
+  no UserDefaults-gated content, no copy claiming the offer disappears.
+  Nothing can appear once and hide between openings.
+
 - **Privacy policy precision (all locales, site + in-app).** The "What
   data we collect" section no longer opens with a blanket "we collect
   nothing" — it now names the only two parties data can go to (your own

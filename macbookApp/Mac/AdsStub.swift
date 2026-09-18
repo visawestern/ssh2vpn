@@ -6,8 +6,8 @@ import Foundation
 /// Сохраняет ТОЧНО те же имена типов и API, чтобы общие вью (RootView)
 /// компилировались без изменений:
 /// - `RewardedOutcome` — те же три кейса;
-/// - `RewardedAdRouter.presentRewarded()` — всегда `.noFill` (UI этот путь
-///   не вызывает: `AppModel.canWatchAd` на macOS всегда false);
+/// - `RewardedAdRouter.presentRewarded()` — STUB: реклама временно
+///   отключена, награда выдаётся сразу без просмотра (.earned);
 /// - `AdvertisingPrivacy` — privacy options никогда не требуются.
 enum RewardedOutcome {
     case earned
@@ -18,7 +18,8 @@ enum RewardedOutcome {
 enum RewardedAdRouter {
     @MainActor
     static func presentRewarded() async -> RewardedOutcome {
-        .noFill
+        // STUB: настоящего показа нет — сразу награда (+3ч через creditAdView).
+        .earned
     }
 }
 

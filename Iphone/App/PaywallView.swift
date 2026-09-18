@@ -2,24 +2,28 @@ import SwiftUI
 
 /// Full-screen paywall shown when the user taps the Unlimited buy button.
 ///
-/// Intro-offer flow: the FIRST presentation ever shows the one-time
-/// intro offer (copy says dismissing loses it); every later presentation
-/// shows the regular full price. Dismissing always just closes.
+/// Stateless: EVERY opening shows the same content — the discounted offer
+/// AND the regular price, side by side. No stages, no one-time flags, no
+/// content that appears once and hides later (Guideline 5.6).
+/// Dismissing always just closes.
 ///
 /// Review compliance: NO countdown timer, NO locked close button, NO fake
-/// urgency, NO in-paywall stage switching — the close always closes.
+/// urgency — the close always closes.
 struct PaywallView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showUnavailable = false
     /// Drives the "hot offer" breathing animation on the discount CTA.
     @State private var pulse = false
 
-    private var isDiscount: Bool { model.paywallStage == .discount }
+    /// Discount visuals depend ONLY on live StoreKit products (both loaded
+    /// and the offer actually cheaper) — never on open count or stored
+    /// flags. Same products → same screen, on every opening, for everyone.
+    private var hasDiscount: Bool { !discountPercentage.isEmpty }
 
     /// The price shown in the UI comes from StoreKit (localized). Falls
     /// back to round US dollars only until the products load.
     private var displayPrice: String {
-        isDiscount ? model.discountPriceString : model.fullPriceString
+        hasDiscount ? model.discountPriceString : model.fullPriceString
     }
 
     var body: some View {
@@ -53,14 +57,28 @@ struct PaywallView: View {
                 Spacer(minLength: 24)
                 pricing
                 buyButton
+                // Second choice, always rendered next to the offer: the same
+                // entitlement at the regular price. Both options visible on
+                // every opening — nothing appears once and hides later.
+                if hasDiscount {
+                    Button {
+                        Task { await buy(discount: false) }
+                    } label: {
+                        Text(model.copy.text(.buyUnlimited, price: model.fullPriceString))
+                            .font(.openSans(14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 12)
+                    .disabled(model.store.isPurchasing)
+                }
                 restoreButton
                 if let notice = model.purchaseNotice {
                     Text(notice).foregroundStyle(.white).font(.footnote).multilineTextAlignment(.center)
                 }
-                // No in-paywall stage switching: the stage is decided once
-                // at open (intro first, full price later). A button here
-                // that jumps back to the discount would resurrect the
-                // dismissed offer — the escalation pattern in reverse.
+                // No in-paywall switching and no staging: both prices are
+                // rendered on every opening, so nothing can appear once
+                // and hide later.
             }
             .padding(.horizontal, 24)
             .padding(.top, 16)
@@ -106,7 +124,7 @@ struct PaywallView: View {
 
     private var hero: some View {
         VStack(spacing: 14) {
-            if isDiscount {
+            if hasDiscount {
                 // Pulsing exclusivity badge — the first thing the eye lands on.
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
@@ -145,12 +163,12 @@ struct PaywallView: View {
             }
             .padding(.bottom, 2)
 
-            Text(model.copy.text(isDiscount ? .paywallDiscountTitle : .paywallTitle, price: displayPrice))
+            Text(model.copy.text(hasDiscount ? .paywallDiscountTitle : .paywallTitle, price: displayPrice))
                 .font(.openSans(28, weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
 
-            Text(model.copy.text(isDiscount ? .paywallDiscountSubtitle : .paywallSubtitle))
+            Text(model.copy.text(hasDiscount ? .paywallDiscountSubtitle : .paywallSubtitle))
                 .font(.openSans(14))
                 .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
@@ -186,7 +204,7 @@ struct PaywallView: View {
 
     private var pricing: some View {
         Group {
-            if isDiscount {
+            if hasDiscount {
                 discountPricing
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -255,7 +273,7 @@ struct PaywallView: View {
 
     private var buyButton: some View {
         Button {
-            Task { await buy() }
+            Task { await buy(discount: hasDiscount) }
         } label: {
             HStack(spacing: 8) {
                 if model.store.isPurchasing {
@@ -263,12 +281,12 @@ struct PaywallView: View {
                         .scaleEffect(0.8)
                         .tint(.white)
                 } else {
-                    Image(systemName: isDiscount ? "flame.fill" : "lock.fill")
+                    Image(systemName: hasDiscount ? "flame.fill" : "lock.fill")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 Text(model.store.isPurchasing
                      ? model.copy.text(.purchasing)
-                     : (isDiscount ? model.copy.text(.paywallBuyDiscount, price: displayPrice) : model.copy.text(.buyUnlimited, price: displayPrice)))
+                     : (hasDiscount ? model.copy.text(.paywallBuyDiscount, price: displayPrice) : model.copy.text(.buyUnlimited, price: displayPrice)))
                     .font(.openSans(16, weight: .bold))
             }
             .foregroundStyle(.white)
@@ -276,7 +294,7 @@ struct PaywallView: View {
             .frame(height: 56)
             .background(
                 LinearGradient(
-                    colors: isDiscount
+                    colors: hasDiscount
                         ? [Color(red: 1.0, green: 0.72, blue: 0.16), Color(red: 0.95, green: 0.35, blue: 0.08)]
                         : [Color(red: 0.35, green: 0.90, blue: 0.64), Color(red: 0.14, green: 0.70, blue: 0.46)],
                     startPoint: .leading,
@@ -284,17 +302,17 @@ struct PaywallView: View {
                 ),
                 in: RoundedRectangle(cornerRadius: 16)
             )
-            .shadow(color: (isDiscount ? Color(red: 1.0, green: 0.55, blue: 0.12) : Color.prim50).opacity(pulse ? 0.65 : 0.35),
+            .shadow(color: (hasDiscount ? Color(red: 1.0, green: 0.55, blue: 0.12) : Color.prim50).opacity(pulse ? 0.65 : 0.35),
                     radius: pulse ? 18 : 12, y: 6)
-            .scaleEffect(isDiscount && pulse ? 1.02 : 1.0)
+            .scaleEffect(hasDiscount && pulse ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .disabled(model.store.isPurchasing)
         .padding(.top, 14)
         // "Hot purchase" pulse: the CTA breathes so the eye lands on it
-        // first. Runs only on the discount stage.
+        // first. Runs only while the offer is actually on screen.
         .onAppear {
-            guard isDiscount else { return }
+            guard hasDiscount else { return }
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
                 pulse = true
             }
@@ -315,16 +333,16 @@ struct PaywallView: View {
 
     // MARK: - Actions
 
-    private func buy() async {
-        // The discount stage must buy the dedicated intro-offer product; the
-        // full stage buys the regular one. Guard on the specific product so
-        // a missing ASC-side product surfaces as "unavailable" instead of a
-        // wrong buy.
-        guard isDiscount ? model.store.discountProduct != nil : model.store.product != nil else {
+    private func buy(discount: Bool) async {
+        // The offer buys the dedicated discount product; the regular
+        // choice buys the regular one. Guard on the specific product so
+        // a missing ASC-side product surfaces as "unavailable" instead of
+        // a wrong buy.
+        guard discount ? model.store.discountProduct != nil : model.store.product != nil else {
             showUnavailable = true
             return
         }
-        switch await model.buyUnlimited(discount: isDiscount) {
+        switch await model.buyUnlimited(discount: discount) {
         case .success:
             model.paywallPaid()
         case .failure:

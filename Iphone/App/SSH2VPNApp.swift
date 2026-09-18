@@ -78,38 +78,17 @@ final class AppModel: ObservableObject {
     /// StoreKit purchase + entitlement restore for Unlimited.
     let store = StoreManager()
 
-    // MARK: - Paywall (intro-offer flow)
-    // FIRST presentation ever: the one-time intro offer. Every later
-    // presentation: the regular full price. Dismissing always just closes —
-    // the close button never escalates, never locks, never timers. Not shown
-    // to users who already own Unlimited.
-    enum PaywallStage: Equatable {
-        case full
-        case discount
-    }
-    /// Legacy flag from the old double-offer flow (declined-once). Kept for
-    /// migration read only: anyone who saw either stage before has consumed
-    /// the intro.
-    private static let paywallDiscountDeclinedKey = "ssh2vpn.paywallDiscountDeclined.v1"
-    static var paywallDiscountDeclined: Bool {
-        get { UserDefaults.standard.bool(forKey: paywallDiscountDeclinedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: paywallDiscountDeclinedKey) }
-    }
-    private static let paywallIntroOfferShownKey = "ssh2vpn.paywallIntroOfferShown.v1"
-    static var paywallIntroOfferShown: Bool {
-        get { UserDefaults.standard.bool(forKey: paywallIntroOfferShownKey) }
-        set { UserDefaults.standard.set(newValue, forKey: paywallIntroOfferShownKey) }
-    }
-    /// True once the user has seen any offer stage: intro is one-time.
-    static var paywallIntroConsumed: Bool {
-        paywallIntroOfferShown || paywallDiscountDeclined
-    }
-    @Published var paywallStage = PaywallStage.full
+    // MARK: - Paywall (stateless: both prices on every opening)
+    // Every presentation shows the SAME content: the discounted offer AND
+    // the regular price, side by side. No stages, no one-time flags, no
+    // UserDefaults-gated content — nothing can appear once and then hide
+    // between openings (Guideline 5.6). Dismissing always just closes —
+    // the close button never escalates, never locks, never timers.
+    // Not shown to users who already own Unlimited.
     @Published var isPaywallPresented = false
 
     func showPaywall() {
         guard !isUnlimited else { return }
-        paywallStage = Self.paywallIntroConsumed ? .full : .discount
         isPaywallPresented = true
     }
 
@@ -119,12 +98,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Dismisses the paywall (user closed it). Always just closes — no
-    /// escalation, no timers, no locks. Dismissing the intro stage consumes
-    /// it: next time only the full price is offered.
+    /// escalation, no timers, no locks, no state changes.
     func dismissPaywall() {
-        if paywallStage == .discount {
-            Self.paywallIntroOfferShown = true
-        }
         isPaywallPresented = false
     }
 

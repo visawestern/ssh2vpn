@@ -5,7 +5,7 @@ The Mac project mirrors the iPhone one 1:1 (same phases, same VPNCore via the
 local SPM package, same shared sources by reference) with these deltas:
   - macOS platform (SDK macosx, MACOSX_DEPLOYMENT_TARGET 13.0, no device family)
   - targets SSH2VPNMac (app) + PacketTunnelMac (SYSTEM extension, not appex)
-  - bundle ids com.ssh2vpn.mac[.packet-tunnel]
+  - bundle ids com.ssh2vpn.macos[.packet-tunnel]
   - shared sources resolve via group path ../Iphone/App (Iphone/ untouched)
   - Mac-local files live in Mac/ (SSH2VPNMacApp, view forks, AdsStub, plists)
   - no GoogleMobileAds (iOS-only SDK); SystemExtensions.framework linked
@@ -43,8 +43,8 @@ def main():
             die("template anchor missing: " + anchor)
 
     # --- 1. file renames (longest first to avoid substring collisions)
-    t = t.replace("com.ssh2vpn.app.packet-tunnel", "com.ssh2vpn.mac.packet-tunnel")
-    t = t.replace("com.ssh2vpn.app", "com.ssh2vpn.mac")
+    t = t.replace("com.ssh2vpn.app.packet-tunnel", "com.ssh2vpn.macos.packet-tunnel")
+    t = t.replace("com.ssh2vpn.app", "com.ssh2vpn.macos")
     t = t.replace("SSH2VPNApp.swift", "SSH2VPNMacApp.swift")
     t = t.replace("SSH2VPNPacketTunnel.entitlements", "PacketTunnelMac.entitlements")
     t = t.replace("SSH2VPN.entitlements", "SSH2VPNMac.entitlements")
@@ -94,8 +94,10 @@ def main():
     t = t.replace('SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";', "SUPPORTED_PLATFORMS = macosx;")
     t = "\n".join(l for l in t.split("\n") if "TARGETED_DEVICE_FAMILY" not in l)
     t = t.replace("IPHONEOS_DEPLOYMENT_TARGET = 18.0;", "MACOSX_DEPLOYMENT_TARGET = 13.0;")
-    t = sub_once(t, "\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n", "")
-    t = sub_once(t, "\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n", "")
+    # NOTE: ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon stays: the iOS
+    # template sets it only on the app target (Debug+Release), the tunnel
+    # extension never had it — so the Mac app keeps its icon from
+    # Mac/Assets.xcassets. Do NOT strip it (stripping = blank .app icon).
 
     # --- 5. local package lives one level up from the Mac project
     t = t.replace('XCLocalSwiftPackageReference "."', 'XCLocalSwiftPackageReference "../Iphone"')
@@ -277,11 +279,11 @@ def main():
         "\t\t\t\tA100000100000000000000A0 /* AdsStub.swift in Sources */,\n"
         "\t\t\t\tA100000100000000000000A1 /* SystemExtensionGate.swift in Sources */,\n")
 
-    # Assets.xcassets into app Resources phase
+    # Assets.xcassets into app Resources phase (inside files = (...), not the dict)
     t = sub_once(t,
-        "\t\tA60000010000000000000007 /* Resources */ = {\n",
-        "\t\tA60000010000000000000007 /* Resources */ = {\n"
-        "\t\t\t\tA100000100000000000000B0 /* Assets.xcassets in Resources */,\n")
+        "\t\t\t\tA10000010000000000000020 /* Assets.xcassets in Resources */,\n",
+        "\t\t\t\tA100000100000000000000B0 /* Assets.xcassets in Resources */,\n"
+        "\t\t\t\tA10000010000000000000020 /* Assets.xcassets in Resources */,\n")
 
     # SystemExtensions.framework into app Frameworks phase
     t = sub_once(t,

@@ -14,7 +14,7 @@ import VPNCore
 @MainActor
 final class MacSystemExtensionGate {
     static let shared = MacSystemExtensionGate()
-    static let extensionIdentifier = "com.ssh2vpn.mac.packet-tunnel"
+    static let extensionIdentifier = "com.ssh2vpn.macos.packet-tunnel"
 
     enum Outcome {
         case completed
