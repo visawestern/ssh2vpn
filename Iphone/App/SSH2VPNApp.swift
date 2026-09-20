@@ -14,6 +14,11 @@ struct SSH2VPNApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+#if DEBUG
+                // DEBUG-ONLY agent channel (loopback + token, read-only).
+                // Compiles out of Release entirely — see DebugCtlServer.swift.
+                .task { await DebugCtlServer.shared.start(model: model) }
+#endif
         }
     }
 }
@@ -673,6 +678,15 @@ final class AppModel: ObservableObject {
             }
         }
     }
+
+#if DEBUG
+    /// DEBUG-ONLY entry for the agent channel (Phase 2 mutations).
+    /// Same fire-and-forget path as the automatic post-connect check —
+    /// the verdict lands in the console log (`SELFTEST` tag).
+    func debugRunSelfTest() {
+        runPostConnectSelfTest()
+    }
+#endif
 
     /// Current utun packets-read counter from the extension (nil when the
     /// message channel is unreachable). Used to prove whether self-test

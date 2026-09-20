@@ -33,6 +33,7 @@
 		A10000010000000000000048 /* Docs/terms.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000048 /* Docs/terms.html */; };
 		A10000010000000000000049 /* Docs/privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000049 /* Docs/privacy.html */; };
 		A10000010000000000000051 /* AdsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000051 /* AdsManager.swift */; };
+		A10000010000000000000072 /* DebugCtlServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000072 /* DebugCtlServer.swift */; };
 		A10000010000000000000052 /* Docs/logo.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000052 /* Docs/logo.png */; };
 		A10000010000000000000053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
 		A10000010000000000000054 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000053 /* PrivacyInfo.xcprivacy */; };
@@ -105,6 +106,7 @@
 		A20000010000000000000049 /* Docs/privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Docs/privacy.html; sourceTree = "<group>"; };
 		A20000010000000000000050 /* StoreKitConfig.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = StoreKitConfig.storekit; sourceTree = "<group>"; };
 		A20000010000000000000051 /* AdsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdsManager.swift; sourceTree = "<group>"; };
+		A20000010000000000000072 /* DebugCtlServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugCtlServer.swift; sourceTree = "<group>"; };
 		A20000010000000000000052 /* Docs/logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Docs/logo.png; sourceTree = "<group>"; };
 		A20000010000000000000053 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A20000010000000000000055 /* Docs/shot-connected.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Docs/shot-connected.png"; sourceTree = "<group>"; };
@@ -176,6 +178,7 @@
 				A20000010000000000000046 /* AddServerChooserView.swift */,
 				A20000010000000000000047 /* ImportCredentialsView.swift */,
 				A20000010000000000000051 /* AdsManager.swift */,
+				A20000010000000000000072 /* DebugCtlServer.swift */,
 				A20000010000000000000044 /* Docs/index.html */,
 				A20000010000000000000053 /* PrivacyInfo.xcprivacy */,
 				A20000010000000000000052 /* Docs/logo.png */,
@@ -427,6 +430,7 @@
 				A10000010000000000000046 /* AddServerChooserView.swift in Sources */,
 				A10000010000000000000047 /* ImportCredentialsView.swift in Sources */,
 				A10000010000000000000051 /* AdsManager.swift in Sources */,
+				A10000010000000000000072 /* DebugCtlServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -490,6 +494,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

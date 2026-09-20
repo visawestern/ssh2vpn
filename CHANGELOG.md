@@ -1,5 +1,36 @@
 # SSH2VPN — Changelog
 
+## 1.0.7 (build 12)
+
+Device-verified tunnel (iPhone 16e, 20 Sep 2026) + DEBUG-only agent channel.
+
+- **Egress PASS on hardware.** Post-connect self-test on a live iPhone:
+  server banner `SSH-2.0-OpenSSH_9.6p1`, server-reported egress IP equals
+  the configured VPS — traffic provably exits via your own server.
+- **Kill-switch leak proof (pcap).** 1,341-packet capture (`rvi0`) across a
+  full connect → traffic → disconnect cycle: physical egress is SSH to the
+  VPS only; zero packets bypassed the tunnel. DNS stayed tunnel-local
+  (queries to the utun resolver only); IPv6 was link-local/mDNS chatter
+  only — no global v6 egress (tunnel is IPv4-only by design).
+- **UDP relay verified.** The capture shows Apple QUIC (:443/UDP), push
+  (:5223) and CDN flows relayed through the tunnel — the bundled
+  `python3` helper carries real UDP, not just TCP+DNS.
+- **Known flake documented.** The automatic post-connect check can report
+  `egress unverified → verdict RELAY` when the server omits the egress
+  report (no iproute2), even while traffic flows (utun delta positive).
+  A manual re-check passes. Verdict logic unchanged; behavior now
+  documented in-guide so the line never reads as a tunnel bug.
+- **DEBUG-only agent channel (dev builds only).** Loopback HTTP control
+  (`127.0.0.1`, USB-`iproxy` only) with read endpoints
+  (`/v1/health|status|logs|dump`) and same-path mutations
+  (`/v1/servers|connect|disconnect|selftest`) so an AI agent can drive the
+  exact finger-tap paths on a tethered iPhone. The whole file is
+  `#if DEBUG`-gated and absent from Release/App Store builds (verified by
+  the new `agent-audit-release.sh` gate); it is slated for full deletion
+  once device verification is complete. No plist/entitlement changes.
+- **Docs ×17.** In-app guide and site now carry the verified findings
+  (egress PASS, zero-leak pcap, tunnel-local DNS, IPv4-only scope).
+
 ## dev (unreleased)
 
 - **Logging on by default (Guideline 5.6).** Diagnostics logging ships
