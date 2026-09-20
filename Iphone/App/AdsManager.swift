@@ -8,12 +8,19 @@ import AppTrackingTransparency
 // MARK: - Ad config
 
 enum AdsConfig {
-    /// Own AdMob app ID + own Rewarded ad unit (both dashboard-issued).
-    /// PRODUCTION now: real ads, real revenue — DO NOT click/tap the ads
-    /// yourself (self-clicks flag the account); the button is only for
-    /// real users.
+    /// AdMob app ID (ours, dashboard-issued — kept so the store listing
+    /// verifies against our account) + Rewarded ad unit.
+    /// TEMPORARY: Google's OFFICIAL iOS rewarded TEST unit. AdMob serves no
+    /// production fill until it verifies our App Store URL, so production
+    /// units return no-fill everywhere (review + early users): the +3h
+    /// button would look dead. Test units make the full watch→earn→credit
+    /// path provable in review; the creative itself is labeled "Test Ad" by
+    /// Google. Declared in Review Notes. DO NOT tap (self-clicks flag the
+    /// account even on test units); the button is only for real users.
+    /// SWAP BACK to "ca-app-pub-1498434981323978/9602260449" + resubmit the
+    /// moment AdMob links the live listing — that update is one line.
     static let gadAppID = "ca-app-pub-1498434981323978~5326656863"
-    static let gadRewardedUnitID = "ca-app-pub-1498434981323978/9602260449"
+    static let gadRewardedUnitID = "ca-app-pub-3940256099942544/1712485313"
 }
 
 // MARK: - Shared plumbing

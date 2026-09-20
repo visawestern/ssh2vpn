@@ -30,6 +30,13 @@ Device-verified tunnel (iPhone 16e, 20 Sep 2026) + DEBUG-only agent channel.
   once device verification is complete. No plist/entitlement changes.
 - **Docs ×17.** In-app guide and site now carry the verified findings
   (egress PASS, zero-leak pcap, tunnel-local DNS, IPv4-only scope).
+- **Rewarded ads: Google official TEST unit (temporary).** AdMob returns
+  no-fill on production units until it verifies our App Store URL, which
+  would leave the +3h button demonstrably dead in review and for early
+  users. This build serves Google's own labeled test creative
+  (`ca-app-pub-3940256099942544/1712485313`) so the full
+  watch→earn→credit path is provable; declared in Review Notes. Swap to
+  the production unit + resubmit once AdMob links the live listing.
 
 ## dev (unreleased)
 

@@ -12,7 +12,7 @@ if [[ ! -f "$BIN" ]]; then
   echo "audit: build it first: xcodebuild build -project Iphone/SSH2VPN.xcodeproj -scheme SSH2VPN -destination 'generic/platform=iOS' -configuration Release"
   exit 2
 fi
-MARKERS=(dbg-ctl-v1 DebugCtlServer "agent channel" DBGCTL "/v1/connect" "/v1/selftest" "17831")
+MARKERS=(dbg-ctl-v1 DebugCtlServer "agent channel" DBGCTL "/v1/connect" "/v1/selftest" "17831" 3940256099942544)
 FAIL=0
 for m in "${MARKERS[@]}"; do
   if strings "$BIN" | grep -qm1 "$m"; then
