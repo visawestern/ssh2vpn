@@ -17,6 +17,8 @@ struct ImportCredentialsView: View {
     @State private var password = ""
     @State private var errorMessage: String?
     @State private var showError = false
+    /// Dismisses the paste editor (no return key on its keyboard).
+    @FocusState private var rawFocus: Bool
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,10 @@ struct ImportCredentialsView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(model.copy.text(.cancel)) { dismiss() }
                         .foregroundStyle(Color.sec50)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(model.copy.text(.ok)) { rawFocus = false }
                 }
             }
             .alert(model.copy.text(.invalidInput), isPresented: $showError) {
@@ -77,6 +83,7 @@ struct ImportCredentialsView: View {
                     .font(.system(.footnote, design: .monospaced))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($rawFocus)
                     .frame(minHeight: 120)
                     .padding(6)
                     .accessibilityLabel(Text(model.copy.text(.importTitle)))

@@ -840,7 +840,10 @@ struct WorldMapView: View {
                             ProgressView()
                                 .controlSize(.mini)
                         } else {
-                            Text(model.connection == .connected ? "32 ms" : "SSH2")
+                            // No invented numbers: until the first real ping
+                            // lands, show an em dash (a hardcoded "32 ms"
+                            // here once posed as a measurement).
+                            Text(model.connection == .connected ? "—" : "SSH2")
                                 .font(.openSans(10, weight: .medium))
                                 .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.sshGray60)
                         }
@@ -1623,6 +1626,8 @@ struct AddServerView: View {
     @State private var showKeyHint = false
     /// Inline result chip under the key editor after a file import.
     @State private var keyImportMessage: String?
+    /// Dismisses the key editor (no return key on its keyboard).
+    @FocusState private var keyFocus: Bool
     @State private var keyImportOK = false
 
     var body: some View {
@@ -1716,6 +1721,7 @@ struct AddServerView: View {
                                 .font(.system(.footnote, design: .monospaced))
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                                .focused($keyFocus)
                                 .padding(6)
                         }
                         .frame(minHeight: 100)
@@ -1870,6 +1876,10 @@ struct AddServerView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(model.copy.text(.cancel)) { dismiss() }
                         .foregroundStyle(Color.sec50)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(model.copy.text(.ok)) { keyFocus = false }
                 }
             }
             .onAppear {
@@ -3208,6 +3218,9 @@ struct AddDNSRuleView: View {
     /// the user never has to guess how wide the rule bites.
     @State private var includeSubdomains = true
     @State private var errorText: String?
+    /// Dismisses the decimalPad (which has no return key) via the
+    /// keyboard toolbar below.
+    @FocusState private var fieldFocus: Bool
 
     init(editing: DNSBlocklistEntry? = nil) {
         self.editing = editing
@@ -3262,6 +3275,7 @@ struct AddDNSRuleView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.decimalPad)
+                            .focused($fieldFocus)
                             .font(.system(.body, design: .monospaced))
                             .padding(12)
                             .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 12))
@@ -3311,6 +3325,10 @@ struct AddDNSRuleView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(model.copy.text(.dnsAddRuleCancel)) { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(model.copy.text(.ok)) { fieldFocus = false }
                 }
             }
         }

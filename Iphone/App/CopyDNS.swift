@@ -6,8 +6,10 @@ import VPNCore
 /// Keyed by preset id; missing key = programming error, caught by tests.
 extension AppCopy {
     func presetDescription(_ preset: DNSPreset) -> String {
-        let table = Self.presetDescriptions[language] ?? Self.presetDescriptions[.english]!
-        return table[preset.id] ?? Self.presetDescriptions[.english]![preset.id]!
+        if let s = Self.presetDescriptions[language]?[preset.id] { return s }
+        if let s = Self.presetDescriptions[.english]?[preset.id] { return s }
+        assertionFailure("Missing DNS preset description for \(preset.id)")
+        return preset.id
     }
 
     /// Localized short label for one capability chip.

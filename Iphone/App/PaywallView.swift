@@ -217,21 +217,32 @@ struct PaywallView: View {
 
     /// Guideline 3.1.2: the purchase screen links the Terms of Use
     /// (standard Apple EULA) and the Privacy Policy next to Restore.
+    /// URLs are validated, never force-unwrapped: a typo must degrade to
+    /// plain text, never a crash.
     private var legalRow: some View {
         HStack(spacing: 16) {
             Spacer()
-            Link(model.copy.text(.legalTerms),
-                 destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-                .font(.openSans(12))
-                .foregroundStyle(.white.opacity(0.55))
-            Link(model.copy.text(.legalPrivacy),
-                 destination: URL(string: "https://visawestern.github.io/ssh2vpn/privacy.html")!)
-                .font(.openSans(12))
-                .foregroundStyle(.white.opacity(0.55))
+            legalLink(text: model.copy.text(.legalTerms),
+                      url: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
+            legalLink(text: model.copy.text(.legalPrivacy),
+                      url: "https://visawestern.github.io/ssh2vpn/privacy.html")
             Spacer()
         }
         .buttonStyle(.plain)
         .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    private func legalLink(text: String, url: String) -> some View {
+        if let destination = URL(string: url) {
+            Link(text, destination: destination)
+                .font(.openSans(12))
+                .foregroundStyle(.white.opacity(0.55))
+        } else {
+            Text(text)
+                .font(.openSans(12))
+                .foregroundStyle(.white.opacity(0.55))
+        }
     }
 
     // MARK: - Actions

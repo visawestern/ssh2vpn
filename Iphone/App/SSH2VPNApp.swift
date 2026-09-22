@@ -83,13 +83,13 @@ final class AppModel: ObservableObject {
     /// StoreKit purchase + entitlement restore for Unlimited.
     let store = StoreManager()
 
-    // MARK: - Paywall (stateless: both prices on every opening)
-    // Every presentation shows the SAME content: the discounted offer AND
-    // the regular price, side by side. No stages, no one-time flags, no
-    // UserDefaults-gated content — nothing can appear once and then hide
-    // between openings (Guideline 5.6). Dismissing always just closes —
-    // the close button never escalates, never locks, never timers.
-    // Not shown to users who already own Unlimited.
+    // MARK: - Paywall (one product, one price, always the same screen)
+    // Every presentation shows the SAME content: the Unlimited offer at
+    // the live StoreKit price, side by side with Restore. No stages, no
+    // one-time flags, no UserDefaults-gated content — nothing can appear
+    // once and then hide between openings (Guideline 5.6). Dismissing
+    // always just closes — the close button never escalates, never locks,
+    // never timers. Not shown to users who already own Unlimited.
     @Published var isPaywallPresented = false
 
     func showPaywall() {
@@ -206,6 +206,12 @@ final class AppModel: ObservableObject {
 
     private let vpn = VPNController()
     private var statusObserver: NSObjectProtocol?
+    /// Foreground/background observer tokens, stored like statusObserver so
+    /// they CAN be removed (no dangling registrations). No explicit removal:
+    /// AppModel lives for the whole process lifetime (@StateObject in the
+    /// App scene), so the tokens die with the process; every closure holds
+    /// self weakly and does nothing after teardown.
+    private var lifecycleObservers: [NSObjectProtocol] = []
     // Last raw VPN status seen (for burst-dedupe of the log only).
     private var lastRawStatus: NEVPNStatus?
     private var lastRawAt: Date?
@@ -469,7 +475,7 @@ final class AppModel: ObservableObject {
         ConsoleLogStore.shared.log(level: .system, tag: "BOOT", message: "SSH2VPN v\(Self.appVersion) diagnostics log initialized")
         // Re-apply the idle-lock whenever the app enters the foreground so the
         // screen stays on for the whole time the user is inside the app.
-        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+        let becameActive = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateIdleTimer()
                 // The tunnel lives in its own extension process and keeps
@@ -480,11 +486,12 @@ final class AppModel: ObservableObject {
                 self?.syncConnectionStateOnForeground()
             }
         }
-        NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+        let willResign = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateIdleTimer()
             }
         }
+        lifecycleObservers.append(contentsOf: [becameActive, willResign])
         refreshServerMetadata()
         // Load the local server list on launch (instant, no extension needed).
         loadServerList()
@@ -1629,9 +1636,15 @@ final class AppModel: ObservableObject {
         guard listRefreshState[source.id] != "loading" else { return }
         listRefreshState[source.id] = "loading"
         ConsoleLogStore.shared.log(level: .info, tag: "DNSLIST", message: "fetching curated list \(source.name): \(source.url)")
+        guard let url = URL(string: source.url) else {
+            self.listRefreshState[source.id] = "failed"
+            ConsoleLogStore.shared.log(level: .warning, tag: "DNSLIST",
+                message: "curated list \(source.name) has a malformed URL — marked failed, kept previous data")
+            return
+        }
         Task { @MainActor in
             do {
-                let (data, _) = try await URLSession.shared.data(from: URL(string: source.url)!)
+                let (data, _) = try await URLSession.shared.data(from: url)
                 let text = String(data: data, encoding: .utf8)
                     ?? String(decoding: data, as: UTF8.self)
                 let domains = DNSListStore.parseHosts(text)
@@ -1827,19 +1840,16 @@ final class AppModel: ObservableObject {
     }
 
     /// Triggered from the Settings Unlimited card or the paywall. Buys
-    /// `com.ssh2vpn.unlimited` (full price) or
-    /// `com.ssh2vpn.unlimited.discount` (one-time intro offer) and, on
-    /// success, sets the shared ledger to unlimited (kernel honors it).
-    /// Returns the StoreKit outcome so callers can react to cancellation
-    /// (e.g. show the discounted follow-up offer).
-    func buyUnlimited(discount: Bool = false) async -> StoreManager.PurchaseOutcome {
-        let outcome = await discount ? store.purchaseDiscount() : store.purchaseUnlimited()
+    /// `com.ssh2vpn.unlimited` (one-time) and, on success, sets the shared
+    /// ledger to unlimited (kernel honors it).
+    /// Returns the StoreKit outcome so callers can react to cancellation.
+    func buyUnlimited() async -> StoreManager.PurchaseOutcome {
+        let outcome = await store.purchaseUnlimited()
         switch outcome {
         case .success:
             reloadQuota()
             ConsoleLogStore.shared.log(level: .success, tag: "IAP",
-                                       message: discount ? "unlimited (intro offer) purchased and applied"
-                                                          : "unlimited purchased and applied")
+                                       message: "unlimited purchased and applied")
         case .failure(let msg):
             ConsoleLogStore.shared.log(level: .error, tag: "IAP", message: "purchase failed: \(msg)")
         case .userCancelled, .pending:

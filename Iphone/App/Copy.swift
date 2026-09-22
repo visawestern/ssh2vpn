@@ -133,7 +133,15 @@ struct AppCopy {
             .thai: thai, .turkish: turkish, .polish: polish, .dutch: dutch,
             .vietnamese: vietnamese,
         ]
-        return values[language]?[key] ?? english[key]!
+        return values[language]?[key] ?? english[key] ?? fallback(key)
+    }
+
+    /// Last-resort fallback: fires in DEBUG so a missing key is caught by
+    /// tests/review builds, returns the key name in production instead of
+    /// crashing the view.
+    private func fallback(_ key: CopyKey) -> String {
+        assertionFailure("Missing copy for key \(key)")
+        return String(describing: key)
     }
 
     /// Returns the localized string with the first `%@` token replaced by
