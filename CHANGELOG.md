@@ -1,5 +1,27 @@
 # SSH2VPN — Changelog
 
+## 1.0.7 (build 13)
+
+Sixteen-point review hardening (all crash/UX/legal vectors closed).
+
+- **No more force-unwraps on review paths.** Missing copy key, malformed
+  blocklist URL and missing DNS preset description now degrade to safe
+  fallbacks (key name / failed mark / preset id) with `assertionFailure`
+  in DEBUG instead of crashing the view.
+- **Keyboard can always be dismissed.** Decimal-pad IP field, private-key
+  editor and paste-import editor all get a keyboard toolbar with a
+  localized OK button (`@FocusState`).
+- **Docs viewer never blanks.** Missing/failed bundled page renders a
+  "page unavailable" note instead of a white view.
+- **No invented numbers.** Unmeasured ping shows an em dash, never a
+  hardcoded value.
+- **Single-product StoreKit config.** Local `StoreKitConfig.storekit`
+  carries only `com.ssh2vpn.unlimited` ($10.00), matching the paywall.
+- **Observers stored.** Foreground/background tokens kept with
+  `statusObserver` semantics for the process-lifetime model.
+- **Legal links validated.** Paywall Terms/Privacy open via validated URLs
+  with plain-text fallback, never force-unwrap.
+
 ## 1.0.7 (build 12)
 
 Device-verified tunnel (iPhone 16e, 20 Sep 2026) + DEBUG-only agent channel.
