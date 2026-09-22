@@ -15,12 +15,31 @@ if [[ ! -f "$BIN" ]]; then
   echo "audit: build it first: xcodebuild build -project Iphone/SSH2VPN.xcodeproj -scheme SSH2VPN -destination 'generic/platform=iOS' -configuration Release"
   exit 2
 fi
-MARKERS=(dbg-ctl-v1 DebugCtlServer "agent channel" DBGCTL "/v1/connect" "/v1/selftest" "17831" 3940256099942544)
+# Debug-channel markers: hard FAIL, no exceptions — these must never
+# reach App Review in any build.
+MARKERS=(dbg-ctl-v1 DebugCtlServer "agent channel" DBGCTL "/v1/connect" "/v1/selftest" "17831")
+# Google official TEST ad units: allowed ONLY while declared (see below).
+# Production swap-back is mandatory before real monetization.
+TEST_AD_MARKERS=(3940256099942544)
+# Declaration file: one test ad unit ID per line. Exists while and only
+# while the submitted build intentionally serves Google's labeled test
+# creatives (AdMob unverified) AND Review Notes declare it.
+DECLARED="Iphone/.admob-test-declared"
 FAIL=0
 for m in "${MARKERS[@]}"; do
   if strings "$BIN" | grep -qm1 "$m"; then
     echo "audit: MARKER FOUND: $m"
     FAIL=1
+  fi
+done
+for m in "${TEST_AD_MARKERS[@]}"; do
+  if strings "$BIN" | grep -qm1 "$m"; then
+    if [[ -f "$DECLARED" ]] && grep -q "$m" "$DECLARED"; then
+      echo "audit: DECLARED TEST AD UNIT $m (see $DECLARED + Review Notes) — swap to production + resubmit after AdMob verification"
+    else
+      echo "audit: UNDECLARED TEST AD UNIT: $m"
+      FAIL=1
+    fi
   fi
 done
 # Config-level check: Release must not define DEBUG.

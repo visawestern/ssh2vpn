@@ -252,6 +252,7 @@ final class DebugCtlServer: NSObject, @unchecked Sendable {
         case ("POST", "/v1/connect"): answerConnect(conn, body: body)
         case ("POST", "/v1/disconnect"): answerDisconnect(conn)
         case ("POST", "/v1/selftest"): answerSelfTest(conn)
+        case ("POST", "/v1/language"): answerLanguage(conn, body: body)
         default: finish(conn, status: 404, data: dbgJSON(["ok": false, "error": "unknown"]))
         }
     }
@@ -450,6 +451,26 @@ final class DebugCtlServer: NSObject, @unchecked Sendable {
             guard let self else { conn.cancel(); return }
             await MainActor.run { [weak self] in self?.model?.debugRunSelfTest() }
             self.finish(conn, status: 200, data: dbgJSON(["ok": true]))
+        }
+    }
+
+    /// Switches the interface language via the same `choose` path as the
+    /// in-app picker (for localized screenshot runs). Body: {"code":"ja"}.
+    private func answerLanguage(_ conn: NWConnection, body: Data) {
+        let code: String = {
+            guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+                return ""
+            }
+            return obj["code"] as? String ?? ""
+        }()
+        Task { [weak self] in
+            guard let self else { conn.cancel(); return }
+            let ok: Bool = await MainActor.run { [weak self] in
+                self?.model?.debugChooseLanguage(code: code) ?? false
+            }
+            self.finish(conn, status: ok ? 200 : 400,
+                        data: dbgJSON(ok ? ["ok": true, "code": code] as [String: Any]
+                                         : ["ok": false, "error": "unknown-language"]))
         }
     }
 

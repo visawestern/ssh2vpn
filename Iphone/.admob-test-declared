@@ -1,0 +1,6 @@
+# Declared Google official TEST ad units (one per line).
+# Active while AdMob returns no production fill for our unverified listing.
+# The submitted build serves Google's labeled test creatives; Review Notes
+# declare this. MANDATORY before real monetization: swap AdsManager.swift
+# back to production units, DELETE this file, resubmit.
+ca-app-pub-3940256099942544/1712485313

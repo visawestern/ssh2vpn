@@ -1,29 +1,19 @@
 import SwiftUI
 
-/// Full-screen paywall shown when the user taps the Unlimited buy button.
-///
-/// Stateless: EVERY opening shows the same content — the discounted offer
-/// AND the regular price, side by side. No stages, no one-time flags, no
-/// content that appears once and hides later (Guideline 5.6).
-/// Dismissing always just closes.
-///
-/// Review compliance: NO countdown timer, NO locked close button, NO fake
-/// urgency — the close always closes.
+/// Full-screen paywall: ONE product (Unlimited, one-time), one price.
+/// No discount stages, no badges, no countdowns, no pulsing CTAs —
+/// the same static screen on every opening (Guideline 5.6).
+/// Dismissing always just closes. Terms (Apple EULA) + Privacy links
+/// sit next to Restore (Guideline 3.1.2).
 struct PaywallView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showUnavailable = false
-    /// Drives the "hot offer" breathing animation on the discount CTA.
-    @State private var pulse = false
-
-    /// Discount visuals depend ONLY on live StoreKit products (both loaded
-    /// and the offer actually cheaper) — never on open count or stored
-    /// flags. Same products → same screen, on every opening, for everyone.
-    private var hasDiscount: Bool { !discountPercentage.isEmpty }
 
     /// The price shown in the UI comes from StoreKit (localized). Falls
-    /// back to round US dollars only until the products load.
+    /// back to an ellipsis until the product loads — never a hardcoded
+    /// amount.
     private var displayPrice: String {
-        hasDiscount ? model.discountPriceString : model.fullPriceString
+        model.fullPriceString
     }
 
     var body: some View {
@@ -57,28 +47,11 @@ struct PaywallView: View {
                 Spacer(minLength: 24)
                 pricing
                 buyButton
-                // Second choice, always rendered next to the offer: the same
-                // entitlement at the regular price. Both options visible on
-                // every opening — nothing appears once and hides later.
-                if hasDiscount {
-                    Button {
-                        Task { await buy(discount: false) }
-                    } label: {
-                        Text(model.copy.text(.buyUnlimited, price: model.fullPriceString))
-                            .font(.openSans(14, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 12)
-                    .disabled(model.store.isPurchasing)
-                }
                 restoreButton
+                legalRow
                 if let notice = model.purchaseNotice {
                     Text(notice).foregroundStyle(.white).font(.footnote).multilineTextAlignment(.center)
                 }
-                // No in-paywall switching and no staging: both prices are
-                // rendered on every opening, so nothing can appear once
-                // and hide later.
             }
             .padding(.horizontal, 24)
             .padding(.top, 16)
@@ -124,28 +97,6 @@ struct PaywallView: View {
 
     private var hero: some View {
         VStack(spacing: 14) {
-            if hasDiscount {
-                // Pulsing exclusivity badge — the first thing the eye lands on.
-                HStack(spacing: 6) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 12, weight: .black))
-                    Text(model.copy.text(.paywallDiscountTag))
-                        .font(.openSans(12, weight: .black))
-                        .tracking(1.2)
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(
-                        LinearGradient(colors: [Color(red: 1.0, green: 0.45, blue: 0.10), Color(red: 0.95, green: 0.15, blue: 0.12)],
-                                       startPoint: .leading, endPoint: .trailing)
-                    )
-                )
-                .shadow(color: Color(red: 1.0, green: 0.35, blue: 0.10).opacity(pulse ? 0.7 : 0.35), radius: pulse ? 16 : 9, y: 3)
-                .scaleEffect(pulse ? 1.04 : 1.0)
-            }
-
             ZStack {
                 Circle()
                     .fill(
@@ -163,12 +114,12 @@ struct PaywallView: View {
             }
             .padding(.bottom, 2)
 
-            Text(model.copy.text(hasDiscount ? .paywallDiscountTitle : .paywallTitle, price: displayPrice))
+            Text(model.copy.text(.paywallTitle, price: displayPrice))
                 .font(.openSans(28, weight: .bold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
 
-            Text(model.copy.text(hasDiscount ? .paywallDiscountSubtitle : .paywallSubtitle))
+            Text(model.copy.text(.paywallSubtitle))
                 .font(.openSans(14))
                 .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
@@ -203,77 +154,22 @@ struct PaywallView: View {
     // MARK: - Pricing + Buy
 
     private var pricing: some View {
-        Group {
-            if hasDiscount {
-                discountPricing
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(displayPrice)
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(model.copy.text(.paywallOneTime))
-                        .font(.openSans(12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.65))
-                }
-                .padding(18)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
-            }
-        }
-    }
-
-    /// The intro-offer block: crossed-out full-price anchor, intro price,
-    /// computed discount capsule. No countdown, no expiry theatrics — a plain
-    /// offer the user can take or leave (Guideline 5.6: no pressured flash-sale UX).
-    private var discountPercentage: String {
-        guard let full = model.store.product, let discount = model.store.discountProduct,
-              full.price > 0, discount.price < full.price,
-              full.priceFormatStyle.currencyCode == discount.priceFormatStyle.currencyCode else { return "" }
-        let percent = NSDecimalNumber(decimal: (full.price - discount.price) / full.price * 100).intValue
-        return "−\(percent)%"
-    }
-    private var discountPricing: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(model.fullPriceString)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .strikethrough(true, color: .white.opacity(0.55))
-                    .foregroundStyle(.white.opacity(0.45))
-                Text(displayPrice)
-                    .font(.system(size: 58, weight: .heavy, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(colors: [Color(red: 1.0, green: 0.85, blue: 0.35), Color(red: 1.0, green: 0.60, blue: 0.15)],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                    .shadow(color: Color(red: 1.0, green: 0.65, blue: 0.15).opacity(0.55), radius: 14, y: 3)
-                Text(discountPercentage)
-                    .font(.system(size: 14, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Color(red: 0.10, green: 0.75, blue: 0.45), in: Capsule())
-                    .rotationEffect(.degrees(-6))
-            }
-            .frame(maxWidth: .infinity)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(displayPrice)
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            Spacer()
+            Text(model.copy.text(.paywallOneTime))
+                .font(.openSans(12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.65))
         }
         .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.white.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(
-                            LinearGradient(colors: [Color(red: 1.0, green: 0.75, blue: 0.25).opacity(0.85), Color(red: 1.0, green: 0.45, blue: 0.15).opacity(0.85)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: 1.5
-                        )
-                )
-        )
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
     }
 
     private var buyButton: some View {
         Button {
-            Task { await buy(discount: hasDiscount) }
+            Task { await buy() }
         } label: {
             HStack(spacing: 8) {
                 if model.store.isPurchasing {
@@ -281,12 +177,12 @@ struct PaywallView: View {
                         .scaleEffect(0.8)
                         .tint(.white)
                 } else {
-                    Image(systemName: hasDiscount ? "flame.fill" : "lock.fill")
+                    Image(systemName: "lock.fill")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 Text(model.store.isPurchasing
                      ? model.copy.text(.purchasing)
-                     : (hasDiscount ? model.copy.text(.paywallBuyDiscount, price: displayPrice) : model.copy.text(.buyUnlimited, price: displayPrice)))
+                     : model.copy.text(.buyUnlimited, price: displayPrice))
                     .font(.openSans(16, weight: .bold))
             }
             .foregroundStyle(.white)
@@ -294,29 +190,17 @@ struct PaywallView: View {
             .frame(height: 56)
             .background(
                 LinearGradient(
-                    colors: hasDiscount
-                        ? [Color(red: 1.0, green: 0.72, blue: 0.16), Color(red: 0.95, green: 0.35, blue: 0.08)]
-                        : [Color(red: 0.35, green: 0.90, blue: 0.64), Color(red: 0.14, green: 0.70, blue: 0.46)],
+                    colors: [Color(red: 0.35, green: 0.90, blue: 0.64), Color(red: 0.14, green: 0.70, blue: 0.46)],
                     startPoint: .leading,
                     endPoint: .trailing
                 ),
                 in: RoundedRectangle(cornerRadius: 16)
             )
-            .shadow(color: (hasDiscount ? Color(red: 1.0, green: 0.55, blue: 0.12) : Color.prim50).opacity(pulse ? 0.65 : 0.35),
-                    radius: pulse ? 18 : 12, y: 6)
-            .scaleEffect(hasDiscount && pulse ? 1.02 : 1.0)
+            .shadow(color: Color.prim50.opacity(0.35), radius: 12, y: 6)
         }
         .buttonStyle(.plain)
         .disabled(model.store.isPurchasing)
         .padding(.top, 14)
-        // "Hot purchase" pulse: the CTA breathes so the eye lands on it
-        // first. Runs only while the offer is actually on screen.
-        .onAppear {
-            guard hasDiscount else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
-        }
     }
 
     private var restoreButton: some View {
@@ -331,18 +215,35 @@ struct PaywallView: View {
         .padding(.top, 16)
     }
 
+    /// Guideline 3.1.2: the purchase screen links the Terms of Use
+    /// (standard Apple EULA) and the Privacy Policy next to Restore.
+    private var legalRow: some View {
+        HStack(spacing: 16) {
+            Spacer()
+            Link(model.copy.text(.legalTerms),
+                 destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                .font(.openSans(12))
+                .foregroundStyle(.white.opacity(0.55))
+            Link(model.copy.text(.legalPrivacy),
+                 destination: URL(string: "https://visawestern.github.io/ssh2vpn/privacy.html")!)
+                .font(.openSans(12))
+                .foregroundStyle(.white.opacity(0.55))
+            Spacer()
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 12)
+    }
+
     // MARK: - Actions
 
-    private func buy(discount: Bool) async {
-        // The offer buys the dedicated discount product; the regular
-        // choice buys the regular one. Guard on the specific product so
-        // a missing ASC-side product surfaces as "unavailable" instead of
-        // a wrong buy.
-        guard discount ? model.store.discountProduct != nil : model.store.product != nil else {
+    private func buy() async {
+        // Single product, single price. A missing ASC-side product surfaces
+        // as "unavailable" instead of a wrong buy.
+        guard model.store.product != nil else {
             showUnavailable = true
             return
         }
-        switch await model.buyUnlimited(discount: discount) {
+        switch await model.buyUnlimited() {
         case .success:
             model.paywallPaid()
         case .failure:

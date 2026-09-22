@@ -9,14 +9,11 @@ import VPNCore
 @MainActor
 final class StoreManager: ObservableObject {
     static let unlimitedProductID = "com.ssh2vpn.unlimited"
-    /// One-time intro-offer product — same entitlement as the full-price one,
-    /// bought only from the paywall's discount stage.
-    static let discountProductID = "com.ssh2vpn.unlimited.discount"
-    /// Any of these product IDs grants Unlimited.
-    static let entitledProductIDs: Set<String> = [unlimitedProductID, discountProductID]
+    /// Product IDs that grant Unlimited (single product; kept as a set so a
+    /// future entitlement never needs a migration).
+    static let entitledProductIDs: Set<String> = [unlimitedProductID]
 
     @Published private(set) var product: Product?
-    @Published private(set) var discountProduct: Product?
     @Published private(set) var isPurchasing = false
 
     private var lastError: String?
@@ -53,9 +50,8 @@ final class StoreManager: ObservableObject {
     }
 
     func loadProduct() async {
-        let products = (try? await Product.products(for: [Self.unlimitedProductID, Self.discountProductID])) ?? []
+        let products = (try? await Product.products(for: [Self.unlimitedProductID])) ?? []
         product = products.first { $0.id == Self.unlimitedProductID }
-        discountProduct = products.first { $0.id == Self.discountProductID }
     }
 
     /// Refreshes the ledger's `unlimited` flag from App Store transactions.
@@ -101,13 +97,6 @@ final class StoreManager: ObservableObject {
     func purchaseUnlimited() async -> PurchaseOutcome {
         if product == nil { await loadProduct() }
         return await purchase(product)
-    }
-
-    /// Buys the one-time intro-offer product (same Unlimited entitlement).
-    /// Only reachable from the paywall's discount stage.
-    func purchaseDiscount() async -> PurchaseOutcome {
-        if discountProduct == nil { await loadProduct() }
-        return await purchase(discountProduct)
     }
 
     private func purchase(_ product: Product?) async -> PurchaseOutcome {

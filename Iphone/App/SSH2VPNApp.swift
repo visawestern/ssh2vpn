@@ -686,6 +686,15 @@ final class AppModel: ObservableObject {
     func debugRunSelfTest() {
         runPostConnectSelfTest()
     }
+
+    /// DEBUG-ONLY language switch for localized screenshot runs.
+    /// Same `choose` path as the in-app language picker. Returns false
+    /// for unknown codes.
+    func debugChooseLanguage(code: String) -> Bool {
+        guard let lang = AppLanguage(rawValue: code) else { return false }
+        choose(lang)
+        return true
+    }
 #endif
 
     /// Current utun packets-read counter from the extension (nil when the
@@ -1728,7 +1737,6 @@ final class AppModel: ObservableObject {
     /// hiccup) — the UI never invents a price: buy() refuses to run without
     /// the real product, so what the button shows is what Apple charges.
     var fullPriceString: String { store.product?.displayPrice ?? "…" }
-    var discountPriceString: String { store.discountProduct?.displayPrice ?? "…" }
 
     /// Normalized [0...1] fraction remaining (for the ring/progress).
     var quotaFraction: Double {
