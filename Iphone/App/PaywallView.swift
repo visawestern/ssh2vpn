@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Full-screen paywall: ONE product (Unlimited, one-time), one price.
-/// No discount stages, no badges, no countdowns, no pulsing CTAs —
+/// No discount stages, no badges, no time pressure, no animated CTAs —
 /// the same static screen on every opening (Guideline 5.6).
 /// Dismissing always just closes. Terms (Apple EULA) + Privacy links
 /// sit next to Restore (Guideline 3.1.2).
@@ -77,7 +77,7 @@ struct PaywallView: View {
                     .foregroundStyle(.white)
             }
             Spacer()
-            // The close is ALWAYS enabled — no lock, no countdown. Forcing
+            // The close is ALWAYS enabled — no lock, no waiting screens. Forcing
             // attention on a paid offer is a dark pattern (Guideline 5.6).
             Button {
                 model.dismissPaywall()
