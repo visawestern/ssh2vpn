@@ -5,12 +5,12 @@ import VPNCore
 
 extension Color {
     static let appBg = Color(red: 0.965, green: 0.970, blue: 0.978)               // Clean subtle off-white #F6F7FA
-    static let octGray0 = Color.white                                             // Pure white cards #FFFFFF
-    static let octGray05 = Color(red: 0.937, green: 0.941, blue: 0.953)          // Soft divider #EFF0F3
-    static let octGray40 = Color(red: 0.745, green: 0.757, blue: 0.773)          // #BEC1C5
-    static let octGray60 = Color(red: 0.514, green: 0.537, blue: 0.569)          // #838991
-    static let octGray80 = Color(red: 0.314, green: 0.337, blue: 0.369)          // #50565E
-    static let octGray100 = Color(red: 0.075, green: 0.161, blue: 0.275)         // #132946
+    static let sshGray0 = Color.white                                             // Pure white cards #FFFFFF
+    static let sshGray05 = Color(red: 0.937, green: 0.941, blue: 0.953)          // Soft divider #EFF0F3
+    static let sshGray40 = Color(red: 0.745, green: 0.757, blue: 0.773)          // #BEC1C5
+    static let sshGray60 = Color(red: 0.514, green: 0.537, blue: 0.569)          // #838991
+    static let sshGray80 = Color(red: 0.314, green: 0.337, blue: 0.369)          // #50565E
+    static let sshGray100 = Color(red: 0.075, green: 0.161, blue: 0.275)         // #132946
     static let prim50 = Color(red: 0.294, green: 0.855, blue: 0.596)             // Emerald mint #4BDB98
     static let prim100 = Color(red: 0.235, green: 0.753, blue: 0.514)            // #3CC083
     static let sec50 = Color(red: 0.090, green: 0.161, blue: 0.275)              // Deep Navy #172946
@@ -80,7 +80,7 @@ struct RootView: View {
                 .adaptiveCenterColumn()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                OctohideTabBar(selected: $selectedTab, copy: model.copy)
+                SSH2VPNTabBar(selected: $selectedTab, copy: model.copy)
             }
 
             // Floating diagnostics button — shown whenever logging is enabled,
@@ -139,7 +139,7 @@ struct RootView: View {
 
 // MARK: - Tab Bar (unified Apple Design with labels)
 
-struct OctohideTabBar: View {
+struct SSH2VPNTabBar: View {
     @Binding var selected: Tab
     let copy: AppCopy
 
@@ -171,7 +171,7 @@ struct OctohideTabBar: View {
                 Text(title)
                     .font(.openSans(11, weight: selected == tab ? .semibold : .regular))
             }
-            .foregroundStyle(selected == tab ? Color.sec50 : Color.octGray60)
+            .foregroundStyle(selected == tab ? Color.sec50 : Color.sshGray60)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
         }
@@ -225,7 +225,7 @@ struct ConnectView: View {
                 if case .connected = model.connection {
                     Text(formatTime(TimeInterval(model.connectionActiveSeconds)))
                         .font(.system(size: 15, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.bottom, 8)
 
                     // Live tunnel telemetry: SSH pool size, live data channels,
@@ -310,7 +310,7 @@ struct ConnectView: View {
                                 showDocsSheet = false
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(Color.octGray100)
+                                    .foregroundStyle(Color.sshGray100)
                             }
                             .accessibilityLabel(model.copy.text(.cancel))
                         }
@@ -335,7 +335,7 @@ struct ConnectView: View {
 
             Text(model.connection == .connected ? model.copy.text(.protected_) : model.copy.text(.unprotected))
                 .font(.openSans(17, weight: .semibold))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
             Spacer()
         }
         .overlay(alignment: .trailing) {
@@ -469,10 +469,10 @@ struct ConnectView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(model.copy.text(.addServerLabel))
                             .font(.openSans(15, weight: .medium))
-                            .foregroundStyle(Color.octGray100)
+                            .foregroundStyle(Color.sshGray100)
                         Text(model.copy.text(.addServerDesc))
                             .font(.openSans(12))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                     }
                 } else {
                     Text(model.serverFlag.isEmpty ? "🌐" : model.serverFlag)
@@ -482,7 +482,7 @@ struct ConnectView: View {
                         HStack(spacing: 6) {
                             Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
                                 .font(.openSans(15, weight: .semibold))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                             if let ping = model.serverPingMs {
                                 Text("\(ping) ms")
                                     .font(.openSans(11, weight: .semibold))
@@ -495,7 +495,7 @@ struct ConnectView: View {
                         HStack(spacing: 6) {
                             Text(model.selectedServer?.displayAddress ?? "\(model.profile.host):\(model.profile.port)")
                                 .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             if model.selectedServer?.hasCustomLabel != true,
@@ -510,7 +510,7 @@ struct ConnectView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.octGray100)
+                    .foregroundStyle(Color.sshGray100)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -567,19 +567,19 @@ struct ConnectView: View {
     }
 
     private var dividerDot: some View {
-        Circle().fill(Color.octGray40).frame(width: 3, height: 3)
+        Circle().fill(Color.sshGray40).frame(width: 3, height: 3)
     }
 
     private func statCell(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
                 .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundStyle(Color.octGray40)
+                .foregroundStyle(Color.sshGray40)
         }
         .frame(maxWidth: .infinity)
     }
@@ -599,10 +599,10 @@ struct ConnectView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(model.copy.text(.freeTimeLeft))
                     .font(.openSans(10, weight: .semibold))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
                 Text(formatTime(model.remainingQuotaSeconds))
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.octGray100)
+                    .foregroundStyle(Color.sshGray100)
             }
 
             Spacer()
@@ -654,7 +654,7 @@ struct ConnectView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    (model.canWatchAd ? Color.sec50 : Color.octGray60),
+                    (model.canWatchAd ? Color.sec50 : Color.sshGray60),
                     in: RoundedRectangle(cornerRadius: 10)
                 )
             }
@@ -775,7 +775,7 @@ struct WorldMapView: View {
                         let y = min(max(p.y, 12), mapHeight - 12)
                         let ping = model.serverPingCache[server.id]
                         let dotColor: Color = {
-                            guard let ms = ping else { return Color.octGray40 }
+                            guard let ms = ping else { return Color.sshGray40 }
                             if ms <= 80 { return Color.green }
                             if ms <= 150 { return Color.orange }
                             return Color.red
@@ -825,12 +825,12 @@ struct WorldMapView: View {
 
                         Text(model.serverCountry.isEmpty ? (model.selectedServer?.displayLabel ?? (model.serverName.isEmpty ? model.profile.host : model.serverName)) : model.serverCountry)
                             .font(.openSans(11, weight: .semibold))
-                            .foregroundStyle(Color.octGray100)
+                            .foregroundStyle(Color.sshGray100)
                             .lineLimit(1)
 
                         Text("•")
                             .font(.system(size: 8))
-                            .foregroundStyle(Color.octGray40)
+                            .foregroundStyle(Color.sshGray40)
 
                         if let ping = model.serverPingMs {
                             Text("\(ping) ms")
@@ -842,7 +842,7 @@ struct WorldMapView: View {
                         } else {
                             Text(model.connection == .connected ? "32 ms" : "SSH2")
                                 .font(.openSans(10, weight: .medium))
-                                .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.octGray60)
+                                .foregroundStyle(model.connection == .connected ? Color.prim50 : Color.sshGray60)
                         }
                     }
                     .padding(.horizontal, 9)
@@ -916,7 +916,7 @@ private struct DNSRulesBadge: View {
     let count: Int
 
     var body: some View {
-        let tint: Color = count == 0 ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)
+        let tint: Color = count == 0 ? Color.sshGray40 : Color(red: 0.85, green: 0.45, blue: 0.1)
         Text("\(count)")
             .font(.openSans(11, weight: .semibold))
             .foregroundStyle(tint)
@@ -954,11 +954,11 @@ struct LocationsView: View {
                     if model.servers.isEmpty {
                         HStack {
                             Text(model.copy.text(.noServerConfigured))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                             Spacer()
                         }
                         .padding(16)
-                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                     }
 
                     // Add Server button
@@ -972,18 +972,18 @@ struct LocationsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(model.copy.text(.addServerLabel))
                                     .font(.openSans(15, weight: .medium))
-                                    .foregroundStyle(Color.octGray100)
+                                    .foregroundStyle(Color.sshGray100)
                                 Text(model.copy.text(.addServerDesc))
                                     .font(.openSans(12))
-                                    .foregroundStyle(Color.octGray60)
+                                    .foregroundStyle(Color.sshGray60)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Color.octGray40)
+                                .foregroundStyle(Color.sshGray40)
                         }
                         .padding(14)
-                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
@@ -1064,7 +1064,7 @@ struct LocationsView: View {
                     HStack(spacing: 6) {
                         Text(country)
                             .font(.openSans(16, weight: .semibold))
-                            .foregroundStyle(Color.octGray100)
+                            .foregroundStyle(Color.sshGray100)
                         if let ping {
                             Text("\(ping) ms")
                                 .font(.openSans(11, weight: .semibold))
@@ -1082,7 +1082,7 @@ struct LocationsView: View {
                     HStack(spacing: 6) {
                         Text(server.displayAddress)
                             .font(.openSans(12))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if !server.hasCustomLabel, !server.username.isEmpty {
@@ -1125,7 +1125,7 @@ struct LocationsView: View {
         .buttonStyle(.plain)
         .disabled(switchLocked)
         .opacity(switchLocked && !isSelected ? 0.55 : 1.0)
-        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.prim50, lineWidth: isConnected ? 1.5 : 0)
@@ -1152,7 +1152,7 @@ struct SettingsViewNew: View {
                              ? model.copy.text(.unlimitedBadge)
                              : model.copy.text(.buyUnlimited))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.octGray100)
+                            .foregroundStyle(model.isUnlimited ? Color.sec50 : Color.sshGray100)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1191,7 +1191,7 @@ struct SettingsViewNew: View {
 
                             Text(model.copy.text(.buyUnlimitedDesc))
                                 .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                                 .lineLimit(2)
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
@@ -1214,13 +1214,13 @@ struct SettingsViewNew: View {
                             .padding(.bottom, 6)
                         }
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Language selector card
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.languageSection))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1233,11 +1233,11 @@ struct SettingsViewNew: View {
                                     .font(.title2)
                                 Text(model.selectedLanguage?.title ?? "English")
                                     .font(.openSans(15, weight: .medium))
-                                    .foregroundStyle(Color.octGray100)
+                                    .foregroundStyle(Color.sshGray100)
                                 Spacer()
                                 Image(systemName: "chevron.up.chevron.down")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.octGray40)
+                                    .foregroundStyle(Color.sshGray40)
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1251,14 +1251,14 @@ struct SettingsViewNew: View {
                             }
                         }
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Documentation card — right after the language card so
                     // even a first-time user finds the plain-language guide.
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.documentation))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1272,15 +1272,15 @@ struct SettingsViewNew: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(model.copy.text(.documentation))
                                         .font(.openSans(15, weight: .medium))
-                                        .foregroundStyle(Color.octGray100)
+                                        .foregroundStyle(Color.sshGray100)
                                     Text(model.copy.text(.documentationDesc))
                                         .font(.openSans(12))
-                                        .foregroundStyle(Color.octGray60)
+                                        .foregroundStyle(Color.sshGray60)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.octGray40)
+                                    .foregroundStyle(Color.sshGray40)
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1288,13 +1288,13 @@ struct SettingsViewNew: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // VPN Settings card
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.vpnSettings))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1303,17 +1303,17 @@ struct SettingsViewNew: View {
                             settingsRow(icon: "lock.shield", title: model.copy.text(.protocolTitle), desc: model.copy.text(.protocolDesc))
                         }
                         .buttonStyle(.plain)
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         NavigationLink(destination: DNSView()) {
                             settingsRow(icon: "network", title: model.copy.text(.dnsSettings), desc: model.copy.text(.dnsDesc))
                         }
                         .buttonStyle(.plain)
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         NavigationLink(destination: AdvancedView()) {
                             settingsRow(icon: "gearshape.2", title: model.copy.text(.advanced), desc: model.copy.text(.advancedDesc))
                         }
                         .buttonStyle(.plain)
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         // Local DNS rules live at the VPN-settings level (not
                         // inside the DNS screen): they apply BEFORE any DNS
                         // server — custom or public — and deserve first-class
@@ -1327,10 +1327,10 @@ struct SettingsViewNew: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(model.copy.text(.dnsLocalRulesTitle))
                                         .font(.openSans(15, weight: .medium))
-                                        .foregroundStyle(Color.octGray100)
+                                        .foregroundStyle(Color.sshGray100)
                                     Text(model.copy.text(.dnsRulesCount))
                                         .font(.openSans(12))
-                                        .foregroundStyle(Color.octGray60)
+                                        .foregroundStyle(Color.sshGray60)
                                 }
                                  Spacer()
                                  // Badge counts custom rules + curated-list
@@ -1340,7 +1340,7 @@ struct SettingsViewNew: View {
                                  DNSRulesBadge(count: model.settings.dnsRules.count + model.curatedDomainCount)
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.octGray40)
+                                    .foregroundStyle(Color.sshGray40)
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1348,13 +1348,13 @@ struct SettingsViewNew: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Diagnostics card
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.diagnosticsSection))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1367,11 +1367,11 @@ struct SettingsViewNew: View {
                                     .frame(width: 24)
                                 Text(model.copy.text(.connectionDiagnostics))
                                     .font(.openSans(15, weight: .medium))
-                                    .foregroundStyle(Color.octGray100)
+                                    .foregroundStyle(Color.sshGray100)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.octGray40)
+                                    .foregroundStyle(Color.sshGray40)
                             }
                             .padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1379,13 +1379,13 @@ struct SettingsViewNew: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // About card
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.about))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -1406,7 +1406,7 @@ struct SettingsViewNew: View {
                             settingsRow(icon: "hand.raised.fill", title: model.copy.text(.privacyPolicyTitle), desc: model.copy.text(.privacyPolicyDesc))
                         }
                         .buttonStyle(.plain)
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         NavigationLink(destination: DocsView(page: .terms, language: model.selectedLanguage?.rawValue)) {
                             settingsRow(icon: "doc.text.fill", title: model.copy.text(.termsOfUseTitle), desc: model.copy.text(.termsOfUseDesc))
                         }
@@ -1415,17 +1415,17 @@ struct SettingsViewNew: View {
                         HStack {
                             Text(model.copy.text(.version))
                                 .font(.openSans(15))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                             Spacer()
                             // Read live from the bundle so the row can never
                             // go stale after a version bump.
                             Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
                                 .font(.openSans(15))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                         }
                         .padding(14)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .padding(16)
             }
@@ -1443,18 +1443,18 @@ struct SettingsViewNew: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.openSans(15, weight: .medium))
-                    .foregroundStyle(Color.octGray100)
+                    .foregroundStyle(Color.sshGray100)
                 Text(desc)
                     .font(.openSans(12))
-                    .foregroundStyle(Color.octGray60)
+                    .foregroundStyle(Color.sshGray60)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.octGray40)
+                .foregroundStyle(Color.sshGray40)
         }
         .padding(14)
-        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
         .contentShape(.rect)
     }
 }
@@ -1484,7 +1484,7 @@ struct LanguagePickerSheet: View {
                                     .font(.title2)
                                 Text(language.title)
                                     .font(.openSans(16, weight: .medium))
-                                    .foregroundStyle(Color.octGray100)
+                                    .foregroundStyle(Color.sshGray100)
                                 Spacer()
                                 if selected == language {
                                     Image(systemName: "checkmark")
@@ -1508,7 +1508,7 @@ struct LanguagePickerSheet: View {
                         // language float to the top); normal dividers
                         // between the rest.
                         if language != (order.pinned + order.rest).last {
-                            Divider().background(Color.octGray05).padding(.leading, 52)
+                            Divider().background(Color.sshGray05).padding(.leading, 52)
                         }
                         if language == order.pinned.last, !order.rest.isEmpty {
                             Divider().background(Color.sec50.opacity(0.35)).padding(.leading, 20)
@@ -1517,7 +1517,7 @@ struct LanguagePickerSheet: View {
                 }
                 .padding(.vertical, 8)
             }
-            .background(Color.octGray0)
+            .background(Color.sshGray0)
             .navigationTitle(model.copy.text(.chooseLanguage))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1633,7 +1633,7 @@ struct AddServerView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.server))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 6)
@@ -1668,14 +1668,14 @@ struct AddServerView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 12)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Private Key section
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Text(model.copy.text(.ed25519PrivateKeyOptional))
                                 .font(.openSans(13, weight: .semibold))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                             InfoDotButton(isVisible: $showKeyHint)
                             Spacer()
                             // Import from Files / iCloud Drive — one tap
@@ -1708,7 +1708,7 @@ struct AddServerView: View {
                             if privateKey.isEmpty {
                                 Text(model.copy.text(.privateKeyPlaceholder))
                                     .font(.system(.footnote, design: .monospaced))
-                                    .foregroundStyle(Color.octGray40)
+                                    .foregroundStyle(Color.sshGray40)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 10)
                             }
@@ -1722,7 +1722,7 @@ struct AddServerView: View {
                         .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.octGray05, lineWidth: 1)
+                                .stroke(Color.sshGray05, lineWidth: 1)
                         )
                         .padding(.horizontal, 12)
 
@@ -1736,7 +1736,7 @@ struct AddServerView: View {
                                     .foregroundStyle(keyImportOK ? Color.prim50 : Color(red: 1.0, green: 0.25, blue: 0.35))
                                 Text(keyImportMessage)
                                     .font(.openSans(11))
-                                    .foregroundStyle(Color.octGray60)
+                                    .foregroundStyle(Color.sshGray60)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .padding(.horizontal, 16)
@@ -1752,7 +1752,7 @@ struct AddServerView: View {
                             Color.clear.frame(height: 0).padding(.bottom, 0)
                         }
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                     .fileImporter(isPresented: $showKeyImporter, allowedContentTypes: [.data, .text, .plainText]) { result in
                         importKeyFile(result)
                     }
@@ -1766,7 +1766,7 @@ struct AddServerView: View {
                         )
                         .padding(12)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                     // Add button
                     Button {
@@ -1856,7 +1856,7 @@ struct AddServerView: View {
                     // Hint
                     Text(model.copy.text(.credentialsHint))
                         .font(.openSans(12))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                 }
@@ -1920,18 +1920,18 @@ struct AddServerView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.openSans(12, weight: .medium))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             TextField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.openSans(14))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 10)
                 .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.octGray05, lineWidth: 1)
+                        .stroke(Color.sshGray05, lineWidth: 1)
                 )
         }
     }
@@ -1940,17 +1940,17 @@ struct AddServerView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.openSans(12, weight: .medium))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             SecureField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
                 .font(.openSans(14))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 10)
                 .background(Color(red: 0.965, green: 0.970, blue: 0.978), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.octGray05, lineWidth: 1)
+                        .stroke(Color.sshGray05, lineWidth: 1)
                 )
         }
     }
@@ -2025,7 +2025,7 @@ struct DiagnosticsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.setupProgress))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -2034,7 +2034,7 @@ struct DiagnosticsView: View {
                             title: connectionTitle,
                             detail: phase.isEmpty ? "—" : phase)
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 // Live telemetry: pool, flows, bytes — same numbers as the
                 // connected-screen strip, so diagnostics and the main screen
@@ -2042,40 +2042,40 @@ struct DiagnosticsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.diagLive))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
                     profileRow(label: model.copy.text(.diagSSHConnections), value: model.sshConnectionCount > 0 ? String(model.sshConnectionCount) : "—")
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.diagActiveFlows), value: model.activeChannelCount > 0 ? String(model.activeChannelCount) : "—")
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.diagDownloaded), value: fmtMB(model.tunnelDownBytes))
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.diagUploaded), value: fmtMB(model.tunnelUpBytes))
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.ping), value: model.serverPingMs.map { "\($0) ms" } ?? "—")
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 // Profile
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.profile))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
                     profileRow(label: model.copy.text(.server), value: model.profile.host.isEmpty ? "—" : model.profile.host)
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.sshPort), value: String(model.profile.port))
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.username), value: model.profile.username.isEmpty ? "—" : model.profile.username)
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     profileRow(label: model.copy.text(.authentication), value: model.profile.privateKey.isEmpty ? model.copy.text(.passwordKeychain) : model.copy.text(.ed25519Key))
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     // Show the ACTUAL effective DNS of the last-started
                     // tunnel (extension-confirmed when polled), and the
                     // pending choice when a change waits for the next connect.
@@ -2087,14 +2087,14 @@ struct DiagnosticsView: View {
                                    value: String(format: model.copy.text(.diagLocalRulesLine), active, blocked))
                     }
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 // Stop reason / last error — the WHY of the last disconnect.
                 if !stopReason.isEmpty || !lastError.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.status))
                             .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -2103,11 +2103,11 @@ struct DiagnosticsView: View {
                             profileRow(label: model.copy.text(.diagStopReason), value: stopReason)
                         }
                         if !lastError.isEmpty, lastError != "none" {
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            Divider().background(Color.sshGray05).padding(.horizontal, 16)
                             profileRow(label: model.copy.text(.diagLastError), value: lastError)
                         }
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
 
                 // DNS pending-change note: user picked X while the live
@@ -2116,15 +2116,15 @@ struct DiagnosticsView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.diagDNSPending))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
                         profileRow(label: model.copy.text(.diagLiveNow), value: liveTunnelDNS.isEmpty ? "—" : liveTunnelDNS)
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         profileRow(label: model.copy.text(.diagOnNextConnect), value: freshTunnelDNS)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
 
                 // Error
@@ -2132,7 +2132,7 @@ struct DiagnosticsView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.copy.text(.error))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -2148,7 +2148,7 @@ struct DiagnosticsView: View {
                         }
                         .padding(14)
                     }
-                    .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
                 }
             }
             .padding(16)
@@ -2232,10 +2232,10 @@ struct DiagnosticsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.openSans(15, weight: .medium))
-                    .foregroundStyle(Color.octGray100)
+                    .foregroundStyle(Color.sshGray100)
                 Text(detail)
                     .font(.openSans(12))
-                    .foregroundStyle(Color.octGray60)
+                    .foregroundStyle(Color.sshGray60)
             }
             Spacer()
             if model.connection == .connecting { ProgressView().controlSize(.small) }
@@ -2246,11 +2246,11 @@ struct DiagnosticsView: View {
     private func progressRow(_ title: String, active: Bool) -> some View {
         HStack {
             Image(systemName: active ? "arrow.triangle.2.circlepath" : "circle")
-                .foregroundStyle(active ? .orange : Color.octGray40)
+                .foregroundStyle(active ? .orange : Color.sshGray40)
                 .frame(width: 24)
             Text(title)
                 .font(.openSans(15))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
             Spacer()
             if active { ProgressView().controlSize(.small) }
         }
@@ -2261,11 +2261,11 @@ struct DiagnosticsView: View {
         HStack {
             Text(label)
                 .font(.openSans(15))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             Spacer()
             Text(value)
                 .font(.openSans(15, weight: .medium))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -2291,7 +2291,7 @@ struct ProtocolView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.vpnProtocol))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -2304,11 +2304,11 @@ struct ProtocolView: View {
                                    desc: model.copy.text(.ssh2Desc),
                                    selected: true) {}
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 Text(model.copy.text(.ssh2Recommended))
                     .font(.openSans(12))
-                    .foregroundStyle(Color.octGray60)
+                    .foregroundStyle(Color.sshGray60)
                     .padding(.horizontal, 16)
             }
             .padding(16)
@@ -2325,15 +2325,15 @@ struct ProtocolView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
                         .font(.openSans(15, weight: .medium))
-                        .foregroundStyle(Color.octGray100)
+                        .foregroundStyle(Color.sshGray100)
                     Text(desc)
                         .font(.openSans(12))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                 }
                 Spacer()
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(selected ? Color.prim50 : Color.octGray40)
+                    .foregroundStyle(selected ? Color.prim50 : Color.sshGray40)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2358,7 +2358,7 @@ struct DNSView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.dnsSettings))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -2366,7 +2366,7 @@ struct DNSView: View {
                     HStack(spacing: 8) {
                         Text(model.copy.text(.useCustomDNS))
                             .font(.openSans(15, weight: .medium))
-                            .foregroundStyle(Color.octGray100)
+                            .foregroundStyle(Color.sshGray100)
                         InfoDotButton(isVisible: $showCustomInfo)
                         Spacer()
                         Toggle("", isOn: customToggle)
@@ -2383,21 +2383,21 @@ struct DNSView: View {
                     }
 
                     if model.settings.useCustomDNS {
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         VStack(spacing: 0) {
                             dnsField(label: model.copy.text(.primaryDNS), text: $model.settings.primaryDNS)
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            Divider().background(Color.sshGray05).padding(.horizontal, 16)
                             dnsField(label: model.copy.text(.secondaryDNS), text: $model.settings.secondaryDNS)
                         }
                     }
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 // ---- Public presets (choosing one switches OFF custom) ----
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.dnsPresetsTitle))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -2406,7 +2406,7 @@ struct DNSView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(DNSPresets.all.enumerated()), id: \.element.id) { index, preset in
                                 if index > 0 {
-                                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
                                 }
                                 presetRow(preset)
                             }
@@ -2414,11 +2414,11 @@ struct DNSView: View {
                     }
                     .frame(maxHeight: 354)   // ~3.5 rows visible
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 Text(model.copy.text(.dnsRulesHint))
                     .font(.openSans(11))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
                     .padding(.horizontal, 16)
             }
             .padding(16)
@@ -2469,7 +2469,7 @@ struct DNSView: View {
                         HStack(spacing: 4) {
                             Text(preset.name)
                                 .font(.openSans(14, weight: .semibold))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                                 .lineLimit(1)
                             InfoDotButtonCompact(isVisible: infoOpen) {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -2485,7 +2485,7 @@ struct DNSView: View {
                     HStack(spacing: 6) {
                         Text("\(preset.primary)  •  \(preset.secondary)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.octGray80)
+                            .foregroundStyle(Color.sshGray80)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
@@ -2501,11 +2501,11 @@ struct DNSView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(selected ? Color.prim50.opacity(0.10) : Color.octGray0)
+                        .fill(selected ? Color.prim50.opacity(0.10) : Color.sshGray0)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(selected ? Color.prim50 : Color.octGray05, lineWidth: selected ? 1.5 : 1)
+                        .stroke(selected ? Color.prim50 : Color.sshGray05, lineWidth: selected ? 1.5 : 1)
                 )
                 .contentShape(.rect)
             }
@@ -2523,7 +2523,7 @@ struct DNSView: View {
 
     private static func chipColor(_ chip: DNSPreset.Chip) -> Color {
         switch chip {
-        case .noFilter: return Color.octGray40
+        case .noFilter: return Color.sshGray40
         case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
         case .malware: return Color(red: 0.13, green: 0.44, blue: 0.85)
         case .phishing: return Color(red: 0.45, green: 0.25, blue: 0.85)
@@ -2538,7 +2538,7 @@ struct DNSView: View {
         HStack {
             Text(label)
                 .font(.openSans(15))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             Spacer()
             TextField("0.0.0.0", text: text)
                 .textInputAutocapitalization(.never)
@@ -2581,7 +2581,7 @@ struct LocalDNSRulesView: View {
 
                 Text(model.copy.text(selectedTab == 0 ? .dnsRulesHint : .dnsListInfoBody))
                     .font(.openSans(11))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
                     .padding(.horizontal, 16)
             }
             .padding(16)
@@ -2622,12 +2622,12 @@ struct LocalDNSRulesView: View {
             HStack(spacing: 8) {
                 Text(model.copy.text(.dnsLocalRulesTitle))
                     .font(.openSans(13, weight: .semibold))
-                    .foregroundStyle(Color.octGray60)
+                    .foregroundStyle(Color.sshGray60)
                 InfoDotButton(isVisible: $showRulesInfo)
                 Spacer()
                 Text("\(model.settings.dnsRules.count) \(model.copy.text(.dnsRulesCount))")
                     .font(.openSans(11, weight: .semibold))
-                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
+                    .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.sshGray40 : Color(red: 0.85, green: 0.45, blue: 0.1))
                 // Import from file (hosts format).
                 Button {
                     showRulesImporter = true
@@ -2646,9 +2646,9 @@ struct LocalDNSRulesView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.octGray40 : Color.sec50)
+                        .foregroundStyle(model.settings.dnsRules.isEmpty ? Color.sshGray40 : Color.sec50)
                         .frame(width: 26, height: 26)
-                        .background(model.settings.dnsRules.isEmpty ? Color.octGray05 : Color.sec50.opacity(0.10), in: Circle())
+                        .background(model.settings.dnsRules.isEmpty ? Color.sshGray05 : Color.sec50.opacity(0.10), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(model.settings.dnsRules.isEmpty)
@@ -2687,14 +2687,14 @@ struct LocalDNSRulesView: View {
             if model.settings.dnsRules.isEmpty {
                 Text(model.copy.text(.dnsRulesEmpty))
                     .font(.openSans(12))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 14)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(model.settings.dnsRules.enumerated()), id: \.element.id) { index, rule in
                         if index > 0 {
-                            Divider().background(Color.octGray05).padding(.horizontal, 16)
+                            Divider().background(Color.sshGray05).padding(.horizontal, 16)
                         }
                         dnsRuleRow(rule)
                     }
@@ -2702,7 +2702,7 @@ struct LocalDNSRulesView: View {
                 .padding(.bottom, 4)
             }
         }
-        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: Lists tab (curated open-source blocklists, AdAway-style)
@@ -2712,7 +2712,7 @@ struct LocalDNSRulesView: View {
             HStack(spacing: 8) {
                 Text(model.copy.text(.dnsListsTitle))
                     .font(.openSans(13, weight: .semibold))
-                    .foregroundStyle(Color.octGray60)
+                    .foregroundStyle(Color.sshGray60)
                 Spacer()
                 if !model.subscribedLists.isEmpty {
                     Text(String(format: model.copy.text(.dnsListsActiveCount), model.subscribedLists.count, model.curatedDomainCount))
@@ -2737,21 +2737,21 @@ struct LocalDNSRulesView: View {
 
             Text(model.copy.text(.dnsListsSubtitle))
                 .font(.openSans(11))
-                .foregroundStyle(Color.octGray40)
+                .foregroundStyle(Color.sshGray40)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
 
             LazyVStack(spacing: 0) {
                 ForEach(Array(DNSListCatalog.all.enumerated()), id: \.element.id) { index, source in
                     if index > 0 {
-                        Divider().background(Color.octGray05).padding(.horizontal, 16)
+                        Divider().background(Color.sshGray05).padding(.horizontal, 16)
                     }
                     curatedListRow(source)
                 }
             }
             .padding(.bottom, 6)
         }
-        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
     }
 
     /// One curated source row: subscribe state, domain count, category chip.
@@ -2763,7 +2763,7 @@ struct LocalDNSRulesView: View {
                 HStack(spacing: 6) {
                     Text(source.name)
                         .font(.openSans(14, weight: .medium))
-                        .foregroundStyle(Color.octGray100)
+                        .foregroundStyle(Color.sshGray100)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(categoryLabel(source.category))
@@ -2776,11 +2776,11 @@ struct LocalDNSRulesView: View {
                 if subscribed, let sub = model.subscribedLists.first(where: { $0.sourceID == source.id }) {
                     Text(String(format: model.copy.text(.dnsListsDomainsBlocked), sub.domains.count))
                         .font(.openSans(11))
-                        .foregroundStyle(Color.octGray40)
+                        .foregroundStyle(Color.sshGray40)
                 } else {
                     Text("~\(source.entryCount)")
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.octGray40)
+                        .foregroundStyle(Color.sshGray40)
                 }
                 // Status line while loading / after failure.
                 if state == "loading" {
@@ -2794,7 +2794,7 @@ struct LocalDNSRulesView: View {
                 } else if state == "empty" {
                     Text(model.copy.text(.dnsListEmpty))
                         .font(.openSans(10))
-                        .foregroundStyle(Color.octGray40)
+                        .foregroundStyle(Color.sshGray40)
                 }
             }
             Spacer()
@@ -2896,7 +2896,7 @@ struct LocalDNSRulesView: View {
                 HStack(spacing: 6) {
                     Text(rule.domain)
                         .font(.openSans(14, weight: .medium))
-                        .foregroundStyle(Color.octGray100)
+                        .foregroundStyle(Color.sshGray100)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(rule.kind == .block ? model.copy.text(.dnsRuleBlocked) : model.copy.text(.dnsRuleOverride))
@@ -2912,13 +2912,13 @@ struct LocalDNSRulesView: View {
                 }
                 Text(rule.kind == .block ? "0.0.0.0" : rule.ip)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
                 // Scope under the address: exact domain or subdomains too.
                 Text(rule.includeSubdomains
                      ? model.copy.text(.dnsRuleScopeSubtree)
                      : model.copy.text(.dnsRuleScopeExact))
                     .font(.openSans(10))
-                    .foregroundStyle(Color.octGray40.opacity(0.8))
+                    .foregroundStyle(Color.sshGray40.opacity(0.8))
             }
             Spacer()
             Button {
@@ -2961,7 +2961,7 @@ struct LocalDNSRulesView: View {
 
     private func categoryColor(_ category: DNSListSource.Category) -> Color {
         switch category {
-        case .general: return Color.octGray40
+        case .general: return Color.sshGray40
         case .ads: return Color(red: 0.85, green: 0.45, blue: 0.1)
         case .privacy: return Color(red: 0.55, green: 0.35, blue: 0.85)
         case .malware: return Color(red: 1.0, green: 0.25, blue: 0.35)
@@ -2984,18 +2984,18 @@ struct DNSImportPreviewView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.copy.text(.dnsImportParsedTitle))
                         .font(.openSans(15, weight: .semibold))
-                        .foregroundStyle(Color.octGray100)
+                        .foregroundStyle(Color.sshGray100)
                     Text(String(format: model.copy.text(.dnsImportSaved), entries.count))
                         .font(.openSans(13))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                     // First few domains as a preview, monospaced.
                     Text(entries.prefix(5).map { entryLine($0) }.joined(separator: "\n")
                          + (entries.count > 5 ? "\n…" : ""))
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.octGray40)
+                        .foregroundStyle(Color.sshGray40)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
-                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 10))
+                        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 10))
                 }
 
                 Spacer()
@@ -3058,9 +3058,9 @@ struct InfoDotButtonCompact: View {
         Button(action: action) {
             Image(systemName: "questionmark")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .foregroundStyle(isVisible ? .white : Color.sshGray40)
                 .frame(width: 18, height: 18)
-                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+                .background(isVisible ? Color.prim50 : Color.sshGray40.opacity(0.35), in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("info")
@@ -3162,9 +3162,9 @@ struct InfoDotButton: View {
         } label: {
             Image(systemName: "questionmark")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(isVisible ? .white : Color.octGray40)
+                .foregroundStyle(isVisible ? .white : Color.sshGray40)
                 .frame(width: 20, height: 20)
-                .background(isVisible ? Color.prim50 : Color.octGray40.opacity(0.35), in: Circle())
+                .background(isVisible ? Color.prim50 : Color.sshGray40.opacity(0.35), in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("info")
@@ -3182,7 +3182,7 @@ struct InfoBubble: View {
                 .foregroundStyle(Color.prim50)
             Text(message)
                 .font(.openSans(12))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
@@ -3219,20 +3219,20 @@ struct AddDNSRuleView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.copy.text(.dnsAddRuleDomain))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                     TextField(model.copy.text(.dnsAddRuleDomainPlaceholder), text: $domain)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                         .font(.system(.body, design: .monospaced))
                         .padding(12)
-                        .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 12))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.copy.text(.dnsAddRuleMode))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                     Picker("", selection: $mode) {
                         Text(model.copy.text(.dnsAddRuleModeBlock)).tag(DNSBlocklistEntry.Kind.block)
                         Text(model.copy.text(.dnsAddRuleModeOverride)).tag(DNSBlocklistEntry.Kind.override)
@@ -3245,7 +3245,7 @@ struct AddDNSRuleView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.copy.text(.dnsRuleScope))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                     Picker("", selection: $includeSubdomains) {
                         Text(model.copy.text(.dnsRuleScopeExact)).tag(false)
                         Text(model.copy.text(.dnsRuleScopeSubtree)).tag(true)
@@ -3257,14 +3257,14 @@ struct AddDNSRuleView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(model.copy.text(.dnsAddRuleIP))
                             .font(.openSans(13, weight: .semibold))
-                            .foregroundStyle(Color.octGray60)
+                            .foregroundStyle(Color.sshGray60)
                         TextField(model.copy.text(.dnsAddRuleIPPlaceholder), text: $ip)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.decimalPad)
                             .font(.system(.body, design: .monospaced))
                             .padding(12)
-                            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
 
@@ -3328,7 +3328,7 @@ struct AdvancedView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.connectionSection))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -3337,10 +3337,10 @@ struct AdvancedView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.copy.text(.killSwitch))
                                 .font(.openSans(15, weight: .medium))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                             Text(model.copy.text(.killSwitchDesc))
                                 .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                         }
                         Spacer()
                         Toggle("", isOn: $model.settings.killSwitch)
@@ -3348,29 +3348,46 @@ struct AdvancedView: View {
                     }
                     .padding(14)
 
-                    Divider().background(Color.octGray05).padding(.horizontal, 16)
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.copy.text(.connectOnDemand))
                                 .font(.openSans(15, weight: .medium))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                             Text(model.copy.text(.connectOnDemandDesc))
                                 .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                         }
                         Spacer()
                         Toggle("", isOn: $model.settings.connectOnDemand)
                             .tint(Color.prim50)
                     }
                     .padding(14)
+
+                    Divider().background(Color.sshGray05).padding(.horizontal, 16)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.copy.text(.allowLAN))
+                                .font(.openSans(15, weight: .medium))
+                                .foregroundStyle(Color.sshGray100)
+                            Text(model.copy.text(.allowLANDesc))
+                                .font(.openSans(12))
+                                .foregroundStyle(Color.sshGray60)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $model.settings.allowLAN)
+                            .tint(Color.prim50)
+                    }
+                    .padding(14)
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(model.copy.text(.debugSection))
                         .font(.openSans(13, weight: .semibold))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 8)
@@ -3379,10 +3396,10 @@ struct AdvancedView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.copy.text(.enableLogging))
                                 .font(.openSans(15, weight: .medium))
-                                .foregroundStyle(Color.octGray100)
+                                .foregroundStyle(Color.sshGray100)
                             Text(model.copy.text(.enableLoggingDesc))
                                 .font(.openSans(12))
-                                .foregroundStyle(Color.octGray60)
+                                .foregroundStyle(Color.sshGray60)
                         }
                         Spacer()
                         Toggle("", isOn: $model.settings.enableLogging)
@@ -3390,7 +3407,7 @@ struct AdvancedView: View {
                     }
                     .padding(14)
                 }
-                .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
             }
             .padding(16)
         }

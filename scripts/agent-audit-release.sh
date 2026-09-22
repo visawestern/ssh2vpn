@@ -3,7 +3,10 @@
 # DEBUG-only agent channel (Guideline 5.6 hygiene).
 # Usage: ./agent-audit-release.sh [<path-to-SSH2VPN.app>]
 # Exit 0 = clean, 1 = markers found (DO NOT SUBMIT).
-set -euo pipefail
+# NOTE: no `pipefail` here on purpose: `strings | grep -q` closes the pipe
+# on first match, strings dies with SIGPIPE, and pipefail would turn that
+# into a failure — silently inverting every check below (false CLEAN).
+set -eu
 APP="${1:-/Users/apple/Library/Developer/Xcode/DerivedData/SSH2VPN-*/Build/Products/Release-iphoneos/SSH2VPN.app}"
 APP=( $~APP )
 BIN="$APP[1]/SSH2VPN"

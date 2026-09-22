@@ -61,14 +61,14 @@ struct ImportCredentialsView: View {
         VStack(spacing: 14) {
             Text(model.copy.text(.importSubtitle))
                 .font(.openSans(13))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
                 .multilineTextAlignment(.center)
 
             ZStack(alignment: .topLeading) {
                 if raw.isEmpty {
                     Text(model.copy.text(.importPlaceholder))
                         .font(.openSans(13))
-                        .foregroundStyle(Color.octGray40)
+                        .foregroundStyle(Color.sshGray40)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
                         .allowsHitTesting(false)
@@ -81,10 +81,10 @@ struct ImportCredentialsView: View {
                     .padding(6)
                     .accessibilityLabel(Text(model.copy.text(.importTitle)))
             }
-            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.octGray05, lineWidth: 1)
+                    .stroke(Color.sshGray05, lineWidth: 1)
             )
 
             Button {
@@ -125,7 +125,7 @@ struct ImportCredentialsView: View {
                           text: $password)
             }
             .padding(12)
-            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
 
             Button {
                 save()
@@ -144,7 +144,7 @@ struct ImportCredentialsView: View {
                 raw = ""
             }
             .font(.openSans(13))
-            .foregroundStyle(Color.octGray60)
+            .foregroundStyle(Color.sshGray60)
             .buttonStyle(.plain)
         }
     }
@@ -202,10 +202,10 @@ struct ImportCredentialsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.openSans(11, weight: .semibold))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             TextField(placeholder, text: text)
                 .font(.openSans(14))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(Color.appBg, in: RoundedRectangle(cornerRadius: 10))
@@ -218,10 +218,10 @@ struct ImportCredentialsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.openSans(11, weight: .semibold))
-                .foregroundStyle(Color.octGray60)
+                .foregroundStyle(Color.sshGray60)
             SecureField(placeholder, text: text)
                 .font(.openSans(14))
-                .foregroundStyle(Color.octGray100)
+                .foregroundStyle(Color.sshGray100)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(Color.appBg, in: RoundedRectangle(cornerRadius: 10))

@@ -57,7 +57,7 @@ struct AddServerChooserView: View {
                                     showDocs = false
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(Color.octGray100)
+                                        .foregroundStyle(Color.sshGray100)
                                 }
                                 .accessibilityLabel(model.copy.text(.cancel))
                             }
@@ -74,7 +74,7 @@ struct AddServerChooserView: View {
     private var header: some View {
         Text(model.copy.text(.vpsOwnServerDesc))
             .font(.openSans(13))
-            .foregroundStyle(Color.octGray60)
+            .foregroundStyle(Color.sshGray60)
             .multilineTextAlignment(.center)
             .padding(.top, 4)
     }
@@ -94,19 +94,19 @@ struct AddServerChooserView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.copy.text(.vpsOwnServer))
                         .font(.openSans(15, weight: .semibold))
-                        .foregroundStyle(Color.octGray100)
+                        .foregroundStyle(Color.sshGray100)
                     Text(model.copy.text(.vpsOwnServerDesc))
                         .font(.openSans(12))
-                        .foregroundStyle(Color.octGray60)
+                        .foregroundStyle(Color.sshGray60)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.octGray40)
+                    .foregroundStyle(Color.sshGray40)
             }
             .padding(14)
-            .background(Color.octGray0, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color.sshGray0, in: RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.prim50.opacity(0.35), lineWidth: 1)

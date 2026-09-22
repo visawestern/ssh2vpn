@@ -28,6 +28,12 @@ Device-verified tunnel (iPhone 16e, 20 Sep 2026) + DEBUG-only agent channel.
   `#if DEBUG`-gated and absent from Release/App Store builds (verified by
   the new `agent-audit-release.sh` gate); it is slated for full deletion
   once device verification is complete. No plist/entitlement changes.
+- **UDP helper de-obfuscated.** The bundled `udp_relay.py` used to launch
+  via `python3 -c '...exec(base64...)'` (quoting safety). It now runs as
+  visible plaintext through a quoted heredoc on fd 3 — no base64, no
+  `exec()`, byte-identical source in command and repo. Unit tests
+  (incl. a real-`sh` heredoc run) green; HELLO_ACK verified against
+  stock `sh` locally.
 - **Docs ×17.** In-app guide and site now carry the verified findings
   (egress PASS, zero-leak pcap, tunnel-local DNS, IPv4-only scope).
 - **Rewarded ads: Google official TEST unit (temporary).** AdMob returns
